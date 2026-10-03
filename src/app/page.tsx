@@ -153,7 +153,7 @@ export default function Home() {
               <Link
                 href="/docs"
                 className="glow-brand inline-flex h-12 items-center gap-2 rounded-xl bg-[#0273C4] px-6 text-base font-semibold text-white transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2"
-              >
+               prefetch={false}>
                 Read the library
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
@@ -213,6 +213,7 @@ export default function Home() {
               <Link
                 key={p.name}
                 href={p.href}
+                prefetch={false}
                 className="group rounded-2xl border border-[rgba(77,75,91,0.4)] bg-[#0E0E12] p-6 transition-all hover:border-[rgba(2,130,216,0.5)] hover:bg-[#101017]"
               >
                 <div className="flex items-center justify-between">
@@ -418,14 +419,14 @@ export default function Home() {
             <Link
               href="/docs"
               className="glow-brand inline-flex h-12 items-center gap-2 rounded-xl bg-[#0273C4] px-7 text-base font-semibold text-white transition-transform hover:scale-[1.02]"
-            >
+             prefetch={false}>
               Open the documentation
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <Link
               href="/docs/getting-started/quickstart"
               className="inline-flex h-12 items-center rounded-xl border border-[rgba(77,75,91,0.6)] px-7 text-base font-semibold text-white transition-colors hover:bg-[#15151B]"
-            >
+             prefetch={false}>
               Quickstart
             </Link>
           </div>

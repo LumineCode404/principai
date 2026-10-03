@@ -27,7 +27,7 @@ export function LanguageSwitcher({ current }: { current: "en" | "zh" | "id" }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Switch language"
+        aria-label={`Switch language, current: ${current.toUpperCase()}`}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[rgba(77,75,91,0.5)] bg-transparent px-2.5 text-[13px] font-medium text-fd-muted-foreground transition-colors hover:bg-[#15151B] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <Languages className="h-3.5 w-3.5" aria-hidden />

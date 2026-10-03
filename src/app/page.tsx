@@ -276,7 +276,7 @@ export default function Home() {
             <p className="max-w-xs font-mono text-xs leading-relaxed text-[#8B89A0]">
               status: sudah digali — every category below has files on disk. The honest list of
               what is not dug yet lives in the{" "}
-              <Link href="/docs/taxonomy" className="text-[#5CB3F2] underline decoration-[#5CB3F2]/50 underline-offset-4 hover:decoration-[#5CB3F2]">
+              <Link href="/docs/taxonomy" prefetch={false} className="text-[#5CB3F2] underline decoration-[#5CB3F2]/50 underline-offset-4 hover:decoration-[#5CB3F2]">
                 taxonomy
               </Link>
               .
@@ -287,6 +287,7 @@ export default function Home() {
               <Link
                 key={c.name}
                 href={c.href}
+                prefetch={false}
                 className="group flex items-center justify-between gap-4 rounded-2xl border border-[rgba(77,75,91,0.4)] bg-[#0E0E12] p-5 transition-all hover:border-[rgba(2,130,216,0.5)] hover:bg-[#101017]"
               >
                 <div>

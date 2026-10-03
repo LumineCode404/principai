@@ -11,7 +11,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-3">
             { }
             <img
-              src="/images/logo-icon-512.png"
+              src="/images/logo-icon-96.png"
               alt="PRINCIPAI owl logo"
               width={44}
               height={44}

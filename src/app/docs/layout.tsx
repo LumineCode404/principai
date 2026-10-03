@@ -12,7 +12,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <span className="font-display flex items-center gap-2 font-extrabold text-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/logo-icon-512.png"
+              src="/images/logo-icon-48.png"
               alt=""
               width={24}
               height={24}

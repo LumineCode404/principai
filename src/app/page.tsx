@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, GitBranch, ShieldCheck, Layers, FlaskConical, Terminal, Languages, ScanSearch, Github } from "lucide-react";
 
 function SeverityChip({ level, label, desc }: { level: string; label: string; desc: string }) {
@@ -92,14 +93,14 @@ export default function Home() {
         />
         <div className="relative mx-auto flex w-full max-w-6xl flex-col items-center gap-10 px-4 pb-20 pt-16 sm:px-6 lg:flex-row lg:items-center lg:gap-16 lg:pt-24">
           <div className="logo-blend order-1 w-56 shrink-0 sm:w-64 lg:order-0 lg:w-[26rem]">
-            { }
-            <img
+            <Image
               src="/images/logo.webp"
               alt="PRINCIPAI logo: a muscular owl whose feathers are made of source code, flexing on a black background"
               width={880}
               height={880}
+              priority
+              sizes="(max-width: 1024px) 224px, 416px"
               className="h-auto w-full"
-              fetchPriority="high"
             />
           </div>
           <div className="order-2 max-w-2xl text-center lg:order-1 lg:text-left">

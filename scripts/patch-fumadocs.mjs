@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Idempotent patch for fumadocs-mdx@15.4.6 + Next.js 16 turbopack.
+ * Idempotent, whitespace-tolerant patch for fumadocs-mdx@15.4.6 + Next.js 16
+ * turbopack.
  *
  * Bug: fumadocs-mdx emits `condition: { query: <RegExp> }` for its `*.json`
  * and `*.yaml` turbopack rules. Next 16's turbopack no longer supports a
@@ -9,12 +10,13 @@
  * "turbopack.rules.*.json: data did not match any variant of untagged enum
  * Either".
  *
- * Fix: scope the meta loader by path instead (glob "meta.json" / "meta.yaml"
- * under any directory), which is semantically equivalent for content
- * collections: only meta files are ever imported with a collection query by
- * the generated .source code.
+ * Fix: scope the meta loader by path instead ("meta.json" / "meta.yaml" under
+ * any directory) — semantically equivalent for content collections, because
+ * only meta files are ever imported with a collection query by the generated
+ * .source code.
  *
- * Re-run safe: if the pattern is already replaced, the script exits 0.
+ * This script matches BOTH tab-indented (npm tarball) and space-indented
+ * (locally reformatted) copies. Re-run safe.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,45 +28,41 @@ if (!existsSync(target)) {
   process.exit(0);
 }
 
-let src = readFileSync(target, 'utf8');
+const src = readFileSync(target, 'utf8');
 
-const jsonFixed = 'condition: { path: "**/meta.json" }';
-const yamlFixed = 'condition: { path: "**/meta.yaml" }';
-
-if (src.includes(jsonFixed) && src.includes(yamlFixed)) {
-  console.log('[patch-fumadocs] already patched, skipping.');
+if (!src.includes('query: metaLoaderQueryGlob')) {
+  console.log('[patch-fumadocs] already patched (or version changed), skipping.');
   process.exit(0);
 }
 
-// The upstream file contains two rules whose condition uses a RegExp that
-// Next 16 cannot serialize. Replace each with a path-scoped condition.
-const brokenJson = '"*.json": {\n\t\t\t\t\t\t\t\tcondition: { query: metaLoaderQueryGlob },';
-const fixedJson = `"*.json": {\n\t\t\t\t\t\t\t\t${jsonFixed},`;
-const brokenYaml = '"*.yaml": {\n\t\t\t\t\t\t\t\tcondition: { query: metaLoaderQueryGlob },';
-const fixedYaml = `"*.yaml": {\n\t\t\t\t\t\t\t\t${yamlFixed},`;
-
+const lines = src.split('\n');
+let lastRule = null;
 let patched = 0;
-if (src.includes(brokenJson)) {
-  src = src.replace(brokenJson, fixedJson);
-  patched++;
-  console.log('[patch-fumadocs] patched json rule.');
-} else if (src.includes(jsonFixed)) {
-  console.log('[patch-fumadocs] json rule already patched.');
-} else {
-  console.log('[patch-fumadocs] json rule pattern not found (version changed?), skipping.');
-}
 
-if (src.includes(brokenYaml)) {
-  src = src.replace(brokenYaml, fixedYaml);
-  patched++;
-  console.log('[patch-fumadocs] patched yaml rule.');
-} else if (src.includes(yamlFixed)) {
-  console.log('[patch-fumadocs] yaml rule already patched.');
-} else {
-  console.log('[patch-fumadocs] yaml rule pattern not found (version changed?), skipping.');
+for (let i = 0; i < lines.length; i++) {
+  const rule = lines[i].match(/"(\*\.[a-z]+)":\s*\{/);
+  if (rule) lastRule = rule[1];
+
+  if (lines[i].includes('condition: { query: metaLoaderQueryGlob }')) {
+    let path = null;
+    if (lastRule === '*.json') path = '**/meta.json';
+    else if (lastRule === '*.yaml') path = '**/meta.yaml';
+    if (path) {
+      lines[i] = lines[i].replace(
+        'condition: { query: metaLoaderQueryGlob }',
+        `condition: { path: "${path}" }`,
+      );
+      patched++;
+    } else {
+      console.warn(`[patch-fumadocs] could not determine rule for line ${i + 1}, skipping it.`);
+    }
+  }
 }
 
 if (patched > 0) {
-  writeFileSync(target, src);
-  console.log('[patch-fumadocs] patch written.');
+  writeFileSync(target, lines.join('\n'));
+  console.log(`[patch-fumadocs] patched ${patched} turbopack condition(s).`);
+} else {
+  console.warn('[patch-fumadocs] query conditions found but nothing patched — inspect manually.');
+  process.exit(1);
 }

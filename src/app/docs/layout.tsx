@@ -10,7 +10,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       nav={{
         title: (
           <span className="font-display flex items-center gap-2 font-extrabold text-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src="/images/logo-icon-48.png"
               alt=""

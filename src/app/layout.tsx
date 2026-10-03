@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin"],
+  weight: ["700", "800", "900"],
 });
 
 const siteUrl = "https://principai.vercel.app";
@@ -88,6 +89,7 @@ export default function RootLayout({
         <RootProvider
           theme={{ forcedTheme: "dark", enableSystem: false }}
           search={{
+            preload: false,
             options: {
               api: "/api/search",
               allowClear: true,

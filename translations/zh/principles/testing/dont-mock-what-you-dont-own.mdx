@@ -1,0 +1,146 @@
+---
+title: "不要 mock 你不拥有的东西 · Don't Mock What You Don't Own"
+id: dont-mock-what-you-dont-own
+name: Don't Mock What You Don't Own
+summary: 绝不手写第三方 SDK 接口的 mock——用你拥有的 adapter 包住它，在快速测试里 double 这个 adapter，并让 adapter 对着真实 service 验证。
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "services"
+  - "libraries"
+  - "ci"
+tags:
+  - "testing"
+  - "mocks"
+  - "test-doubles"
+  - "boundaries"
+aliases:
+  - "Mock Only What You Own"
+  - "Wrap What You Don't Own"
+sources:
+  - 'Freeman & Pryce, "Growing Object-Oriented Software, Guided by Tests", 2009, https://growing-object-oriented-software.com/'
+  - 'Freeman, Pryce, Mackinnon & Walnes, "Mock Roles, not Objects", OOPSLA 2004, https://jmock.org/oopsla2004.pdf'
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: ok
+source_hash: "9f86d2f530dcc507"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/dont-mock-what-you-dont-own.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+当一个测试需要把代码与第三方 SDK、client 或 API 隔离时，绝不要手写 vendor 接口的 mock——那是在猜别人的语义，再给自己的猜测打分。用一个接口归你所有的薄 adapter 把这个依赖一次性包起来，在快速测试里 double 这个 adapter，并保留一小批让 adapter 对着真实 service 或其官方认可的 sandbox 运行的测试。一旦有测试开始拼写出 vendor 的方法名，就该去挪 boundary 了。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+一个 mock 编码的是关于「你没有写过、改不动、通常也没读过」的行为的假设。这条规则是社区对 Freeman 与 Pryce 的 *Growing Object-Oriented Software, Guided by Tests* 背后那所 mock-objects 学派的凝练——他们更早的 OOPSLA 论文把核心直接说了出来：mock objects 作为一种把测试与第三方库隔离开的技术，「less interesting as a technique for isolating tests from third-party libraries than is widely thought」（不如广泛以为的那么有用）。可操作的形式是：double 你拥有的 role 和 interface，把每一个外部 service 当作一个架构 boundary。用一个接口属于你的 adapter 包住它——命名、报错、语义都由你选——在 unit test 里 double 这个 port，再让那一个 adapter 对着真东西验证，于是 vendor 的怪癖与演化只住在一个小小的位置，而不是在每个测试文件里被重新猜一遍。
+
+## 何时使用
+
+- 任何忍不住想去 stub 一个 vendor SDK 的 client、transport 或内部的 unit test。
+- 版本节奏激进的依赖——breaking change 会在 minor 版本之间到来。
+- 基础设施 client——payment、邮件、存储、SMS、identity——在这里一个错误假设意味着一次生产故障，而身后还站着一套绿色的 suite。
+- 供养不起每次运行都打真实网络调用的快速 feedback loop。
+
+## 何时不该使用
+
+- 你自己拥有的 interface：放心 double——用 test double 驱出自己的 role，正是这门技艺按设计运转的样子。
+- 你用得又浅又不变的依赖——一个 integration test 的成本，低于无限期维护一层 wrapper。
+- 提供官方第一方 test double、且附有文档化保真承诺的 provider——那个 double 是 provider contract 的一部分，不是你对它的猜测。
+- 对一个尚未承诺的服务做探索性 spike；在任何东西上线之前删掉它们，或加以审查。
+
+## 反模式
+
+- 在 test runner 里 patch vendor module，再从它的类型签名里凭空捏造 response 对象——方法名靠猜、错误形状靠想象、分页语义无人知晓。
+- 通过 reflection 去 mock 私有或内部类，强行走公共 API 从未承诺的奇异错误路径。
+- 一套直到生产流量真打过来之前、从未与真实服务说过一句话的 suite。
+- 回放一份从生产拷来的 response，再手工编辑它直到断言通过——一个对猜测的 mock、对记忆的 mock。
+- 升级 vendor 大版本的方式是把 mock 一路 patch 到变绿，对真实表面没有做过一次检查。
+
+## 代码示例
+
+错误示范——直接 mock vendor 的接口：
+
+```ts
+import { PaymentSDK } from 'vendor-payments'; // 第三方 SDK —— 不是我们的
+
+jest.mock('vendor-payments');
+// 一个手搓的、别人接口的 fake：方法名从文档里猜，
+// 错误形状凭空发明，幂等语义连它的作者都说不清。
+const sdk = jest.mocked(PaymentSDK);
+sdk.charge.mockResolvedValue({ ok: true });               // 真的那个会返回 ok 吗？
+sdk.charge.mockRejectedValue(new Error('card_declined')); // 那是它的错误类型吗？
+
+test('checkout charges the customer', async () => {
+  await checkout(user, 42);
+  expect(sdk.charge).toHaveBeenCalled(); // 证明的是我们的猜测，不是 vendor
+});
+```
+
+正确示范——拥有 boundary，double 那个 port，验证 adapter：
+
+```ts
+// payments.ts —— boundary 是我们的：命名、报错、语义都由我们选。
+export interface PaymentGateway {
+  charge(amountCents: number, token: string):
+    Promise<{ id: string } | { declined: true }>;
+}
+
+// 快速 unit test：double 顶替的是我们的 port，不是他们的 SDK。
+test('a declined card creates no order', async () => {
+  const gateway: PaymentGateway = { charge: async () => ({ declined: true }) };
+  await expect(checkout(user, 42, gateway)).rejects.toThrow(PaymentDeclined);
+});
+
+// adapter 测试：vendor SDK 为真的唯一一处（sandbox 或录制
+// 流量）。vendor 漂移在这里、在 CI 里断掉，而不是在生产里。
+test('adapter maps vendor failures onto our contract', async () => {
+  const gateway = new VendorPaymentGateway(SANDBOX_KEY);
+  const result = await gateway.charge(42, 'tok_charge_declined');
+  expect(result).toEqual({ declined: true });
+});
+```
+
+## 技术执法
+
+<Enforcement>
+只有当构建执法 boundary 时，这条规则才是真的：
+
+- **import 限制**：lint 规则禁止在 adapter 模块之外 import vendor SDK——「只有 adapter 碰 vendor」变成机器检查，而不是部落记忆。
+- **adapter 上的 contract test**：每个 adapter 在一个打了标的 CI job 里至少带一个对着真实服务或其官方 sandbox 的测试，于是 vendor 漂移以一个红色构建现身，而不是一张生产页面。
+- **double review 规则**：手写的第三方接口 double 是 review 阻断项；reviewer 的第一个问题是「这个 double 描述的是谁的接口？」。
+- **录制流量优于捏造 payload**：当真实调用对 CI 太贵时，回放带有效期的录制交互——录制会过期、强制重录；虚构不会。
+- **预防 vs. 检测**：import 限制预防对不属于你的接口写新的 mock；sandbox contract test 检测 vendor 在 adapter 底下移动。两半都要，永远。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2024 年 3 月针对 LocalStack——测试里广泛使用的 AWS 替身——的一份 bug 报告，以罕见的精确度记录了这个失败模式。一位开发者把一个 Lambda 的 DynamoDB 访问从 Query 换成了 BatchGet，却忘记把 IAM 权限从 dynamodb:Query 改成 dynamodb:BatchGetItem。每一次针对 LocalStack 的测试运行都通过了，因为这个 emulator 不执行 DynamoDB 的 action 权限；缺失的权限只在代码跑上真实 AWS 时才浮出水面，成为一个 permission error。报告者自己的结语是：「My expectation was this would have been caught in localstack.」（我本以为这会在 localstack 里被抓住。）https://github.com/localstack/localstack/issues/10517（verification: ok——issue 文本为直接引用；除了被报告的那条 AWS 报错之外，生产下游还坏了什么，文中并没有描述——belum digali。）哪怕在真实 boundary 上做一次很薄的检查，也本可以更早暴露这个策略错配——以一个失败的 pipeline 步骤现身，而不是一个运行时 permission error。
+</RealCase>
+
+## 张力与权衡
+
+- **速度 vs. 保真**：一套全是 double 的 suite，恰恰在它说谎的地方又快又安静；Test Pyramid 的答案是垫一层薄薄的真实 boundary 测试，让 vendor 漂移在便宜的地方被抓住。
+- **wrapper 成本 vs. 直接依赖**：每一个 adapter 都是你从此拥有并维护的代码；Dependency Inversion 只有在 boundary 真实时才值回票价——包住一个用得浅浅的依赖，是拿一种负债换另一种。
+- **你的 contract vs. vendor 漂移**：哪怕隔着 adapter，你也会开始依赖没人写进文档的 vendor 行为——Hyrum's Law 对 provider 同样生效；adapter 的 contract test 就是这种静默依赖被发现的方式。
+
+## 相关原则
+
+- [测试行为而非实现 · Test Behavior, Not Implementation](/zh/docs/principles/testing/test-behavior-not-implementation)——mock 一个 vendor 的内部，会把你的 suite 耦合到他们的实现选择上。
+- [依赖倒置 · Dependency Inversion](/zh/docs/principles/architecture/dependency-inversion)——adapter 就是你所依赖的 abstraction，用来取代 SDK。
+- [测试金字塔 · Test Pyramid](/zh/docs/principles/testing/test-pyramid)——让 double 保持诚实的，是那层薄薄的真实 boundary 基座。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——没写进文档的 vendor 行为，无论你是否察觉，都会变成你的依赖。
+
+## 参考文献
+
+- Freeman & Pryce, *Growing Object-Oriented Software, Guided by Tests* (2009) — https://growing-object-oriented-software.com/（本书主页：用 mock object 在你拥有的 boundary 处驱动设计的 TDD；verification: ok——书与站点，perlu——这五个词的短语是否逐字见于书中正文，belum digali。）
+- Freeman, Pryce, Mackinnon & Walnes, *Mock Roles, not Objects*, OOPSLA 2004 — https://jmock.org/oopsla2004.pdf（mock object 作为设计技艺，以及论文自己关于隔离第三方库的结论。）
+- Martin Fowler, *Mocks Aren't Stubs* — https://martinfowler.com/articles/mocksArentStubs.html（test double 的词汇表，以及 classical 与 mockist 之分。）

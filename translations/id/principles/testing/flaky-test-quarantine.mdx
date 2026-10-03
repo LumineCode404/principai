@@ -1,0 +1,136 @@
+---
+title: Flaky Test Quarantine
+id: flaky-test-quarantine
+name: Flaky Test Quarantine
+summary: Test yang gagal bergantian pada kode yang tak berubah meracuni kepercayaan pada seluruh suite — karantinalah secara sengaja, dengan bug dan expiry, alih-alih me-rerun sampai hijau.
+category: testing
+type: practice
+severity: important
+applies_to:
+  - "ci"
+  - "services"
+tags:
+  - "testing"
+  - "flakiness"
+  - "ci"
+aliases:
+  - "Quarantine Flaky Tests"
+sources:
+  - 'John Micco, "Flaky Tests at Google and How We Mitigate Them", https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'
+status: draft
+verification: ok
+source_hash: "08ed98f71eab21e7"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/flaky-test-quarantine.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Perlakukan test yang gagal bergantian pada kode yang tak berubah sebagai defect dengan tenggat, bukan sebagai derau untuk di-rerun. Karantinalah keluar dari critical path, cantumkan tracking bug, dan tetapkan expiry yang setelah lewatnya karantina itu sendiri menggagalkan build. Jangan pernah me-rerun kegagalan otomatis sampai hijau dan jangan pernah menghapus test secara diam-diam — karantina yang membusuk tak terlihat menjadi titik buta yang menyembunyikan race yang nyata.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Test flaky menunjukkan hasil lulus dan gagal sekaligus pada kode yang sama — definisi Google sendiri, dari post blog testing John Micco tahun 2016. Flakiness menghancurkan produk inti sebuah suite: kepercayaan. Begitu engineer belajar bahwa merah bisa berarti "coba lagi", mereka berhenti membaca kegagalan — termasuk yang nyata — dan angka Micco memperlihatkan skalanya di Google: sekitar 1,5% dari seluruh test run melaporkan hasil flaky, hampir 16% test membawa tingkat flakiness tertentu, dan laju masuknya test flaky kira-kira menyamai laju perbaikannya meski ada usaha khusus. Karantina adalah praktik penahanan: test flaky dikeluarkan dari critical path, bug untuk memperbaikinya dibuka, dan karantina itu sendiri dilacak — dengan owner dan expiry — sehingga penahanan tidak pernah bisa diam-diam menjadi lubang permanen di coverage.
+
+## Kapan pakai
+
+- Suite CI apa pun yang menggerbangi merge atau rilis, tempat kegagalan bergantian sudah terlihat lebih dari sekali.
+- Korpus test besar yang berjalan terus-menerus — flakiness tumbuh seiring ukuran suite dan porsi end-to-end test.
+- Tim yang para developernya mulai bilang "rerun saja": kerusakan kepercayaan sudah dimulai.
+- Workflow dengan build cop atau triage kegagalan oleh manusia, tempat setiap flake memakan waktu investigasi.
+
+## Kapan TIDAK pakai
+
+- Ketika kegagalannya deterministik dan bisa direproduksi — itu test gagal biasa; perbaiki kodenya, jangan beri label.
+- Flakiness yang disebabkan race di production code yang sedang dites — itu bug produk yang menumpang lewat test; singkaplah, jangan dikarantina.
+- Suite kecil yang test flaky-nya cukup diperbaiki sekarang — karantina ada untuk saat throughput perbaikan tak bisa mengejar kedatangan.
+- Sebagai respons atas satu kegagalan tak terjelaskan: tanpa variansi lulus/gagal yang terukur, "flaky" hanyalah tebakan, dan tebakan itu bisa mengubur regression yang nyata.
+
+## Anti-pattern
+
+- Me-rerun test yang gagal secara otomatis sampai lulus, tanpa catatan — setiap flake menjadi tak terlihat, dan tiap rerun senyap memperlebar titik buta.
+- Anotasi skip sekadar lewat pada test flaky: coverage lenyap tanpa bug, tanpa keputusan, tanpa jejak.
+- "Flaky" sebagai putusan pribadi — developer mana pun boleh menyatakan merah sebagai derau sesuka hati, dan putusan itu membusuk menjadi merah-bisa-diabaikan.
+- Daftar karantina yang tak ditinjau siapa pun: test itu keluar dari critical path dan keluar dari ingatan semua orang, selamanya.
+- Menyalahkan toolchain ("runner-nya lambat kemarin") alih-alih mengukur variansi lulus/gagal per test.
+
+## Contoh kode
+
+Salah — rerun sampai hijau:
+
+```python
+# run_tests.py — yang klasik: kegagalan lenyap karena retry, tanpa catatan
+import subprocess
+
+code = 1
+for _ in range(3):  # test yang gagal 2 dari 3 run kini "lulus"
+    code = subprocess.call(["pytest", "-x", "--lf"])
+    if code == 0:
+        break
+raise SystemExit(code)  # flake-nya tak pernah dihitung atau dimiliki
+```
+
+Benar — karantina eksplisit dengan bug dan expiry:
+
+```python
+# run_tests.py — suite tetap deterministik; test yang diketahui flaky
+# dikarantina berdasarkan nama, masing-masing dengan tracking bug dan expiry.
+import datetime
+import subprocess
+
+QUARANTINE = {
+    "tests/test_webhook.py::test_retry_on_timeout": {
+        "bug": "PLAT-1423",  # kenapa ia flaky, dilacak di tempat pekerjaan berada
+        "expires": datetime.date(2026, 9, 30),  # karantina bersifat sementara
+    },
+}
+
+stale = [t for t, meta in QUARANTINE.items()
+         if meta["expires"] <= datetime.date.today()]
+if stale:
+    # karantina membusuk dengan nyaring: entri kedaluwarsa gagalkan build
+    raise SystemExit(f"quarantine expired - fix or re-triage: {stale}")
+
+subprocess.call(["pytest", "-m", "not quarantined"])
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Karantina adalah workflow, dan workflow-nya bisa dibuat mekanis:
+
+- **Deteksi flake otomatis**: CI merekam variansi lulus/gagal per test lintas run pada kode yang tak berubah; test yang melampaui threshold flakiness yang terkonfigurasi ditandai, dan opsional dikarantina otomatis — tool yang Google deskripsikan melakukan tepat hal ini.
+- **Registry karantina sebagai data**: test terkarantina hidup di registry yang di-check-in, tiap entri membawa link bug dan expiry; perubahan registry di-review seperti diff lainnya.
+- **Expiry menggerbangi build**: entri kedaluwarsa menggagalkan CI sampai test diperbaiki, di-triage ulang, atau dihapus dengan keputusan eksplisit — penahanan tidak pernah menjadi permanen karena kelalaian.
+- **Tanpa retry senyap**: rerun otomatis atas kegagalan dimatikan saja atau memancarkan counter per test; jumlah retry yang naik itu sendiri adalah pemicu karantina.
+- **Dashboard karantina**: jumlah flaky, umur entri, dan coverage yang hilang ke karantina dilaporkan ke tim, sehingga utang itu tetap terlihat, bukan ambien.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+Google mendeskripsikan praktik ini secara publik dalam "Flaky Tests at Google and How We Mitigate Them" karya John Micco (Mei 2016). https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html Di seluruh korpus Google, sekitar 1,5% dari seluruh test run melaporkan hasil flaky — di sana didefinisikan sebagai test "that exhibits both a passing and a failing result with the same code" (yang menunjukkan hasil lulus dan gagal sekaligus pada kode yang sama) — dan hampir 16% test membawa tingkat flakiness tertentu; dengan proyek rata-rata sekitar seribu test, aritmetikanya saja menghasilkan aliran alarm palsu yang tetap per run, yang masing-masing menuntut investigasi oleh developer atau build cop. Satu mitigasi yang dipublikasikan adalah tool yang memonitor flakiness dan otomatis mengarantina test ketika terlalu tinggi: karantina mengeluarkan test dari critical path dan membuka bug agar developer mengurangi flakiness-nya. Caveat Micco sendiri adalah tensi prinsip ini: karantina "could easily mask a real race condition or some other bug in the code being tested" (bisa dengan mudah menutupi race condition yang nyata atau bug lain di kode yang sedang dites), dan alternatif yang lebih lunak — menandai test flaky sehingga hanya gagal setelah tiga kegagalan beruntun — menunda kerusakan nyata pada test lima belas menit menjadi kira-kira empat puluh lima menit. Menu yang dipublikasikan (rerun, mark-as-flaky, quarantine-with-bug) persis permukaan kebijakan yang diformalkan prinsip ini: tahan deranya, jaga utangnya tetap terlihat, dan jangan pernah biarkan penahanan menjadi perbaikannya.
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Karantina vs. Fail-Visible**: memindahkan test flaky keluar dari critical path menukar sinyal dengan stabilitas — kegagalannya masih ada, hanya di tempat yang lebih senyap; jaga registry-nya tetap nyaring atau topengnya menjadi permanen.
+- **Auto-rerun vs. Retry Budget**: me-rerun test gagal sampai hijau adalah retry loop tanpa budget — ia membelanjakan waktu build demi ilusi; jika retry ada sama sekali, mereka dibatasi, dihitung, dan dilaporkan seperti retry lainnya.
+- **Ditimbang terhadap Observability First**: flake mungkin satu-satunya saksi race atau bug pengurutan yang nyata — perlakukan variansi per test sebagai telemetry tentang perilaku production, bukan sekadar utang suite.
+
+## Prinsip terkait
+
+- [Test Pyramid](/id/docs/principles/testing/test-pyramid) — suite yang berat di puncak adalah generator utama flakiness; lebih sedikit test di layer bawah adalah perbaikan strukturalnya.
+- [Fail Visible](/id/docs/principles/reliability/fail-visible) — karantina yang kedaluwarsa atau membengkak harus membunyikan alarm, bukan larut ke latar.
+- [Retry Budget](/id/docs/principles/reliability/retry-budget) — auto-rerun adalah retry: dibatasi, dihitung, dan dilaporkan, atau tidak sama sekali.
+- [Observability First](/id/docs/principles/reliability/observability-first) — variansi lulus/gagal per test adalah telemetry tentang kode, bukan hanya tentang suite.
+
+## Referensi
+
+- John Micco, Flaky Tests at Google and How We Mitigate Them — https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html (angka flakiness Google dan tool mitigasinya: rerun test yang gagal, mark-as-flaky, karantina otomatis dengan bug yang dibuka).
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html (kenapa test flaky mengikis kepercayaan developer, dan kenapa test yang lebih kecil adalah basis yang andal).

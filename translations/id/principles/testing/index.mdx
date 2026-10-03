@@ -1,0 +1,17 @@
+---
+title: "Testing · Testing"
+description: Bukti bahwa software bekerja, dan terus bekerja — bentuk suite, perilaku di atas implementasi, flaky test, property, test double, dan definisi legacy code.
+---
+
+Testing bukan teater verifikasi — testing adalah bukti, dan bukti punya ekonomi. Setiap test membeli keyakinan dengan harga: runtime, maintenance, dan perhatian. Prinsip di kategori ini tentang membayar harga itu secara sengaja: membentuk suite agar feedback datang sebelum menjadi mahal, meng-assert perilaku agar refactor tetap aman, mengkarantina test yang keracakannya menghancurkan kepercayaan, dan mengenali bahwa kode tanpa test bukan kode lama — kode itu kode yang tak bisa diubah.
+
+<Cards>
+  <Card title="Test Pyramid" description="Seimbangkan automated test suite berdasarkan biaya feedback — banyak unit test yang cepat, beberapa integration test, sedikit end-to-end test." href="/id/docs/principles/testing/test-pyramid" />
+  <Card title="Test Behavior, Not Implementation" description="Assert apa yang dikerjakan sistem — state dan efek yang observable — bukan bagaimana caranya; test yang terikat pada call graph internal rusak pada setiap refactor yang aman." href="/id/docs/principles/testing/test-behavior-not-implementation" />
+  <Card title="Flaky Test Quarantine" description="Test yang gagal bergantian pada kode yang tak berubah meracuni kepercayaan pada seluruh suite — karantinalah secara sengaja, dengan bug dan expiry." href="/id/docs/principles/testing/flaky-test-quarantine" />
+  <Card title="Property-Based Testing" description="Nyatakan invariant yang harus dipegang kode untuk setiap input, lalu biarkan generator memburu input yang melanggarnya." href="/id/docs/principles/testing/property-based-testing" />
+  <Card title="Don't Mock What You Don't Own" description="Jangan pernah menulis mock buatan tangan atas interface SDK third-party — bungkus dalam adapter milik Anda, dan verifikasi adapter-nya terhadap service yang nyata." href="/id/docs/principles/testing/dont-mock-what-you-dont-own" />
+  <Card title="Legacy Code Is Untested Code" description="Kode tanpa test yang cepat adalah legacy sejak hari dirilis — pin apa yang benar-benar ia lakukan dengan characterization test sebelum menyentuh satu baris pun." href="/id/docs/principles/testing/legacy-code-is-untested-code" />
+</Cards>
+
+Domain testing di registry memuat lebih banyak entri daripada ini — yang di atas sudah digali, dengan sumber; sisanya dilacak secara jujur sebagai *belum digali* sampai diteliti dan ditulis. Kategori yang sudah digali bukan kategori yang selesai.

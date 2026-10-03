@@ -1,0 +1,127 @@
+---
+title: Legacy Code Is Untested Code
+id: legacy-code-is-untested-code
+name: Legacy Code Is Untested Code
+summary: Code without fast tests is legacy the day it ships — you cannot change it safely, only guess. Pin what it actually does with characterization tests before touching a line.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - maintenance
+  - services
+  - legacy
+tags:
+  - legacy
+  - refactoring
+  - characterization-tests
+  - safety-net
+aliases:
+  - Code Without Tests Is Legacy Code
+sources:
+  - 'Michael Feathers, "Working Effectively with Legacy Code", 2004, https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Treat any code without fast, reliable tests as legacy — including code written last sprint. Never refactor, clean up, or extend it blind: first pin its current behavior with characterization tests, warts included; then make your change with the pins green. If the code cannot be pinned because it is welded to I/O, open a seam and test through it — do not copy the logic out and fork it into two divergent versions, neither tested.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Michael Feathers' reframing, from *Working Effectively with Legacy Code* (2004), relocates "legacy" from age to risk: legacy code is code without tests — the definition is widely attributed to the book's introduction (verification: perlu for the exact sentence — the verbatim wording is belum digali; the book itself is billed as strategies for working with large, untested legacy code bases). The operational meaning: legacy code is code you are afraid to change. Without a safety net, every modification is archaeology plus hope; with one, refactoring becomes evidence work. Feathers' accompanying toolkit — characterization tests that assert what the code *does* do rather than what it should, and seams that make entangled code testable — is the mechanism that converts the fear into a green suite first and a safe change second.
+
+## When to use
+
+- Before any cleanup, refactor, or modernization PR in an area without fast tests.
+- Before extending a long-lived module whose weird edge cases nobody can explain.
+- Under emergency maintenance: pin the exact path you are about to touch — a narrow pin beats a blind hotfix.
+- When inheriting or auditing a codebase: the tested part is the part that changes with evidence; the rest is legacy by definition, whatever its birth date.
+
+## When NOT to use
+
+- Code already held by fast tests: by this definition it is not legacy, however ugly — ugliness is a design judgment; fear is the legacy signal.
+- Verified-dead code: delete it with evidence (see Chesterton's Fence) rather than pinning behavior nobody needs and carrying it forever.
+- Code scheduled for replacement rather than modification — pinning what is about to be retired wastes the pin.
+- As an excuse to skip understanding: a characterization test records behavior, it does not explain it; the fence's why still has to be hunted by hand.
+
+## Anti-pattern
+
+- "Rewrite it from scratch" as the reflex response to fear — the replacement inherits every unknown behavior while discarding years of quiet fixes.
+- Cleaning up legacy inside a feature PR: behavior changes and intent changes share one diff, and neither can be reverted alone.
+- Characterization tests written from the spec instead of observation — they fail against the real quirks, get deleted, and the code is right back to unpinned.
+- Wrapping the whole module in one giant end-to-end test and calling it pinned — too slow to run constantly, too coarse to localize a slip.
+- Copy-pasting legacy logic into a new module "with fixes", leaving two divergent copies, neither under test.
+
+## Code example
+
+Wrong — refactor without a pin:
+
+```python
+def apply_discount(order):
+    # inherited logic: nobody remembers why over-100 goes through fees
+    if order.total > 100 and order.coupon:
+        return order.total * 0.9 - order.fees
+    return order.total
+
+# The "cleanup": someone deletes the fee subtraction because it looks
+# wrong, and ships it. The customers whose bills that branch handled
+# correctly-for-them find out in next month's invoices.
+```
+
+Right — pin observed behavior first, then change:
+
+```python
+def test_discount_over_100_with_coupon_is_pinned_as():
+    # NOT what the code should do — what it observably DOES today.
+    # If this pins a surprise, good: that surprise is exactly the
+    # risk you were about to take blind.
+    order = Order(total=120, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 103.0   # 120*0.9 - 5, warts included
+
+def test_discount_below_100_ignores_coupon():
+    order = Order(total=80, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 80      # no discount at all — pinned
+
+# Pins green, behavior captured: now refactor apply_discount freely.
+# Any behavioral slip becomes a red test before merge instead of a
+# silent invoice error after it.
+```
+
+## Technical enforcement
+
+<Enforcement>
+Untested code must be expensive to touch, and the expense must be automatic:
+
+- **Change-gated coverage**: CI fails a PR whose touched files lose fast-test coverage, or whose changed behavior paths carry no tests — the pin arrives with the change, never in a later sprint.
+- **Untested-file inventory**: a generated report lists files with no fast tests; a diff touching them is flagged for characterization work automatically, not by memory.
+- **Mutation spot-checks on new pins**: a light mutation run over newly pinned paths verifies the pins actually detect change — a pin that never fails is decoration, and the build treats it as such.
+- **Separation-of-diff rule**: cleanup and behavior change in the same PR against unpinned code is a review blocker; the pinning diff lands first, on its own.
+- **What prevents vs. detects**: change gates prevent new untested code from accumulating; the inventory and mutation checks detect how weak the existing pins are. Both halves, always.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In April 2020, New Jersey's unemployment system — running on 40-year-old mainframes programmed in COBOL — met a pandemic surge: an unprecedented 362,000 people had applied for unemployment in the state, and its IT department was racing to keep the service running. Governor Phil Murphy publicly appealed for volunteer programmers who knew COBOL, and the state labor commissioner told reporters: "Literally, we have systems that are 40 years-plus old, and there'll be lots of postmortems." Maintaining your own production system by public appeal for volunteers is what "legacy code is untested code" looks like at state scale: code the owner cannot change with confidence, only staff. A characterization suite around the eligibility rules would not have absorbed the surge — it would have reduced the risk of the maintenance work the state's IT department was racing to do, on code nobody could afford to break. https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html (verification: ok for the quoted facts; the article does not describe the mainframes' test coverage — that the code was effectively unpinned is inference from era and appeal, tidak yakin; dig the postmortems the commissioner promised before quoting any.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Pinning cost vs. urgency**: emergencies do not wait for suites; the workable compromise is pinning exactly the paths about to change, not the whole module — the Test Pyramid's granularity logic applied to rescue work.
+- **Observed behavior vs. intended spec**: characterization tests bless today's behavior, bugs included; each pinned wart must be a deliberate decision — preserve it, or change it knowingly — which is Test Behavior, Not Implementation taken to its honest extreme.
+- **Refactor in place vs. rewrite**: fear of unpinned code pushes toward the big rewrite, but the replacement must itself grow from something working (Gall's Law), and the weird branches may carry reasons the pins will never reveal (Chesterton's Fence).
+
+## Related principles
+
+- [Test Behavior, Not Implementation](/docs/principles/testing/test-behavior-not-implementation) — characterization tests are the pure case: behavior as observed, never structure as designed.
+- [Chesterton's Fence](/docs/principles/design/chesterton-fence) — a pin tells you what the fence does, never why it was built.
+- [Gall's Law](/docs/principles/architecture/gall-law) — the counterweight to the rewrite reflex that fear of legacy induces.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — until pins exist, changes to legacy ship staged and revertable, because review alone cannot hold them.
+
+## References
+
+- Michael C. Feathers, *Working Effectively with Legacy Code* (2004) — https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055 (the definition and the toolkit: characterization tests, seams, sprouting; verification: perlu for the verbatim sentence — sudah digali at the book-page level, the exact quote is belum digali.)
+- CNBC, *New Jersey needs volunteers who know COBOL, a 60-year-old programming language* (April 2020) — https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html (the 40-year-old mainframes, the 362,000-application surge, the volunteer appeal, the commissioner's quote.)

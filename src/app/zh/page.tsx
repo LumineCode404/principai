@@ -14,6 +14,7 @@ const categories = [
   { name: "架构 Architecture", desc: "边界、依赖、从简单起点生长。", href: "/zh/docs/principles/architecture" },
   { name: "API", desc: "显式、版本化、诚实的契约。", href: "/zh/docs/principles/api" },
   { name: "设计 Design", desc: "简单性与支配度量的定律。", href: "/zh/docs/principles/design" },
+  { name: "测试 Testing", desc: "有经济学的证据——suite 形状、行为高于实现。", href: "/zh/docs/principles/testing" },
 ];
 
 export default function HomeZh() {
@@ -67,7 +68,7 @@ export default function HomeZh() {
             </h1>
             <div className="hero-up" style={{ ["--d" as never]: "0.2s"} }>
               <p className="mt-6 text-lg leading-relaxed text-[#8B89A0]">
-                32 条软件工程原则，全部有完整中文翻译——每条原则一个文件，固定章节顺序，
+                {stats.dug} 条软件工程原则，全部有完整中文翻译——每条原则一个文件，固定章节顺序，
                 severity 分级，并带语音摘要。原则建议，控制执法；这是整座图书馆的地基。
               </p>
             </div>
@@ -138,7 +139,7 @@ export default function HomeZh() {
                 <AudioLines className="h-6 w-6 text-[#5CB3F2]" aria-hidden />
               </span>
               <div>
-                <p className="font-semibold text-white">32 段语音摘要 · 每条原则一段</p>
+                <p className="font-semibold text-white">{stats.dug} 段语音摘要 · 每条原则一段</p>
                 <p className="mt-0.5 text-sm text-[#8B89A0]">
                   示例：
                   <Link
@@ -231,7 +232,7 @@ export default function HomeZh() {
             </Item>
             <Item>
               <div className="rounded-2xl border border-[rgba(77,75,91,0.4)] bg-[#0E0E12] p-6">
-                <p className="font-display text-4xl font-black text-white">32</p>
+                <p className="font-display text-4xl font-black text-white">{stats.dug}</p>
                 <p className="mt-1 font-mono text-xs uppercase tracking-widest text-[#8B89A0]">中文翻译全部完成</p>
               </div>
             </Item>

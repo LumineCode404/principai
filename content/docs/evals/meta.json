@@ -1,3 +1,7 @@
 {
-  "pages": ["index", "cleanup-script"]
+  "pages": [
+    "index",
+    "cleanup-script",
+    "schema-migration"
+  ]
 }

@@ -72,6 +72,7 @@ const categories = [
   { name: "Architecture", desc: "Boundaries, dependencies, growth from simple beginnings.", href: "/docs/principles/architecture" },
   { name: "API", desc: "Contracts that are explicit, versioned, and honest.", href: "/docs/principles/api" },
   { name: "Design", desc: "Simplicity, judgment, and the laws of measures.", href: "/docs/principles/design" },
+  { name: "Testing", desc: "Evidence with an economics — suite shape, behavior over implementation.", href: "/docs/principles/testing" },
 ];
 
 const steps = [
@@ -87,12 +88,12 @@ const languages = [
     label: "English",
     desc: "The source of truth — every principle written and reviewed here first.",
     href: "/docs",
-    extra: "32 principles",
+    extra: "the canon",
   },
   {
     code: "中文",
     label: "Chinese",
-    desc: "全部 32 条原则的完整中文翻译，每条原则带语音摘要。",
+    desc: "全部原则的完整中文翻译，每条原则带语音摘要。",
     href: "/zh/docs",
     extra: "voice summaries",
     voice: true,
@@ -100,9 +101,9 @@ const languages = [
   {
     code: "ID",
     label: "Bahasa Indonesia",
-    desc: "Terjemahan bertahap — prinsip yang selesai langsung tayang.",
+    desc: "Terjemahan penuh seluruh arsip — draf sampai ditinjau manusia, arti tetap mengalir dari bahasa Inggris.",
     href: "/id/docs",
-    extra: "growing archive",
+    extra: "full archive",
   },
 ];
 

@@ -1,0 +1,140 @@
+---
+title: Don't Mock What You Don't Own
+id: dont-mock-what-you-dont-own
+name: Don't Mock What You Don't Own
+summary: Never hand-write mocks of a third-party SDK's interface — wrap it in an adapter you own, double the adapter in fast tests, and verify the adapter against the real service.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - services
+  - libraries
+  - ci
+tags:
+  - testing
+  - mocks
+  - test-doubles
+  - boundaries
+aliases:
+  - Mock Only What You Own
+  - Wrap What You Don't Own
+sources:
+  - 'Freeman & Pryce, "Growing Object-Oriented Software, Guided by Tests", 2009, https://growing-object-oriented-software.com/'
+  - 'Freeman, Pryce, Mackinnon & Walnes, "Mock Roles, not Objects", OOPSLA 2004, https://jmock.org/oopsla2004.pdf'
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+When a test needs to isolate code from a third-party SDK, client, or API, never hand-write a mock of the vendor's interface — you are guessing at someone else's semantics and grading yourself on the guess. Wrap the dependency once in a thin adapter whose interface you own, double that adapter in fast tests, and keep a small set of tests that exercise the adapter against the real service or its sanctioned sandbox. If a test starts spelling out a vendor's method names, move the boundary instead.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+A mock encodes assumptions about behavior you did not write, cannot change, and usually have not read. The rule is the community's distillation of the mock-objects school behind Freeman and Pryce's *Growing Object-Oriented Software, Guided by Tests* — and their earlier OOPSLA paper states the core directly: mock objects turned out to be "less interesting as a technique for isolating tests from third-party libraries than is widely thought". The working form: double roles and interfaces you own, and treat every external service as an architectural boundary. Wrap it in an adapter whose interface is yours — names, errors, and semantics you chose — double that port in unit tests, and verify the one adapter against the real thing, so the vendor's quirks and evolution live in exactly one small place instead of being re-guessed in every test file.
+
+## When to use
+
+- Any unit test tempted to stub a vendor SDK's client, transport, or internals.
+- Dependencies that version aggressively, where breaking changes arrive between minor releases.
+- Infrastructure clients — payments, mail, storage, SMS, identity — where a wrong assumption means a production failure with a green suite behind it.
+- Fast feedback loops that cannot afford real network calls on every run.
+
+## When NOT to use
+
+- Interfaces you own: double them freely — driving out your own roles with test doubles is the technique working as designed.
+- A dependency you use trivially and unchanged, where one integration test costs less than maintaining a wrapper layer indefinitely.
+- Providers that maintain an official, first-party test double with documented fidelity guarantees — that double is part of the provider's contract, not your guess about it.
+- Exploratory spikes against a service you have not committed to; delete or vet them before anything ships.
+
+## Anti-pattern
+
+- Patching the vendor module in the test runner and inventing response objects from its type signatures — method names guessed, error shapes imagined, pagination semantics unknown.
+- Mocking private or internal classes via reflection to force exotic error paths the public API never promises.
+- A suite that never once talks to the real service until production traffic does.
+- Replaying a response copied from production, then hand-editing it until the assertions pass — a mock of a guess of a memory.
+- Upgrading a vendor major version by patching the mocks until green, without a single check against the real surface.
+
+## Code example
+
+Wrong — mocking the vendor's interface directly:
+
+```ts
+import { PaymentSDK } from 'vendor-payments'; // third-party SDK — not ours
+
+jest.mock('vendor-payments');
+// A hand-built fake of someone else's interface: names guessed from docs,
+// error shapes invented, idempotency semantics unknown to its author.
+const sdk = jest.mocked(PaymentSDK);
+sdk.charge.mockResolvedValue({ ok: true });               // does the real one say ok?
+sdk.charge.mockRejectedValue(new Error('card_declined')); // is that its error type?
+
+test('checkout charges the customer', async () => {
+  await checkout(user, 42);
+  expect(sdk.charge).toHaveBeenCalled(); // proves our guess, not the vendor
+});
+```
+
+Right — own the boundary, double the port, verify the adapter:
+
+```ts
+// payments.ts — the boundary is OURS: names, errors, and semantics we chose.
+export interface PaymentGateway {
+  charge(amountCents: number, token: string):
+    Promise<{ id: string } | { declined: true }>;
+}
+
+// Fast unit test: the double stands in for OUR port, not their SDK.
+test('a declined card creates no order', async () => {
+  const gateway: PaymentGateway = { charge: async () => ({ declined: true }) };
+  await expect(checkout(user, 42, gateway)).rejects.toThrow(PaymentDeclined);
+});
+
+// Adapter test: the ONE place the vendor SDK is real (sandbox or recorded
+// traffic). Vendor drift breaks HERE, in CI, not in production.
+test('adapter maps vendor failures onto our contract', async () => {
+  const gateway = new VendorPaymentGateway(SANDBOX_KEY);
+  const result = await gateway.charge(42, 'tok_charge_declined');
+  expect(result).toEqual({ declined: true });
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+The rule is only real when the build enforces the boundary:
+
+- **Import restrictions**: lint rules forbid importing vendor SDKs outside their adapter module — "only the adapter touches the vendor" becomes machine-checked, not tribal memory.
+- **Contract tests on adapters**: every adapter carries at least one test against the real service or its sanctioned sandbox in a labeled CI job, so vendor drift surfaces as a red build rather than a production page.
+- **Double review rule**: hand-written doubles of third-party interfaces are review blockers; the reviewer's first question is "whose interface is this double describing?".
+- **Recorded traffic over invented payloads**: when real calls are too costly for CI, replay recorded interactions with an expiry date — recordings expire and force a re-capture; fiction does not.
+- **What prevents vs. detects**: import restrictions prevent new mocks of interfaces you do not own; sandbox contract tests detect the vendor moving underneath the adapter. Both halves, always.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+A March 2024 bug report against LocalStack — a widely used stand-in for AWS in tests — documents the failure mode with unusual precision. A developer switched a Lambda's DynamoDB access from Query to BatchGet but forgot to change the IAM permission from dynamodb:Query to dynamodb:BatchGetItem. Every test run against LocalStack passed, because the emulator does not enforce DynamoDB action permissions; the missing permission surfaced only when the code ran against real AWS, as a permission error. The reporter's own closing expectation: "My expectation was this would have been caught in localstack." https://github.com/localstack/localstack/issues/10517 (verification: ok — issue text quoted; what failed downstream in production beyond the reported AWS error is not described — belum digali.) A check at the real boundary, even a thin one, would have surfaced the policy mismatch earlier — as a failing pipeline step instead of a runtime permission error.
+</RealCase>
+
+## Tension and trade-off
+
+- **Speed vs. fidelity**: a suite of doubles is fast and quiet exactly where it is lying; the Test Pyramid's answer is a thin base of real-boundary tests so vendor drift is caught somewhere cheap.
+- **Wrapper cost vs. direct dependency**: every adapter is code you now own and maintain; Dependency Inversion earns its keep only where the boundary is real — wrapping a dependency you use trivially trades one liability for another.
+- **Your contract vs. vendor drift**: even through an adapter you will come to depend on vendor behavior nobody documented — Hyrum's Law works on providers too; adapter contract tests are how that silent dependence gets noticed.
+
+## Related principles
+
+- [Test Behavior, Not Implementation](/docs/principles/testing/test-behavior-not-implementation) — mocking a vendor's internals couples your suite to their implementation choices.
+- [Dependency Inversion](/docs/principles/architecture/dependency-inversion) — the adapter is the abstraction you depend on instead of the SDK.
+- [Test Pyramid](/docs/principles/testing/test-pyramid) — the thin real-boundary base that keeps doubles honest.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — undocumented vendor behavior becomes your dependency whether you noticed or not.
+
+## References
+
+- Freeman & Pryce, *Growing Object-Oriented Software, Guided by Tests* (2009) — https://growing-object-oriented-software.com/ (the book's home: TDD with mock objects driving design at boundaries you own; verification: ok for the book and site, perlu for whether the five-word phrase appears verbatim in the text — belum digali.)
+- Freeman, Pryce, Mackinnon & Walnes, *Mock Roles, not Objects*, OOPSLA 2004 — https://jmock.org/oopsla2004.pdf (mock objects as a design technique, and the paper's own verdict on isolating third-party libraries.)
+- Martin Fowler, *Mocks Aren't Stubs* — https://martinfowler.com/articles/mocksArentStubs.html (the vocabulary of test doubles and the classical vs. mockist distinction.)

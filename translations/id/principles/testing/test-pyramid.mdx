@@ -1,0 +1,131 @@
+---
+title: Test Pyramid
+id: test-pyramid
+name: Test Pyramid
+summary: Seimbangkan automated test suite berdasarkan biaya feedback — banyak unit test yang cepat, beberapa integration test, sedikit end-to-end test.
+category: testing
+type: heuristic
+severity: important
+applies_to:
+  - "ci"
+  - "services"
+  - "libraries"
+tags:
+  - "testing"
+  - "feedback-loop"
+  - "test-suite"
+aliases:
+  - "Testing Pyramid"
+  - "Test Automation Pyramid"
+sources:
+  - 'Mike Cohn, Succeeding with Agile, 2009'
+  - 'Ham Vocke, "The Practical Test Pyramid", https://martinfowler.com/articles/practical-test-pyramid.html'
+status: draft
+verification: ok
+source_hash: "87904a8c01eb68e0"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/test-pyramid.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Bentuk setiap automated test suite sebagai piramida: banyak unit test kecil dan cepat di dasarnya, layer integration test yang lebih tipis, dan hanya beberapa end-to-end test yang lambat di puncaknya. Dorong setiap assertion turun ke layer terendah yang masih bisa mengamati perilaku yang ia pedulikan, dan perlakukan suite yang memakan berjam-jam untuk dijalankan sebagai defect pada suite-nya, bukan sebagai takdir. Jangan pernah menjawab suite yang lambat dan flaky dengan menambah test lagi di puncak — turun satu layer sebagai gantinya.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Test pyramid — dicetuskan oleh Mike Cohn dalam Succeeding with Agile dan dipopulerkan oleh "The Practical Test Pyramid" karya Ham Vocke — adalah metafora bagi suite yang seimbang: banyak unit test kecil dan cepat, beberapa integration test yang lebih coarse-grained, sangat sedikit end-to-end test level tinggi. Bentuknya mengodekan biaya: test yang lebih tinggi di stack lebih lambat, lebih flaky, dan lebih sulit didiagnosis ketika gagal, jadi suite membeli coverage di tempat test murah dijalankan dan murah diperbaiki, dan menyisakan puncak yang mahal untuk journey yang benar-benar membutuhkan seluruh sistem terhubung menjadi satu. Yang dibeli bentuk ini adalah kecepatan feedback — otomasi seharusnya memberi tahu bahwa software rusak "in a matter of seconds and minutes instead of days and weeks" (hitungan detik dan menit, bukan hari dan minggu). Peringatan Vocke tentang bentuk terbaliknya, "test ice-cream cone", adalah bahwa ia "will be a nightmare to maintain and takes way too long to run" — akan menjadi mimpi buruk untuk dipelihara dan memakan waktu terlalu lama untuk dijalankan.
+
+## Kapan pakai
+
+- Codebase apa pun yang runtime test CI-nya menjadi gerbang merge atau release.
+- Tim yang menjalankan continuous integration, tempat feedback loop harus tetap hidup dengan merge berkali-kali sehari.
+- Kode service dan library yang logikanya bisa dieksekusi tanpa deployment penuh.
+- Menyelamatkan suite yang sudah tidak dijalankan developer secara lokal karena memakan waktu terlalu lama.
+
+## Kapan TIDAK pakai
+
+- Spike dan prototype sekali buang yang tak akan pernah sampai ke production — strategi testing untuk kode berumur hitungan hari hanyalah derau.
+- Path safety-critical atau yang diatur kontrak dan menuntut bukti end-to-end: puncak piramida dianggarkan berdasarkan risiko, bukan selera.
+- Sistem legacy yang sulit dites tempat wiring-nya sendirilah risikonya — pin dulu perilaku saat ini (lihat Legacy Code Is Untested Code) sebelum menegakkan bentuk layer.
+- Codebase front-end yang tooling-nya membuat integration test hampir secepat unit test — optimalkan return on investment daripada bentuk (Testing Trophy milik Dodds).
+
+## Anti-pattern
+
+- Ice-cream cone: gunung end-to-end UI test di atas basis unit test yang tipis — lambat, flaky, dan tidak mendiagnosis apa-apa.
+- Men-test setiap business rule melalui full stack: empat puluh detik login, database, dan browser demi mengetahui satu angka.
+- Bertengkar soal nama layer ("apa itu unit test?") alih-alih bertanya apa yang diamati sebuah test dan seberapa cepat ia berjalan — Vocke secara eksplisit memperingatkan agar tidak terikat pada nama-nama layer.
+- Memandatkan rasio layer atau persentase coverage per repository — piramida adalah cost heuristic, dan Goodhart's Law akan menagih metric-nya.
+- Suite yang begitu lambat sampai developer mengeroyokkan perubahan mengikuti run semalaman dan membaca hasilnya pagi berikutnya.
+
+## Contoh kode
+
+Salah — satu business rule, hanya di-test melalui browser utuh:
+
+```ts
+// e2e/checkout.spec.ts — satu-satunya test yang meng-cover rule volume-discount
+test('volume discount', async ({ page }) => {
+  await page.goto('/login');
+  await page.fill('#email', 'e2e-bot@example.com'); // full stack demi satu rule:
+  await page.click('#login');                        // auth, session, database
+  for (let i = 0; i < 11; i++) {
+    await page.click('#add-to-cart');                // 11 round-trip browser
+  }
+  await expect(page.locator('#total')).toHaveText('104.50'); // ~40 detik setup
+});
+```
+
+Benar — rule-nya sebagai unit test cepat, journey-nya sebagai satu smoke test:
+
+```ts
+// unit/discount.spec.ts — rule-nya sendiri, hitungan milidetik
+test('11th item is free', () => {
+  const cart = items(11, unitPrice(9.5));
+  expect(volumeDiscount(cart)).toBe(104.5); // 10 dibayar, 1 gratis
+});
+
+// e2e/checkout.smoke.spec.ts — tepat SATU journey membuktikan wiring-nya
+// (login, tambah satu item, lihat total yang masuk akal); ia tidak
+// membuktikan ulang rule yang sudah dimiliki layer unit.
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Piramida itu sendiri adalah nasihat tentang di mana assertion tinggal; pipeline-lah yang menegakkan konsekuensinya:
+
+- **CI runtime budget**: suite default yang menjadi gerbang merge punya cap runtime keras; melebihinya menggagalkan build dan memaksa test baru turun satu layer atau masuk lane terjadwal.
+- **Layer tagging**: setiap test mendeklarasikan layer-nya; CI melaporkan runtime dan jumlah per layer sebagai tren, sehingga piramida yang terbalik menjadi terlihat, bukan sekadar ambien.
+- **Merge gate di fast lane**: pull request digerbangi oleh unit dan integration test; suite end-to-end berjalan post-merge atau terjadwal, dengan pelaporan keras yang mengalir kembali ke backlog.
+- **Kuota end-to-end di review**: perubahan yang menambah end-to-end test harus menjelaskan kenapa assertion-nya tidak bisa tinggal lebih rendah — sebagai butir checklist review yang wajib.
+- **Pelacakan flake per layer**: kegagalan diatribusikan ke layer; layer yang kegagalannya sebagian besar flaky mendapat perlakuan karantina (lihat Flaky Test Quarantine), bukan lebih banyak test.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+Blog testing Google mengargumentasikan ekonominya dari praktik dalam "Just Say No to More End-to-End Tests" (Mike Wacker, April 2015). https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html Wacker menyajikan apa yang ia beri label eksplisit sebagai sketsa komposit, berdasarkan kumpulan pengalaman nyata: sebuah tim menggerbangi rilisnya pada suite end-to-end semalaman, dan dengan tersisa satu hari menuju deadline, pass rate-nya runtuh — pertama karena sign-in ke service rusak dan hampir semua test melakukan sign-in user, lalu sekali lagi karena tim mitra men-deploy build buruk ke environment testing bersama. Kesimpulan artikel itu adalah argumen piramida dalam bahasa production: test yang lebih kecil itu cepat ("no developer wants to wait hours or days to find out if their change works" — tidak ada developer yang mau menunggu berjam-jam atau berhari-hari untuk tahu apakah perubahannya bekerja) dan andal, sementara strategi yang sebagian besar dibangun dari end-to-end test mengubah setiap defect kecil menjadi peristiwa seluruh suite. Suite di layer yang lebih rendah akan mengurangi blast radius masing-masing defect itu menjadi satu test yang gagal dengan satu sebab yang jelas.
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Test Pyramid vs. Testing Trophy**: ketika integration test hampir secepat unit test (banyak tooling front-end modern), bentuk berhenti menjadi intinya — Kent C. Dodds mengusulkan menimbang layer berdasarkan return on investment, bukan berdasarkan jumlah.
+- **Fast lane vs. wiring nyata**: menggerbangi merge pada fast lane saja berarti defect integration baru muncul setelah merge; pasangkan jadwalnya dengan pelaporan Fail-Visible agar lane post-merge membunyikan alarm, bukan berbisik.
+- **Ditimbang terhadap Goodhart's Law**: begitu piramida ditegakkan sebagai rasio layer atau angka coverage, metric itu di-gaming dan cost heuristic di baliknya terlupakan.
+
+## Prinsip terkait
+
+- [Test Behavior, Not Implementation](/id/docs/principles/testing/test-behavior-not-implementation) — layer dasar yang cepat hanya menjadi aset jika test-test kecilnya mengamati perilaku, bukan call graph.
+- [Flaky Test Quarantine](/id/docs/principles/testing/flaky-test-quarantine) — suite yang berat di puncak adalah tempat flakiness berkembang biak; karantinalah secara sengaja.
+- [Fail Visible](/id/docs/principles/reliability/fail-visible) — runtime budget yang terlampaui dan kegagalan post-merge harus nyaring, bukan ambien.
+- [Goodhart's Law](/id/docs/principles/design/goodharts-law) — rasio layer dan persentase coverage menjadi target begitu diukur sebagai target.
+
+## Referensi
+
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html (pembagian layer, apa yang di-test di tiap level, anti-pattern ice-cream cone; mengatribusikan konsep ini pada Succeeding with Agile karya Mike Cohn).
+- Kent C. Dodds, Write tests. Not too many. Mostly integration. — https://kentcdodds.com/blog/write-tests (Testing Trophy — menimbang layer berdasarkan return on investment ketika integration test murah).
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html (kenapa strategi berat end-to-end gagal dalam praktik: lambat, flaky, sulit didiagnosis).

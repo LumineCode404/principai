@@ -1,0 +1,17 @@
+---
+title: Testing
+description: Evidence that software works, and keeps working — suite shape, behavior over implementation, flaky tests, properties, doubles, and the definition of legacy code.
+---
+
+Testing is not verification theater — it is evidence, and evidence has an economics. Every test buys confidence at a price in runtime, maintenance, and attention. The principles in this category are about paying that price deliberately: shaping the suite so feedback arrives before it is expensive, asserting behavior so refactors stay safe, quarantining the tests whose randomness destroys trust, and recognizing that code without tests is not old code — it is unchangeable code.
+
+<Cards>
+  <Card title="Test Pyramid" description="Balance the automated test suite by feedback cost — many fast unit tests, some integration tests, few end-to-end tests." href="/docs/principles/testing/test-pyramid" />
+  <Card title="Test Behavior, Not Implementation" description="Assert what the system does — observable states and effects — not how it does it; tests coupled to internal call graphs break on every safe refactor." href="/docs/principles/testing/test-behavior-not-implementation" />
+  <Card title="Flaky Test Quarantine" description="A test that fails intermittently on unchanged code poisons trust in the whole suite — isolate it deliberately, with a bug and an expiry." href="/docs/principles/testing/flaky-test-quarantine" />
+  <Card title="Property-Based Testing" description="State the invariants your code must hold for every input, then let a generator hunt for the inputs that break them." href="/docs/principles/testing/property-based-testing" />
+  <Card title="Don't Mock What You Don't Own" description="Never hand-write mocks of a third-party SDK's interface — wrap it in an adapter you own, and verify the adapter against the real service." href="/docs/principles/testing/dont-mock-what-you-dont-own" />
+  <Card title="Legacy Code Is Untested Code" description="Code without fast tests is legacy the day it ships — pin what it actually does with characterization tests before touching a line." href="/docs/principles/testing/legacy-code-is-untested-code" />
+</Cards>
+
+The registry's testing domain holds more entries than this — the ones above are dug, with sources; the rest are tracked honestly as *belum digali* until they are researched and written. A dug category is not a finished one.

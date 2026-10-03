@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, BookOpenText, Search } from "lucide-react";
+import { ArrowRight, BookOpenText, Search, Check, Circle, HelpCircle } from "lucide-react";
 import {
   REGISTRY,
   REGISTRY_DOMAINS,
@@ -14,23 +14,32 @@ import { Reveal, Lift } from "@/components/motion";
 
 const PAGE_SIZE = 40;
 
+function StatusIcon({ status }: { status: RegistryEntry["status"] }) {
+  if (status === "sudah digali") return <Check className="h-3 w-3" aria-hidden />;
+  if (status === "tidak yakin") return <HelpCircle className="h-3 w-3" aria-hidden />;
+  return <Circle className="h-3 w-3" aria-hidden />;
+}
+
 function statusChip(status: RegistryEntry["status"]) {
   if (status === "sudah digali") {
     return (
-      <span className="inline-flex shrink-0 items-center rounded-full border border-[rgba(2,130,216,0.45)] bg-[rgba(2,130,216,0.1)] px-2 py-0.5 text-[11px] font-semibold text-[#5CB3F2]">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[rgba(2,130,216,0.45)] bg-[rgba(2,130,216,0.1)] px-2 py-0.5 text-[11px] font-semibold text-[#5CB3F2]">
+        <StatusIcon status={status} />
         sudah digali
       </span>
     );
   }
   if (status === "tidak yakin") {
     return (
-      <span className="inline-flex shrink-0 items-center rounded-full border border-[rgba(255,107,107,0.4)] bg-[rgba(255,107,107,0.07)] px-2 py-0.5 text-[11px] font-semibold text-[#FF9B9B]">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[rgba(255,107,107,0.4)] bg-[rgba(255,107,107,0.07)] px-2 py-0.5 text-[11px] font-semibold text-[#FF9B9B]">
+        <StatusIcon status={status} />
         tidak yakin
       </span>
     );
   }
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full border border-[rgba(77,75,91,0.5)] bg-[rgba(77,75,91,0.12)] px-2 py-0.5 text-[11px] font-medium text-[#8B89A0]">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[rgba(77,75,91,0.5)] bg-[rgba(77,75,91,0.12)] px-2 py-0.5 text-[11px] font-medium text-[#8B89A0]">
+      <StatusIcon status={status} />
       belum digali
     </span>
   );
@@ -52,7 +61,7 @@ function EntryRow({ entry, index }: { entry: RegistryEntry; index: number }) {
           <Link
             href={entry.href}
             prefetch={false}
-            className="group inline-flex items-baseline gap-1.5 font-semibold text-white hover:text-[#5CB3F2]"
+            className="group inline-flex items-baseline gap-1.5 rounded font-semibold text-white outline-none hover:text-[#5CB3F2] focus-visible:text-[#5CB3F2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0282D8]"
           >
             {entry.name}
             <ArrowRight className="h-3 w-3 translate-y-[-1px] text-[#8B89A0] transition-all group-hover:translate-x-0.5 group-hover:text-[#0282D8]" aria-hidden />
@@ -78,6 +87,21 @@ export default function RegistryPage() {
   const [query, setQuery] = useState("");
   const [domain, setDomain] = useState<string>("all");
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // "/" focuses the search box — the docs-site affordance, skipped when
+  // the user is already typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" ) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -140,6 +164,7 @@ export default function RegistryPage() {
                 </label>
                 <input
                   id="registry-search"
+                  ref={searchRef}
                   type="search"
                   value={query}
                   onChange={(e) => {
@@ -147,12 +172,15 @@ export default function RegistryPage() {
                     setVisible(PAGE_SIZE);
                   }}
                   placeholder="Search name, definition, or source…"
-                  className="h-11 w-72 max-w-full rounded-xl border border-[rgba(77,75,91,0.5)] bg-[#0E0E12] pl-9 pr-4 text-sm text-white placeholder:text-[#8B89A0] focus:border-[rgba(2,130,216,0.6)] focus:outline-none focus:ring-2 focus:ring-[rgba(2,130,216,0.35)]"
+                  className="h-11 w-72 max-w-full rounded-xl border border-[rgba(77,75,91,0.5)] bg-[#0E0E12] pl-9 pr-12 text-sm text-white placeholder:text-[#8B89A0] focus:border-[rgba(2,130,216,0.6)] focus:outline-none focus:ring-2 focus:ring-[rgba(2,130,216,0.35)]"
                 />
+                <kbd aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-[rgba(77,75,91,0.5)] bg-[#15151B] px-1.5 font-mono text-[11px] text-[#8B89A0]">
+                  /
+                </kbd>
               </div>
               <a
                 href="/registry.json"
-                className="inline-flex h-11 items-center rounded-xl border border-[rgba(77,75,91,0.5)] px-4 font-mono text-[13px] text-[#8B89A0] transition-colors hover:border-[rgba(2,130,216,0.5)] hover:text-white"
+                className="inline-flex h-11 items-center rounded-xl border border-[rgba(77,75,91,0.5)] px-4 font-mono text-[13px] text-[#8B89A0] transition-colors hover:border-[rgba(2,130,216,0.5)] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0282D8]"
               >
                 registry.json
               </a>

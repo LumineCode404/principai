@@ -1,3 +1,12 @@
 {
-  "pages": ["index", "security", "reliability", "data", "architecture", "api", "design"]
+  "pages": [
+    "index",
+    "security",
+    "reliability",
+    "data",
+    "architecture",
+    "api",
+    "design",
+    "testing"
+  ]
 }

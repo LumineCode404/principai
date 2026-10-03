@@ -1,0 +1,133 @@
+---
+title: Legacy Code Is Untested Code
+id: legacy-code-is-untested-code
+name: Legacy Code Is Untested Code
+summary: Kode tanpa test yang cepat adalah legacy sejak hari dirilis — Anda tak bisa mengubahnya dengan aman, hanya menebak. Pin apa yang benar-benar ia lakukan dengan characterization test sebelum menyentuh satu baris pun.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "maintenance"
+  - "services"
+  - "legacy"
+tags:
+  - "legacy"
+  - "refactoring"
+  - "characterization-tests"
+  - "safety-net"
+aliases:
+  - "Code Without Tests Is Legacy Code"
+sources:
+  - 'Michael Feathers, "Working Effectively with Legacy Code", 2004, https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055'
+status: draft
+verification: perlu
+source_hash: "9126548134a8c2ee"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/legacy-code-is-untested-code.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Perlakukan kode apa pun tanpa test yang cepat dan andal sebagai legacy — termasuk kode yang ditulis sprint lalu. Jangan pernah me-refactor, membereskan, atau memperluasnya secara buta: pin dulu perilakunya saat ini dengan characterization test, cacatnya ikut termasuk; lalu buat perubahan Anda dengan pin yang hijau. Jika kode itu tak bisa dipin karena terweld ke I/O, buka sebuah seam dan test melaluinya — jangan menyalin logikanya keluar lalu mem-fork-nya menjadi dua versi yang menyimpang, tanpa satu pun teruji.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Pembingkaian ulang Michael Feathers, dari *Working Effectively with Legacy Code* (2004), memindahkan "legacy" dari usia ke risiko: legacy code adalah kode tanpa test — definisi ini luas diatribusikan ke pengantar bukunya (verification: perlu untuk kalimat eksaknya — kata-kata verbatim-nya belum digali; bukunya sendiri dipasarkan sebagai strategi untuk bekerja dengan legacy code base besar yang tak teruji). Makna operasionalnya: legacy code adalah kode yang Anda takuti untuk diubah. Tanpa safety net, setiap modifikasi adalah arkeologi plus harapan; dengan safety net, refactoring menjadi pekerjaan bukti. Toolkit pendamping Feathers — characterization test yang meng-assert apa yang kode *lakukan* alih-alih apa yang seharusnya, dan seam yang membuat kode terjerat bisa dites — adalah mekanisme yang mengubah ketakutan itu menjadi suite hijau lebih dulu dan perubahan yang aman kemudian.
+
+## Kapan pakai
+
+- Sebelum PR pembersihan, refactor, atau modernisasi apa pun di area tanpa test yang cepat.
+- Sebelum memperluas modul berumur panjang yang edge case anehnya tak bisa dijelaskan siapa pun.
+- Saat maintenance darurat: pin tepat path yang hendak disentuh — pin yang sempit mengalahkan hotfix buta.
+- Saat mewarisi atau mengaudit sebuah codebase: bagian yang teruji adalah bagian yang berubah dengan bukti; sisanya legacy secara definisi, apa pun tanggal kelahirannya.
+
+## Kapan TIDAK pakai
+
+- Kode yang sudah ditahan test cepat: menurut definisi ini ia bukan legacy, sedjelek apa pun penampilannya — kejelekan adalah penilaian desain; ketakutan adalah sinyal legacy.
+- Kode yang terbukti mati: hapus dengan bukti (lihat Chesterton's Fence) alih-alih mem-pin perilaku yang tak dibutuhkan siapa pun dan menggendongnya selamanya.
+- Kode yang dijadwalkan diganti, bukan diubah — mem-pin apa yang hendak dipensiunkan membuang pin-nya.
+- Sebagai alasan melewatkan pemahaman: characterization test merekam perilaku, tidak menjelaskannya; "kenapa"-nya fence tetap harus diburu dengan tangan.
+
+## Anti-pattern
+
+- "Tulis ulang dari nol" sebagai respons refleks terhadap ketakutan — penggantinya mewarisi setiap perilaku tak diketahui sambil membuang bertahun-tahun perbaikan senyap.
+- Membereskan legacy di dalam PR fitur: perubahan perilaku dan perubahan intent berbagi satu diff, dan keduanya tak bisa di-revert sendiri-sendiri.
+- Characterization test yang ditulis dari spec alih-alih observasi — mereka gagal melawan keunikan yang nyata, dihapus, dan kode itu kembali tak ter-pin.
+- Membungkus seluruh modul dalam satu test end-to-end raksasa lalu menyebutnya ter-pin — terlalu lambat untuk terus dijalankan, terlalu kasar untuk melokalisasi satu kesalahan.
+- Menyalin-tempel logika legacy ke modul baru "dengan perbaikan", meninggalkan dua salinan yang menyimpang, tanpa satu pun di bawah test.
+
+## Contoh kode
+
+Salah — refactor tanpa pin:
+
+```python
+def apply_discount(order):
+    # logic warisan: tak ada yang ingat kenapa di atas 100 lewat fees
+    if order.total > 100 and order.coupon:
+        return order.total * 0.9 - order.fees
+    return order.total
+
+# "Pembersihan" itu: seseorang menghapus pengurangan fee karena tampak
+# salah, lalu mengirimkannya. Customer yang tagihannya dikerjakan cabang itu
+# dengan-benar-bagi-mereka mengetahuinya di invoice bulan depan.
+```
+
+Benar — pin dulu perilaku yang teramati, lalu ubah:
+
+```python
+def test_discount_over_100_with_coupon_is_pinned_as():
+    # BUKAN apa yang seharusnya dikerjakan kode — apa yang DIA kerjakan
+    # secara observable hari ini. Jika ini mem-pin sebuah kejutan, bagus:
+    # kejutan itu persis risiko yang barusan hendak diambil secara buta.
+    order = Order(total=120, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 103.0   # 120*0.9 - 5, cacatnya ikut termasuk
+
+def test_discount_below_100_ignores_coupon():
+    order = Order(total=80, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 80      # tanpa discount sama sekali — ter-pin
+
+# Pin hijau, perilaku terekam: sekarang bebas me-refactor apply_discount.
+# Slide perilaku apa pun menjadi test merah sebelum merge, alih-alih
+# kesalahan invoice senyap setelahnya.
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Kode yang tak teruji harus mahal untuk disentuh, dan biayanya harus otomatis:
+
+- **Coverage tergerbangi perubahan**: CI menggagalkan PR yang file yang disentuhnya kehilangan coverage test cepat, atau yang path perilaku yang diubahnya tak membawa test — pin datang bersama perubahan, tidak pernah di sprint berikutnya.
+- **Inventaris file tak teruji**: laporan yang di-generate mencantumkan file tanpa test cepat; diff yang menyentuhnya ditandai untuk pekerjaan characterization secara otomatis, bukan karena hafalan.
+- **Spot-check mutation pada pin baru**: satu run mutation ringan atas path yang baru dipin memverifikasi pin itu benar-benar mendeteksi perubahan — pin yang tak pernah gagal adalah dekorasi, dan build memperlakukannya demikian.
+- **Aturan pemisahan diff**: pembersihan dan perubahan perilaku dalam PR yang sama atas kode tak ter-pin adalah pemblokir review; diff pem-pin-an mendarat lebih dulu, sendirian.
+- **Yang mencegah vs. yang mendeteksi**: gerbang perubahan mencegah kode tak teruji yang baru menumpuk; inventaris dan pemeriksaan mutation mendeteksi seberapa lemah pin yang ada. Kedua sisinya, selalu.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+Pada April 2020, sistem unemployment New Jersey — yang berjalan di mainframe berumur 40 tahun yang diprogram dengan COBOL — berjumpa gelombang pandemi: 362.000 orang, tanpa preseden, telah mengajukan unemployment di negara bagian itu, dan departemen IT-nya berlomba menjaga service tetap berjalan. Gubernur Phil Murphy secara publik memohon programmer sukarelawan yang menguasai COBOL, dan komisaris tenaga kerja negara bagian itu berkata kepada para wartawan: "Literally, we have systems that are 40 years-plus old, and there'll be lots of postmortems." (Harfiahnya: kami punya sistem yang berumur 40 tahun lebih, dan akan ada banyak postmortem.) Memelihara sistem production sendiri lewat permohonan publik untuk sukarelawan adalah wujud "legacy code is untested code" pada skala negara bagian: kode yang tak bisa diubah pemiliknya dengan keyakinan, hanya ditambah staf. Suite characterization di sekitar aturan kelayakan tidak akan menyerap gelombang itu — ia akan mengurangi risiko pekerjaan maintenance yang sedang diperlombakan departemen IT negara bagian itu, pada kode yang tak sanggup dipecahkan siapa pun. https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html (verification: ok untuk fakta yang dikutip; artikel itu tidak mendeskripsikan coverage test mainframe-mainframe itu — bahwa kodenya efektif tak ter-pin adalah inferensi dari era dan permohonan sukarelawan, tidak yakin; galilah postmortem yang dijanjikan komisaris itu sebelum mengutip apa pun.)
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Biaya pin vs. urgensi**: darurat tak menunggu suite; kompromi yang bisa dijalankan adalah mem-pin tepat path yang hendak berubah, bukan seluruh modul — logika granularitas Test Pyramid yang diterapkan pada pekerjaan penyelamatan.
+- **Perilaku teramati vs. spec yang dimaksudkan**: characterization test memberkati perilaku hari ini, bug ikut termasuk; tiap cacat yang dipin harus menjadi keputusan yang disengaja — pertahankan, atau ubah dengan sadar — yang adalah Test Behavior, Not Implementation dibawa ke ekstrem jujurnya.
+- **Refactor di tempat vs. tulis ulang**: ketakutan pada kode tak ter-pin mendorong ke penulisan ulang besar, tetapi penggantinya sendiri harus tumbuh dari sesuatu yang bekerja (Gall's Law), dan cabang-cabang aneh itu mungkin membawa alasan yang tak pernah akan terungkap oleh pin (Chesterton's Fence).
+
+## Prinsip terkait
+
+- [Test Behavior, Not Implementation](/id/docs/principles/testing/test-behavior-not-implementation) — characterization test adalah kasus murninya: perilaku sebagaimana teramati, tak pernah struktur sebagaimana dirancang.
+- [Chesterton's Fence](/id/docs/principles/design/chesterton-fence) — pin memberi tahu apa yang dikerjakan fence, tak pernah kenapa ia dibangun.
+- [Gall's Law](/id/docs/principles/architecture/gall-law) — pemberat bagi refleks tulis-ulang yang dipicu ketakutan pada legacy.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — sampai pin ada, perubahan pada legacy dikirim bertahap dan bisa di-revert, karena review saja tak sanggup menahannya.
+
+## Referensi
+
+- Michael C. Feathers, *Working Effectively with Legacy Code* (2004) — https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055 (definisi dan toolkit-nya: characterization test, seam, sprouting; verification: perlu untuk kalimat verbatim-nya — sudah digali di level halaman buku, kutipan eksaknya belum digali.)
+- CNBC, *New Jersey needs volunteers who know COBOL, a 60-year-old programming language* (April 2020) — https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html (mainframe 40 tahun, gelombang 362.000 pengajuan, permohonan sukarelawan, kutipan komisarisnya.)

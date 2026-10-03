@@ -1,4 +1,13 @@
 {
   "title": "Prinsip",
-  "pages": ["index", "security", "reliability", "data", "design", "api", "architecture"]
+  "pages": [
+    "index",
+    "security",
+    "reliability",
+    "data",
+    "design",
+    "api",
+    "architecture",
+    "testing"
+  ]
 }

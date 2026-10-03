@@ -1,0 +1,135 @@
+---
+title: "测试行为而非实现 · Test Behavior, Not Implementation"
+id: test-behavior-not-implementation
+name: Test Behavior, Not Implementation
+summary: 断言系统做了什么——可观察的状态与效果——而不是它怎么做；与内部 call graph 耦合的测试，会在每一次安全的 refactor 上破裂。
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "ci"
+  - "libraries"
+  - "services"
+tags:
+  - "testing"
+  - "mocks"
+  - "refactoring"
+aliases:
+  - "Test Behaviour, Not Implementation"
+  - "Classical Testing"
+sources:
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: perlu
+source_hash: "d4e21a415cbaa71b"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/test-behavior-not-implementation.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+写断言可观察结果的测试——返回值、状态变化、发往世界的效果——而不是断言哪个 collaborator 被调用、以什么顺序、带什么参数。优先使用真实而快速的 collaborator（in-memory repository、capture adapter），而不是 call-sequence mock；把交互断言留给那些交互本身就是 contract 的场合。当一个可观察行为完全相同的 refactor 弄坏了你的测试时，修的是测试——不是 refactor。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+一个有用的测试，在行为变化时失败、在行为未变时通过。Mockist（伦敦学派）风格验证的是交互——哪个 collaborator 被调用了、按什么顺序、带什么参数——这把测试耦合到了实现的 call graph 上；classical（底特律学派）风格通过真实的 collaborator 验证状态与效果，对内部结构保持失明。Martin Fowler 的「Mocks Aren't Stubs」（2007）记录了这两种风格及其命名——classical 对应 Detroit、mockist 对应 London，取自两处 XP 社区成长的地方——并把代价说得直白：mockist 测试「more coupled to the implementation of a method」（与方法实现耦合得更紧），并且「changing the nature of calls to collaborators usually cause a mockist test to break」（改变对 collaborator 调用的性质，通常就会弄坏一个 mockist 测试）——哪怕任何可观察的东西都没有变。测试行为而非实现，正是让一套 suite 始终保持为 refactor 安全网的东西——而这也是拥有一套 suite 唯一持久的理由。
+
+## 何时使用
+
+- 处于活跃 refactor 中的代码——suite 就是让变化变便宜的那张安全网。
+- unit 层面的 test-driven development：先测下一个可观察行为，再让实现浮现。
+- 共享的 library 与内部 service——collaborator 的调用顺序不在任何人的 contract 里。
+- 正在引入 mocking 框架的团队——在写下第一个 mock 之前，先决定要断言什么。
+
+## 何时不该使用
+
+- 当交互本身就是规格时——「payment provider 必须恰好被扣款一次」「audit event 必须在状态翻转之前发出」：断言这个交互是在测行为，不是实现泄漏。
+- 位于系统边缘的 boundary adapter——wire 上的字节（event schema、header、编码）才是 consumer 要解析的 contract：验证 wire，而不是对象图。
+- 你不拥有的第三方 collaborator——完全不要 mock 它们的内部；包一层，测这个包装（见 Don't Mock What You Don't Own）。
+- 没有 seam 的 legacy code：先用 characterization test 钉住当前行为（见 Legacy Code Is Untested Code），再来评判任何测试的风格。
+
+## 反模式
+
+- 一个 mock 断言两个内部 collaborator 之间的精确调用顺序——此后每一次重命名测试都会变红。
+- 对整个参数对象做 deep-equality 断言，而其中只有一个字段是行为、其余纯属附带。
+- 一次「refactor」的全部内容是把四十个 mock 改到匹配新的内部调用结构，而批准它的测试从头到尾没问过系统做了什么。
+- 主要靠 call-assertion 堆出来的 coverage：一套对「结果是否正确」毫无立场的绿色 suite。
+- 对本可以直接运行起来的 value object 和纯函数做 mock。
+
+## 代码示例
+
+错误示范——测试把 call graph 钉死：
+
+```ts
+test('order placement', () => {
+  const repo = mock<OrderRepo>();
+  const mailer = mock<Mailer>();
+  const svc = new OrderService(repo, mailer);
+
+  svc.place(cart);
+
+  expect(repo.save).toHaveBeenCalledWithExactly(expectedOrder); // 整条记录精确匹配
+  expect(mailer.send).toHaveBeenCalledBefore(repo.save); // 内部顺序
+});
+// 把 repo.save 重命名为 repo.persist，或者把收据挪到保存之后再发
+// （可观察行为没有任何变化），这个测试就坏了：安全网没了。
+```
+
+正确示范——测试断言状态与效果：
+
+```ts
+test('placing an order persists it and sends exactly one receipt', () => {
+  const repo = new InMemoryOrderRepo(); // 真实、快速的 collaborator
+  const mailer = new CaptureMailer(); // 捕获发了什么，而不是谁调用的
+
+  new OrderService(repo, mailer).place(cart);
+
+  expect(repo.findByUser(cart.userId)).toHaveLength(1); // 状态：订单存在
+  expect(mailer.sent.map((m) => m.to)).toEqual([cart.email]); // 恰好一封收据
+});
+// 内部命名、顺序与调用结构现在可以自由变化；
+// 只有当测试点名的那种行为真的变了，测试才会失败。
+```
+
+## 技术执法
+
+<Enforcement>
+风格光靠 review 守不住；把约束接进工具链：
+
+- **Mock 白名单**：mocking 配置只允许对处于架构 boundary 的 collaborator 使用 test double；给深层内部 seam 做 double 需要一个显式的、经过 review 的例外。
+- **交互断言带标记**：验证调用的断言必须放在标记为 contract test 的文件里，否则 CI 会把它标注出来，送交 merge 前的 review。
+- **Mutation testing**：活下来的 mutant 暴露出那些断言结构而不是结果的测试；按模块追踪存活趋势。
+- **CI 里的 refactor 演练**：一个定时 job 施加保持行为的变换（重命名、重排相互独立的调用），并要求 suite 保持绿色——耦合会以「无操作变更上的失败」的形式现身。
+- **执法 vs. 检测**：白名单和标记在 review 处挡住新的耦合；mutation testing 和 refactor 演练检测你已有的耦合——两半都要跑。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一个团队把一个持久化方法改名，并重排了两个内部步骤——先保存订单、再发收据——没有任何可观察的变化：存下的数据相同，送达的邮件相同。基于 mock 的 suite 在几十个断言旧方法名与旧顺序的测试上齐齐变红；一位开发者花了一个下午重写 mock 去匹配新的调用结构，而这个改动被一些从头到尾没问过「系统做了什么」的测试「批准」了。suite 作为安全网的价值悄悄流失，直到一个真正的行为变化顺着同一条「改 mock 就好」的反射溜过去。行为层面的断言，本可以把这一整类失败缩减为一次绿色的构建加一次一行的重命名。（verification: perlu——耦合机制在 Fowler 的「Mocks Aren't Stubs」里有记录；belum digali——一次保持行为不变的 refactor 弄坏基于 mock 的 suite 的具名公开记述，尚未得到核实。）
+</RealCase>
+
+## 张力与权衡
+
+- **Classical vs. mockist（Detroit vs. London）**：mockist 测试能精确定位是哪个交互坏了；classical 测试能在 refactor 中幸存，但失败定位更粗——按设计当前的稳定程度来选择。
+- **行为 vs. 显式 contract**：当交互本身就是规格（恰好扣款一次、翻转之前发出）时，交互断言就是行为——与 Explicit Contracts 权衡，把它写成一个 contract test，而不是一个顺手写下的 mock。
+- **与测试金字塔权衡**：classical 测试需要真实的 collaborator，这会把一些断言推进更慢的层——用 in-memory fake 和 capture adapter 把速度买回来，而不是用 call-graph mock。
+
+## 相关原则
+
+- [不要 mock 你不拥有的东西 · Don't Mock What You Don't Own](/zh/docs/principles/testing/dont-mock-what-you-dont-own)——最尖锐的实现耦合形式：mock 一个你改不了的依赖的内部。
+- [测试金字塔 · Test Pyramid](/zh/docs/principles/testing/test-pyramid)——行为层面的断言一层一层地住在哪里。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——一条被断言的调用顺序，在绿色 suite 被依赖的那一刻就成了 contract。
+- [遗留代码即未经测试的代码 · Legacy Code Is Untested Code](/zh/docs/principles/testing/legacy-code-is-untested-code)——refactor 之前先钉住当前行为；安全网论证只在网存在时成立。
+
+## 参考文献
+
+「test behavior, not implementation」这句口号是社区速记，没有单一的权威出处；本页把它锚定在下面这场有据可查的争论上。
+
+- Martin Fowler, Mocks Aren't Stubs — https://martinfowler.com/articles/mocksArentStubs.html（classical vs. mockist TDD、Detroit 与 London 的命名，以及 mockist 测试如何与实现耦合）。
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html（sociable vs. solitary unit test，以及每层该测什么）。

@@ -1,0 +1,146 @@
+---
+title: Don't Mock What You Don't Own
+id: dont-mock-what-you-dont-own
+name: Don't Mock What You Don't Own
+summary: Jangan pernah menulis mock buatan tangan atas interface SDK third-party — bungkus dalam adapter milik Anda, gandakan adapter-nya di test cepat, dan verifikasi adapter-nya terhadap service yang nyata.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "services"
+  - "libraries"
+  - "ci"
+tags:
+  - "testing"
+  - "mocks"
+  - "test-doubles"
+  - "boundaries"
+aliases:
+  - "Mock Only What You Own"
+  - "Wrap What You Don't Own"
+sources:
+  - 'Freeman & Pryce, "Growing Object-Oriented Software, Guided by Tests", 2009, https://growing-object-oriented-software.com/'
+  - 'Freeman, Pryce, Mackinnon & Walnes, "Mock Roles, not Objects", OOPSLA 2004, https://jmock.org/oopsla2004.pdf'
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: ok
+source_hash: "9f86d2f530dcc507"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/dont-mock-what-you-dont-own.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Ketika sebuah test perlu mengisolasi kode dari SDK, client, atau API third-party, jangan pernah menulis mock buatan tangan atas interface vendor — Anda sedang menebak semantik orang lain dan menilai diri sendiri berdasarkan tebakan itu. Bungkus dependency itu sekali dalam adapter tipis yang interface-nya Anda miliki, gandakan adapter-nya di test cepat, dan pertahankan sejumlah kecil test yang mengeksekusi adapter terhadap service nyata atau sandbox resminya. Jika sebuah test mulai mengeja nama method vendor, pindahkan boundary-nya.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Mock mengodekan asumsi tentang perilaku yang tidak Anda tulis, tak bisa Anda ubah, dan biasanya belum Anda baca. Aturannya adalah destilasi komunitas atas aliran mock-objects di balik *Growing Object-Oriented Software, Guided by Tests* karya Freeman dan Pryce — dan paper OOPSLA mereka yang lebih awal menyatakan intinya secara langsung: mock objects ternyata "less interesting as a technique for isolating tests from third-party libraries than is widely thought" (kurang menarik sebagai teknik untuk mengisolasi test dari library third-party daripada yang banyak diasumsikan). Bentuk kerjanya: gandakan role dan interface milik Anda, dan perlakukan setiap service eksternal sebagai boundary arsitektural. Bungkus dalam adapter yang interface-nya milik Anda — nama, error, dan semantik yang Anda pilih — gandakan port itu di unit test, dan verifikasi satu adapter itu terhadap hal yang nyata, sehingga keunikan dan evolusi vendor hidup di tepat satu tempat kecil alih-alih ditebak ulang di setiap file test.
+
+## Kapan pakai
+
+- Unit test apa pun yang tergoda men-stub client, transport, atau internal SDK vendor.
+- Dependency yang agresif versinya, tempat breaking change datang di antara minor release.
+- Client infrastructure — payments, mail, storage, SMS, identity — tempat asumsi yang salah berarti kegagalan production dengan suite hijau di belakangnya.
+- Feedback loop cepat yang tak sanggup membayar panggilan jaringan nyata di setiap run.
+
+## Kapan TIDAK pakai
+
+- Interface milik Anda: gandakan dengan bebas — menggali role Anda sendiri dengan test double adalah teknik yang bekerja sesuai rancangannya.
+- Dependency yang Anda pakai secara trivial dan tanpa perubahan, tempat satu integration test lebih murah daripada memelihara layer wrapper tanpa batas waktu.
+- Provider yang memelihara test double resmi first-party dengan jaminan fidelitas yang terdokumentasi — double itu bagian dari contract provider, bukan tebakan Anda tentangnya.
+- Spike eksploratori terhadap service yang belum Anda komitkan; hapus atau vet mereka sebelum ada apa pun yang dikirim.
+
+## Anti-pattern
+
+- Me-patch modul vendor di test runner dan mereka-reka objek respons dari type signature-nya — nama method ditebak, bentuk error diimajinasikan, semantik pagination tak diketahui.
+- Me-mock class private atau internal lewat reflection untuk memaksa jalur error eksotis yang tak pernah dijanjikan API publiknya.
+- Suite yang tidak sekali pun berbicara dengan service nyata sampai trafik production yang melakukannya.
+- Me-replay respons yang disalin dari production, lalu mengeditnya dengan tangan sampai assertion lulus — mock dari tebakan dari kenangan.
+- Menaikkan major version vendor dengan me-patch mock sampai hijau, tanpa satu pun pemeriksaan terhadap permukaan yang nyata.
+
+## Contoh kode
+
+Salah — me-mock interface vendor secara langsung:
+
+```ts
+import { PaymentSDK } from 'vendor-payments'; // SDK third-party — bukan milik kita
+
+jest.mock('vendor-payments');
+// Fake buatan tangan atas interface milik orang lain: nama ditebak dari docs,
+// bentuk error direka, semantik idempotency tidak diketahui penulisnya.
+const sdk = jest.mocked(PaymentSDK);
+sdk.charge.mockResolvedValue({ ok: true });               // apakah yang asli bilang ok?
+sdk.charge.mockRejectedValue(new Error('card_declined')); // apakah itu tipe error-nya?
+
+test('checkout charges the customer', async () => {
+  await checkout(user, 42);
+  expect(sdk.charge).toHaveBeenCalled(); // membuktikan tebakan kita, bukan vendor
+});
+```
+
+Benar — miliki boundary-nya, gandakan port-nya, verifikasi adapter-nya:
+
+```ts
+// payments.ts — boundary-nya MILIK KITA: nama, error, dan semantik yang kita pilih.
+export interface PaymentGateway {
+  charge(amountCents: number, token: string):
+    Promise<{ id: string } | { declined: true }>;
+}
+
+// Unit test cepat: double berdiri menggantikan PORT MILIK KITA, bukan SDK mereka.
+test('a declined card creates no order', async () => {
+  const gateway: PaymentGateway = { charge: async () => ({ declined: true }) };
+  await expect(checkout(user, 42, gateway)).rejects.toThrow(PaymentDeclined);
+});
+
+// Test adapter: SATU-satunya tempat vendor SDK nyata (sandbox atau trafik
+// yang terekam). Vendor drift gagal DI SINI, di CI, bukan di production.
+test('adapter maps vendor failures onto our contract', async () => {
+  const gateway = new VendorPaymentGateway(SANDBOX_KEY);
+  const result = await gateway.charge(42, 'tok_charge_declined');
+  expect(result).toEqual({ declined: true });
+});
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Aturan itu baru nyata ketika build menegakkan boundary-nya:
+
+- **Batasan import**: lint rule melarang mengimpor SDK vendor di luar modul adapternya — "hanya adapter yang menyentuh vendor" menjadi terperiksa mesin, bukan memori suku.
+- **Contract test pada adapter**: setiap adapter membawa minimal satu test terhadap service nyata atau sandbox resminya dalam job CI berlabel, sehingga vendor drift muncul sebagai build merah alih-alih page production.
+- **Aturan review double**: double buatan tangan atas interface third-party adalah pemblokir review; pertanyaan pertama reviewer adalah "interface siapa yang dideskripsikan double ini?".
+- **Trafik terekam daripada payload rekaan**: ketika panggilan nyata terlalu mahal bagi CI, replay interaksi yang terekam dengan tanggal kedaluwarsa — rekaman kedaluwarsa dan memaksa penangkapan ulang; fiksi tidak.
+- **Yang mencegah vs. yang mendeteksi**: batasan import mencegah mock baru atas interface yang bukan milik Anda; contract test pada sandbox mendeteksi vendor yang bergerak di bawah adapter. Kedua sisinya, selalu.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+Sebuah laporan bug Maret 2024 terhadap LocalStack — pengganti AWS yang banyak dipakai dalam test — mendokumentasikan failure mode ini dengan presisi yang tidak biasa. Seorang developer mengganti akses DynamoDB sebuah Lambda dari Query ke BatchGet tetapi lupa mengubah IAM permission dari dynamodb:Query ke dynamodb:BatchGetItem. Setiap run test terhadap LocalStack lulus, karena emulator itu tidak menegakkan permission action DynamoDB; permission yang hilang itu baru muncul ketika kode dijalankan terhadap AWS nyata, sebagai permission error. Ekspektasi penutup pelapor itu sendiri: "My expectation was this would have been caught in localstack." (harapan saya adalah hal ini seharusnya tertangkap di localstack). https://github.com/localstack/localstack/issues/10517 (verification: ok — teks issue dikutip; apa yang gagal di hilir production selain error AWS yang dilaporkan tidak dideskripsikan — belum digali.) Satu pemeriksaan di boundary yang nyata, walau tipis, akan menyingkap ketidakcocokan policy itu lebih awal — sebagai langkah pipeline yang gagal, alih-alih permission error saat runtime.
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Kecepatan vs. fidelitas**: suite dari double itu cepat dan hening justru di tempat ia berbohong; jawaban Test Pyramid adalah basis tipis test real-boundary sehingga vendor drift tertangkap di tempat yang murah.
+- **Biaya wrapper vs. dependency langsung**: setiap adapter adalah kode yang kini Anda miliki dan pelihara; Dependency Inversion membayar dirinya hanya di tempat boundary-nya nyata — membungkus dependency yang Anda pakai secara trivial menukar satu liability dengan liability lain.
+- **Contract Anda vs. vendor drift**: bahkan lewat adapter, Anda akan sampai bergantung pada perilaku vendor yang tak didokumentasikan siapa pun — Hyrum's Law bekerja pada provider juga; contract test pada adapter adalah cara ketergantungan senyap itu mendapat perhatian.
+
+## Prinsip terkait
+
+- [Test Behavior, Not Implementation](/id/docs/principles/testing/test-behavior-not-implementation) — me-mock internal vendor mengikat suite Anda pada pilihan implementasi mereka.
+- [Dependency Inversion](/id/docs/principles/architecture/dependency-inversion) — adapter adalah abstraksi yang Anda andalkan alih-alih SDK-nya.
+- [Test Pyramid](/id/docs/principles/testing/test-pyramid) — basis tipis real-boundary yang menjaga double tetap jujur.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — perilaku vendor yang tak terdokumentasi menjadi dependency Anda, sadar atau tidak.
+
+## Referensi
+
+- Freeman & Pryce, *Growing Object-Oriented Software, Guided by Tests* (2009) — https://growing-object-oriented-software.com/ (rumah bukunya: TDD dengan mock objects yang menggerakkan desain di boundary milik Anda; verification: ok untuk buku dan sitenya, perlu untuk apakah frasa lima kata itu muncul verbatim di teksnya — belum digali.)
+- Freeman, Pryce, Mackinnon & Walnes, *Mock Roles, not Objects*, OOPSLA 2004 — https://jmock.org/oopsla2004.pdf (mock objects sebagai teknik desain, dan putusan paper itu sendiri tentang mengisolasi library third-party.)
+- Martin Fowler, *Mocks Aren't Stubs* — https://martinfowler.com/articles/mocksArentStubs.html (kosakata test double dan pembedaan classical vs. mockist.)

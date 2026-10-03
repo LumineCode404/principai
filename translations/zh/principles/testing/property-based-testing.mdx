@@ -1,0 +1,149 @@
+---
+title: "基于属性的测试 · Property-Based Testing"
+id: property-based-testing
+name: Property-Based Testing
+summary: 把代码必须对每个输入都保持的 invariant 说出来，然后让 generator 去搜出打破它的输入——一条 property 抵得上一架子手挑的示例。
+category: testing
+type: practice
+severity: important
+applies_to:
+  - "libraries"
+  - "services"
+  - "ci"
+tags:
+  - "testing"
+  - "invariants"
+  - "generators"
+  - "correctness"
+aliases:
+  - "PBT"
+  - "Generative Testing"
+sources:
+  - 'Claessen & Hughes, "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs", ICFP 2000, https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf'
+  - 'John Hughes, "Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane", 2016, https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9'
+  - 'QuickCheck (Haskell), https://hackage.haskell.org/package/QuickCheck'
+  - 'fast-check (JavaScript/TypeScript), https://fast-check.dev/'
+status: draft
+verification: ok
+source_hash: "8d76a9a4053fec8f"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/property-based-testing.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+停止用手枚举示例输入。对任何带真实 invariant 的行为——round-trip、有序性、幂等性、交换律——把 invariant 表述成一条 property，让 generator 去搜索违反它的输入；找到之后，把 shrink 过的 counterexample 保留为一个具名的 regression 测试。永远去查看 generator 实际生成了什么，让搜索抵达你在意的角落，而不是只采样无聊的中间地带。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+示例测试断言的是你想到的某一个输入的输出；property 断言的是一条对 generator 能产生的每一个输入都必须成立的 invariant。Property-based testing——由 Claessen 与 Hughes 在 QuickCheck（ICFP 2000）中引入——用程序的语言表达 property，在大量随机生成的用例上检验它们，并在失败时报告一个 counterexample；现代实现会把失败 shrink 向一个最小的复现输入。这条脉络从 Haskell 的 QuickCheck 一路延伸到 Hughes 联合创立 Quviq 于 2006 年商业化的 Erlang 版本，再到 fast-check（JavaScript/TypeScript）与 Hypothesis（Python）这样的移植。姿态的转变才是重点：示例验证你想象到的用例，property 攻击你没想象到的用例空间。
+
+## 何时使用
+
+- 有清晰 invariant 的纯逻辑：codec 与 serializer（round-trip）、parser（print-parse 同一性）、集合（顺序、大小、成员关系）、金额与日期运算。
+- 宽到无法枚举的输入域：unicode、负数与边界数、空与单例情形、深层嵌套的结构。
+- regression 纪律：每一个线上报告的 bug 都变成一条 property 加上它失败的 seed，让搜索持续覆盖这一类失败，而不只是被报告的那一个用例。
+- 有趣的失败藏在交错里的有状态系统：生成的命令序列去探索手写测试永远猜不到的状态。
+
+## 何时不该使用
+
+- 由精确内容规定的行为——snapshot 测试、golden file、文案文本：示例就是 contract，property 对它没有任何额外的权威。
+- 说不出 invariant 的逻辑：如果你说不出什么永远成立，问题是 contract 没有写下来（见 Explicit Contracts），不是缺一个 generator。
+- 缓慢的带副作用的流程：生成会成倍放大执行次数；让 property 靠近纯逻辑，用少量聚焦的 integration test 覆盖 I/O 的 seam。
+- 用一次即弃的脚本——它的整个输入空间就是你手上的一个文件。
+
+## 反模式
+
+- 同义反复的 property——把实现复述一遍：用与代码相同的方式计算等式另一边，来「测试」一个函数。
+- 平凡为真的 property（「输出不为 null」）——让 suite 的绿色虚胖，却什么也没约束。
+- 不受约束的 generator 大量产出非法输入，运行预算全花在被前置条件跳过的用例上。
+- 从不检查 generator 的分布——suite 一边通过，一边只采样输入空间里容易的中间地带。
+- 丢弃失败的 seed：一个没人能复现的 counterexample，是一份没有地址的 bug 报告。
+- 把 shrinking 当作可有可无——一个未 shrink 的失败，把真正的触发条件埋在一整屏随机数据的某处。
+
+## 代码示例
+
+错误示范——三个示例，全是作者信手拈来的：
+
+```ts
+// urlCodec: decode(encode(s)) 应当是 identity。
+test('encodes a path', () => {
+  expect(decode(encode('users/42'))).toBe('users/42');
+});
+test('encodes a space', () => {
+  expect(decode(encode('new york'))).toBe('new york');
+});
+test('encodes an accent', () => {
+  expect(decode(encode('café'))).toBe('café');
+});
+// 实际被测到的输入空间：三个字符串。多字节边界、百分号、
+// 空输入、控制字符——从未被生成，从未被测试。
+// 第一个产出这种输入的调用者，会去提一个 ticket。
+```
+
+正确示范——invariant 表述为一条 property，并把 shrink 结果留作 regression：
+
+```ts
+import fc from 'fast-check';
+
+// invariant：对任何字符串，先 encode 再 decode 都是 identity。
+test('round-trips every generated string', () => {
+  fc.assert(
+    fc.property(fc.string(), (s) => {
+      expect(decode(encode(s))).toBe(s);
+    }),
+    { numRuns: 2000 }, // 刻意地预算运行次数，而不是听凭某个默认值
+  );
+});
+
+// 失败时 runner 会打印 seed 和 shrink 出的 counterexample，
+// 例如 "Property failed after 12 tests (seed: 1527422598337)"。
+// 把那个用例按名字钉住，让这一类 bug 保持死亡：
+test('regression: percent sign survives the round-trip', () => {
+  expect(decode(encode('%'))).toBe('%');
+});
+```
+
+## 技术执法
+
+<Enforcement>
+生成必须被治理，而不只是被欣赏：
+
+- **seed 纪律**：每一次 CI 运行都记录 runner 失败时打印的 seed；一条没有可复现 seed 的 property 失败，被当作坏掉的测试处理，而不是绿色的。
+- **counterexample 进 regression 的门槛**：失败的 property 必须作为具名的、checked-in 的 regression 测试，与它的修复落在同一个 PR 里——就是那个 shrink 出的用例本身，而不是它的转述。
+- **分布检查**：generator 给自己的输出分类打标，某个类别消失时 suite 失败——搜索无法静默地退回容易的中间地带。
+- **运行时长预算**：property suite 在 CI 里拿到一个显式的时间预算，超支时发出响亮信号，这样生成不会悄悄烂掉构建的时长。
+- **同义反复 review**：镜像被测实现的 property 在 review 中被拒绝，与什么都没断言的断言同等对待。
+- **预防 vs. 检测**：分布门禁和运行预算预防空洞的 suite；seed 日志和 shrink 出的 regression 检测搜索已经找到的 bug。两半都要，永远。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+John Hughes——原 QuickCheck 论文的共同作者——在「Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane」中讲述了十年的工业成果。截至写作时最大的 QuickCheck 项目，是代表 Volvo Cars 为 AUTOSAR C 代码构建验收测试；而一种 QuickCheck 的 race 检测方法「nailed a notorious bug plaguing Klarna」（揪出了一个长期困扰 Klarna 的臭名昭著的 bug）——Klarna 是北欧电子商务开票系统的市场领导者。两者都是同一种姿态的工业尺度版本：invariant 被表述为可执行的 property，输入空间由 generator 探索，有状态的交错用生成的序列去攻击，而不是靠手去猜。https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9（verification: ok——事实引自该章的摘要；Klarna bug 的机制与项目细节在章体正文里——belum digali，全文在付费墙后。）
+</RealCase>
+
+## 张力与权衡
+
+- **广度 vs. 确定性**：随机输入让每次运行都成为一次新实验；没有记录下来的 seed，一条失败的 property 与 flaky 测试无从区分——Flaky Test Quarantine 的纪律就是广度的代价。
+- **property vs. 示例**：一条在几千个生成输入上幸存的 property 仍然没有证明那条 invariant，它对意图也一言不发；留下那几个能解释行为的示例，让生成在它们之间狩猎——这正是 Test Pyramid 规定的快慢分工，应用在同一套 suite 内部。
+- **contract vs. 镜像**：最强的 property 陈述用户依赖的 contract；最弱的复述实现，只在代码被重新排列时失败——Test Behavior, Not Implementation 为示例测试画的那条线，在这里画得更锋利。
+
+## 相关原则
+
+- [测试行为而非实现 · Test Behavior, Not Implementation](/zh/docs/principles/testing/test-behavior-not-implementation)——property 是钉住可观察行为而非结构的最锋利工具。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——一条说得出来的 property 是一份可执行的 contract；说不出来的，就是一份缺失的 contract。
+- [测试金字塔 · Test Pyramid](/zh/docs/principles/testing/test-pyramid)——快速生成的 suite 相对于缓慢的 integration coverage 住在哪里。
+- [不稳定测试隔离 · Flaky Test Quarantine](/zh/docs/principles/testing/flaky-test-quarantine)——一个没被记录的 seed，是一个胚胎期的 flaky 测试。
+
+## 参考文献
+
+- Claessen & Hughes, *QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs*, ICFP 2000 — https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf（原论文：property 即函数、随机用例、自定义 generator。）
+- John Hughes, *Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane*, Springer 2016 — https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9（工业级 QuickCheck：Volvo Cars 的 AUTOSAR 验收测试、Klarna 的 race bug。）
+- fast-check documentation — https://fast-check.dev/（面向 JavaScript 与 TypeScript 的 property-based testing：runner、arbitrary、shrinking。）
+- Hypothesis documentation — https://hypothesis.readthedocs.io/（Python 的 property-based testing 库。）

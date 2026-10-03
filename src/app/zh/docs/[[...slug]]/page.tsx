@@ -63,6 +63,7 @@ export default async function Page({
           status={page.data.status}
           verification={page.data.verification}
           tags={page.data.tags}
+          translationStatus={page.data.translation_status}
         />
       ) : null}
       {page.data.category ? (

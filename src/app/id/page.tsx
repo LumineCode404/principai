@@ -14,6 +14,7 @@ const categories = [
   { name: "Desain", desc: "Simplicity, duplikasi, dan hukum metrik.", href: "/id/docs/principles/design", ready: "6 dari 6" },
   { name: "API", desc: "Contract eksplisit dan janji kepada orang asing.", href: "/id/docs/principles/api", ready: "4 dari 4" },
   { name: "Arsitektur", desc: "Gaya yang membentuk sistem, bukan cetak biru.", href: "/id/docs/principles/architecture", ready: "4 dari 4" },
+  { name: "Testing", desc: "Bukti dengan ekonomi — bentuk suite, perilaku di atas implementasi.", href: "/id/docs/principles/testing", ready: "6 dari 6" },
 ];
 
 export default function HomeId() {
@@ -68,7 +69,7 @@ export default function HomeId() {
             <div className="hero-up" style={{ ["--d" as never]: "0.2s"} }>
               <p className="mt-6 text-lg leading-relaxed text-[#8B89A0]">
                 Prinsip rekayasa perangkat lunak dalam format yang ramah AI agent — satu
-                prinsip satu file, staged loading, severity bertingkat. Semua 32 prinsip
+                prinsip satu file, staged loading, severity bertingkat. Semua {stats.dug} prinsip
                 sudah diterjemahkan ke bahasa Indonesia (status draf, menunggu tinjauan
                 manusia). Prinsip menasihati, kontrol teknis yang menegakkan.
               </p>
@@ -130,7 +131,7 @@ export default function HomeId() {
           </Reveal>
           <Reveal delay={0.05}>
             <p className="mt-5 max-w-3xl text-lg leading-relaxed text-[#8B89A0]">
-              Kategori di bawah sudah <em>sudah digali</em>. Semua 32 prinsip sudah
+              Kategori di bawah sudah <em>sudah digali</em>. Semua {stats.dug} prinsip sudah
               diterjemahkan penuh ke bahasa Indonesia; koreksi lanjutan mengikuti arsip
               bahasa Inggris sebagai sumber kebenaran tunggal. Daftar ini bukan janji
               cakupan.

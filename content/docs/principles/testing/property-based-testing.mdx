@@ -1,0 +1,143 @@
+---
+title: Property-Based Testing
+id: property-based-testing
+name: Property-Based Testing
+summary: State the invariants your code must hold for every input, then let a generator hunt for the inputs that break them — one property beats a shelf of hand-picked examples.
+category: testing
+type: practice
+severity: important
+applies_to:
+  - libraries
+  - services
+  - ci
+tags:
+  - testing
+  - invariants
+  - generators
+  - correctness
+aliases:
+  - PBT
+  - Generative Testing
+sources:
+  - 'Claessen & Hughes, "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs", ICFP 2000, https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf'
+  - 'John Hughes, "Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane", 2016, https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9'
+  - 'QuickCheck (Haskell), https://hackage.haskell.org/package/QuickCheck'
+  - 'fast-check (JavaScript/TypeScript), https://fast-check.dev/'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Stop enumerating example inputs by hand. For any behavior with a real invariant — round-trips, ordering, idempotence, commutativity — state the invariant as a property and let a generator search for violating inputs; when one is found, keep the shrunk counterexample as a named regression test. Always inspect what the generator actually produces, so the search reaches the corners you care about instead of sampling the boring middle.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+An example test asserts the output for one input you thought of; a property asserts an invariant that must hold for every input a generator can produce. Property-based testing — introduced by Claessen and Hughes in QuickCheck (ICFP 2000) — expresses properties in the language of the program, tests them on large numbers of randomly generated cases, and reports a counterexample when one fails; modern implementations shrink failures toward a minimal reproducing input. The lineage runs from Haskell's QuickCheck through the Erlang version that Hughes co-founded Quviq to commercialize in 2006, to ports such as fast-check for JavaScript and TypeScript and Hypothesis for Python. The shift in posture is the point: examples verify the cases you imagined, properties attack the case space you did not.
+
+## When to use
+
+- Pure logic with crisp invariants: codecs and serializers (round-trip), parsers (print-parse identity), collections (order, size, membership), money and date arithmetic.
+- Input domains too wide to enumerate: unicode, negative and boundary numbers, empty and singleton cases, deeply nested structures.
+- Regression discipline: every field-reported bug becomes a property plus its failing seed, so the search keeps covering that class of failure, not just the one reported case.
+- Stateful systems where the interesting failures are interleavings: generated command sequences exploring states that hand-written tests never guess.
+
+## When NOT to use
+
+- Behavior specified by exact content — snapshot tests, golden files, copy text: the example is the contract, and a property adds no authority over it.
+- Logic with no statable invariant: if you cannot say what always holds, the problem is an unwritten contract (see Explicit Contracts), not a missing generator.
+- Slow side-effectful flows: generation multiplies executions; keep properties near pure logic and cover the I/O seams with a few focused integration tests.
+- Once-and-discarded scripts whose entire input space is one file you control.
+
+## Anti-pattern
+
+- Tautology properties that restate the implementation — testing one function by computing the other side of the equality the same way the code does.
+- Trivially true properties ("output is not null") that inflate the suite's greenness while constraining nothing.
+- Unconstrained generators that produce mostly invalid inputs, so the run budget is spent on cases the precondition skips.
+- Never inspecting the generator's distribution — the suite passes while sampling only the easy middle of the input space.
+- Discarding the failing seed: a counterexample nobody can reproduce is a bug report without an address.
+- Treating shrinking as optional — an unshrunk failure buries the actual trigger somewhere inside a screenful of random data.
+
+## Code example
+
+Wrong — three examples, all from the top of the author's head:
+
+```ts
+// urlCodec: decode(encode(s)) is supposed to be the identity.
+test('encodes a path', () => {
+  expect(decode(encode('users/42'))).toBe('users/42');
+});
+test('encodes a space', () => {
+  expect(decode(encode('new york'))).toBe('new york');
+});
+test('encodes an accent', () => {
+  expect(decode(encode('café'))).toBe('café');
+});
+// Input space actually tested: three strings. Multi-byte boundaries,
+// percent signs, empty input, control characters — never generated,
+// never tested. The first caller who produces one files a ticket.
+```
+
+Right — the invariant as a property, with the shrink kept as a regression:
+
+```ts
+import fc from 'fast-check';
+
+// The invariant: decode after encode is the identity, for ANY string.
+test('round-trips every generated string', () => {
+  fc.assert(
+    fc.property(fc.string(), (s) => {
+      expect(decode(encode(s))).toBe(s);
+    }),
+    { numRuns: 2000 }, // budget the runs deliberately, not by accident of a default
+  );
+});
+
+// On failure the runner prints the seed and the shrunk counterexample,
+// e.g. "Property failed after 12 tests (seed: 1527422598337)".
+// Pin that case by name so the bug class stays dead:
+test('regression: percent sign survives the round-trip', () => {
+  expect(decode(encode('%'))).toBe('%');
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+Generation must be governed, not just admired:
+
+- **Seed discipline**: every CI run records the seed the runner prints on failure; a property failure without a reproducible seed is treated as a broken test, not a green one.
+- **Counterexample-to-regression gate**: a failing property must land as a named, checked-in regression test in the same PR as its fix — the shrunk case itself, not a paraphrase of it.
+- **Distribution checks**: generators label their output categories, and the suite fails when a label disappears — the search cannot silently retreat to the easy middle.
+- **Runtime budget**: property suites get an explicit time budget in CI with a loud signal when it is exceeded, so generation does not quietly rot the build's duration.
+- **Tautology review**: properties that mirror the implementation under test are rejected in review exactly like assertions that assert nothing.
+- **What prevents vs. detects**: distribution gates and run budgets prevent vacuous suites; seed logs and shrunk regressions detect the bugs the search has already found. Both halves, always.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+John Hughes — co-author of the original QuickCheck paper — recounts a decade of industrial results in "Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane". The largest QuickCheck project to date, as of that writing, built acceptance tests for AUTOSAR C code on behalf of Volvo Cars, and a QuickCheck race-detection method "nailed a notorious bug plaguing Klarna", northern Europe's market leader in invoicing systems for e-commerce. Both are the same posture at industrial scale: invariants stated as executable properties, an input space explored by generator, and stateful interleavings attacked with generated sequences rather than hand-guessed ones. https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9 (verification: ok — facts quoted from the chapter's abstract; the Klarna bug mechanics and project detail live in the chapter body — belum digali, the full text is paywalled.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Breadth vs. determinism**: random inputs make every run a new experiment; without recorded seeds, a failing property is indistinguishable from a flaky test — the discipline of Flaky Test Quarantine is the price of the breadth.
+- **Properties vs. examples**: a property surviving thousands of generated inputs still does not prove the invariant, and it documents nothing about intent; keep the handful of examples that explain the behavior and let generation hunt between them — the same fast-slow split the Test Pyramid prescribes, applied inside one suite.
+- **Contract vs. mirror**: the strongest properties state the contract users depend on; the weakest restate the implementation and fail only when the code is rearranged — the line Test Behavior, Not Implementation draws for example tests, drawn sharper here.
+
+## Related principles
+
+- [Test Behavior, Not Implementation](/docs/principles/testing/test-behavior-not-implementation) — a property is the sharpest tool for pinning observable behavior instead of structure.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — a statable property is a contract made executable; an unstatable one is a missing contract.
+- [Test Pyramid](/docs/principles/testing/test-pyramid) — where fast generated suites sit relative to slow integration coverage.
+- [Flaky Test Quarantine](/docs/principles/testing/flaky-test-quarantine) — an unrecorded seed is a flaky test in embryo.
+
+## References
+
+- Claessen & Hughes, *QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs*, ICFP 2000 — https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf (the original paper: properties as functions, random cases, custom generators.)
+- John Hughes, *Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane*, Springer 2016 — https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9 (industrial QuickCheck: Volvo Cars AUTOSAR acceptance tests, the Klarna race bug.)
+- fast-check documentation — https://fast-check.dev/ (property-based testing for JavaScript and TypeScript: runners, arbitraries, shrinking.)
+- Hypothesis documentation — https://hypothesis.readthedocs.io/ (the property-based testing library for Python.)

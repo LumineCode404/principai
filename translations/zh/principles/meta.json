@@ -1,4 +1,13 @@
 {
-  "title": "原则",
-  "pages": ["index", "security", "reliability", "data", "architecture", "api", "design"]
+  "title": "\u539f\u5219",
+  "pages": [
+    "index",
+    "security",
+    "reliability",
+    "data",
+    "architecture",
+    "api",
+    "design",
+    "testing"
+  ]
 }

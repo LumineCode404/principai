@@ -1,0 +1,17 @@
+---
+title: "测试 · Testing"
+description: 软件在工作的证据，并且持续在工作——suite 的形状、行为高于实现、不稳定测试、property、test double，以及 legacy code 的定义。
+---
+
+测试不是验证表演——测试是证据，而证据有经济学。每个 test 都在用 runtime、维护成本和注意力换信心。这个类别的原则讲的是如何有意识地付这笔账：把 suite 的形状配好，让 feedback 在变得昂贵之前到达；断言行为而非实现，让 refactor 保持安全；隔离那些随机性会摧毁信任的测试；并且认清一件事——没有测试的代码不是旧代码，是不可更改的代码。
+
+<Cards>
+  <Card title="测试金字塔 · Test Pyramid" description="按 feedback 成本配平自动化 test suite——大量快速的 unit test，一定数量的 integration test，少量 end-to-end test。" href="/zh/docs/principles/testing/test-pyramid" />
+  <Card title="测试行为而非实现 · Test Behavior, Not Implementation" description="断言系统做了什么——可观察的状态与效果——而不是它怎么做；与内部 call graph 耦合的测试，会在每一次安全的 refactor 上破裂。" href="/zh/docs/principles/testing/test-behavior-not-implementation" />
+  <Card title="不稳定测试隔离 · Flaky Test Quarantine" description="在代码未变时间歇失败的测试会毒害整套 suite 的信任——带着 bug 和有效期刻意隔离它。" href="/zh/docs/principles/testing/flaky-test-quarantine" />
+  <Card title="基于属性的测试 · Property-Based Testing" description="把代码必须对每个输入都保持的 invariant 说出来，然后让 generator 去搜出打破它的输入。" href="/zh/docs/principles/testing/property-based-testing" />
+  <Card title="不要 mock 你不拥有的东西 · Don't Mock What You Don't Own" description="绝不手写第三方 SDK 接口的 mock——用你拥有的 adapter 包住它，并让 adapter 对着真实 service 验证。" href="/zh/docs/principles/testing/dont-mock-what-you-dont-own" />
+  <Card title="遗留代码即未经测试的代码 · Legacy Code Is Untested Code" description="没有快速测试的代码，发布当天就是 legacy code——动任何一行之前，先用 characterization test 把它实际的行为钉住。" href="/zh/docs/principles/testing/legacy-code-is-untested-code" />
+</Cards>
+
+registry 的 testing domain 里还有比这更多的条目——上面这些已深挖、带来源；其余的以 *belum digali*（未深挖）诚实追踪，直到被研究并写成为止。已深挖的类别不等于完成的类别。

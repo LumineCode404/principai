@@ -1,0 +1,125 @@
+---
+title: Test Pyramid
+id: test-pyramid
+name: Test Pyramid
+summary: Balance the automated test suite by feedback cost — many fast unit tests, some integration tests, few end-to-end tests.
+category: testing
+type: heuristic
+severity: important
+applies_to:
+  - ci
+  - services
+  - libraries
+tags:
+  - testing
+  - feedback-loop
+  - test-suite
+aliases:
+  - Testing Pyramid
+  - Test Automation Pyramid
+sources:
+  - 'Mike Cohn, Succeeding with Agile, 2009'
+  - 'Ham Vocke, "The Practical Test Pyramid", https://martinfowler.com/articles/practical-test-pyramid.html'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Shape every automated test suite as a pyramid: many small and fast unit tests at the base, a thinner layer of integration tests, and only a few slow end-to-end tests at the top. Push each assertion down to the lowest layer that can still observe the behavior it cares about, and treat a suite that takes hours to run as a defect in the suite, not a fact of life. Never answer a slow, flaky suite by adding more tests at the top — go down a layer instead.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+The test pyramid — coined by Mike Cohn in Succeeding with Agile and popularized by Ham Vocke's "The Practical Test Pyramid" — is a metaphor for a balanced suite: lots of small and fast unit tests, some more coarse-grained integration tests, very few high-level end-to-end tests. The shape encodes cost: tests higher up the stack are slower, flakier, and harder to diagnose when they fail, so the suite buys coverage where tests are cheap to run and cheap to fix, and reserves the expensive top for the journeys that genuinely need the whole system wired together. What the shape buys is feedback speed — automation should tell you the software is broken "in a matter of seconds and minutes instead of days and weeks". Vocke's warning about the inverted shape, the "test ice-cream cone", is that it "will be a nightmare to maintain and takes way too long to run".
+
+## When to use
+
+- Any codebase whose CI test runtime gates merges or releases.
+- Teams practicing continuous integration, where the feedback loop has to survive merging many times a day.
+- Service and library code whose logic can be exercised without a full deployment.
+- Rescuing a suite developers have stopped running locally because it takes too long.
+
+## When NOT to use
+
+- Throwaway spikes and prototypes that will never reach production — a testing strategy for code with a lifespan of days is noise.
+- Safety-critical or contractually regulated paths that require end-to-end evidence: the top of the pyramid is budgeted by risk, not by taste.
+- Hard-to-test legacy systems where the wiring itself is the risk — pin current behavior first (see Legacy Code Is Untested Code) before enforcing layer shapes.
+- Front-end codebases whose tooling has made integration tests nearly as fast as unit tests — optimize for return on investment over shape (Dodds' Testing Trophy).
+
+## Anti-pattern
+
+- The ice-cream cone: a mountain of end-to-end UI tests over a thin base of unit tests — slow, flaky, and it diagnoses nothing.
+- Testing every business rule through the full stack: forty seconds of login, database, and browser to learn one number.
+- Fighting about layer names ("is that a unit test?") instead of asking what a test observes and how fast it runs — Vocke explicitly warns not to get attached to the names of the layers.
+- Mandating layer ratios or coverage percentages per repository — the pyramid is a cost heuristic, and Goodhart's Law will collect the metric.
+- A suite so slow that developers batch changes around overnight runs and read the results the next morning.
+
+## Code example
+
+Wrong — one business rule, tested only through the whole browser:
+
+```ts
+// e2e/checkout.spec.ts — the ONLY test covering the volume-discount rule
+test('volume discount', async ({ page }) => {
+  await page.goto('/login');
+  await page.fill('#email', 'e2e-bot@example.com'); // full stack for one rule:
+  await page.click('#login');                        // auth, session, database
+  for (let i = 0; i < 11; i++) {
+    await page.click('#add-to-cart');                // 11 browser round-trips
+  }
+  await expect(page.locator('#total')).toHaveText('104.50'); // ~40s of setup
+});
+```
+
+Right — the rule as a fast unit test, the journey as one smoke test:
+
+```ts
+// unit/discount.spec.ts — the rule itself, in milliseconds
+test('11th item is free', () => {
+  const cart = items(11, unitPrice(9.5));
+  expect(volumeDiscount(cart)).toBe(104.5); // 10 paid, 1 free
+});
+
+// e2e/checkout.smoke.spec.ts — exactly ONE journey proves the wiring
+// (login, add one item, see a plausible total); it does not re-prove
+// rules the unit layer already owns.
+```
+
+## Technical enforcement
+
+<Enforcement>
+The pyramid itself is advice about where assertions live; the pipeline enforces its consequences:
+
+- **CI runtime budget**: the default merge-gating suite has a hard runtime cap; exceeding it fails the build and forces new tests down a layer or into a scheduled lane.
+- **Layer tagging**: every test declares its layer; CI reports per-layer runtime and counts as a trend, so an inverting pyramid becomes visible instead of ambient.
+- **Merge gate on the fast lane**: pull requests are gated on unit and integration tests; end-to-end suites run post-merge or on a schedule, with loud reporting back into the backlog.
+- **End-to-end quota in review**: a change that adds end-to-end tests must justify why the assertion cannot live lower — as a required review checklist item.
+- **Per-layer flake tracking**: failures are attributed to layers; a layer whose failures are mostly flaky gets quarantine treatment (see Flaky Test Quarantine), not more tests.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Google's testing blog argued the economics from practice in "Just Say No to More End-to-End Tests" (Mike Wacker, April 2015). https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html Wacker presents what he explicitly labels a composite sketch, based on a collection of real experiences: a team gates its release on a nightly end-to-end suite, and with one day to the deadline the pass rate collapses — first because signing in to the service is broken and almost all tests sign in a user, then again because a partner team deployed a bad build to the shared testing environment. The article's conclusion is the pyramid's argument in production terms: smaller tests are fast ("no developer wants to wait hours or days to find out if their change works") and reliable, while a strategy built mostly on end-to-end tests turns every small defect into a suite-wide event. A lower-layer suite would have reduced the blast radius of each of those defects to one failing test with one obvious cause.
+</RealCase>
+
+## Tension and trade-off
+
+- **Test Pyramid vs. Testing Trophy**: when integration tests are nearly as fast as unit tests (much modern front-end tooling), shape stops being the point — Kent C. Dodds proposes weighting layers by return on investment instead of by count.
+- **Fast lane vs. real wiring**: gating merges on the fast lane alone means integration defects surface only after merge; pair the schedule with Fail-Visible reporting so the post-merge lane alarms instead of whispering.
+- **Weigh against Goodhart's Law**: the moment the pyramid is enforced as layer ratios or coverage numbers, the metric gets gamed and the cost heuristic behind it is forgotten.
+
+## Related principles
+
+- [Test Behavior, Not Implementation](/docs/principles/testing/test-behavior-not-implementation) — the fast base layer is only an asset if the small tests observe behavior, not call graphs.
+- [Flaky Test Quarantine](/docs/principles/testing/flaky-test-quarantine) — top-heavy suites are where flakiness breeds; contain it deliberately.
+- [Fail Visible](/docs/principles/reliability/fail-visible) — exceeded runtime budgets and post-merge failures must be loud, not ambient.
+- [Goodhart's Law](/docs/principles/design/goodharts-law) — layer ratios and coverage percentages become targets the moment they are measured as targets.
+
+## References
+
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html (layering, what to test at each level, the ice-cream-cone anti-pattern; attributes the concept to Mike Cohn's Succeeding with Agile).
+- Kent C. Dodds, Write tests. Not too many. Mostly integration. — https://kentcdodds.com/blog/write-tests (the Testing Trophy — weighting layers by return on investment when integration tests are cheap).
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html (why end-to-end-heavy strategies fail in practice: slow, flaky, hard to diagnose).

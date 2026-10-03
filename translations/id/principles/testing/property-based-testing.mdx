@@ -1,0 +1,149 @@
+---
+title: Property-Based Testing
+id: property-based-testing
+name: Property-Based Testing
+summary: Nyatakan invariant yang harus dipegang kode untuk setiap input, lalu biarkan generator memburu input yang melanggarnya — satu property mengalahkan rak penuh contoh pilihan tangan.
+category: testing
+type: practice
+severity: important
+applies_to:
+  - "libraries"
+  - "services"
+  - "ci"
+tags:
+  - "testing"
+  - "invariants"
+  - "generators"
+  - "correctness"
+aliases:
+  - "PBT"
+  - "Generative Testing"
+sources:
+  - 'Claessen & Hughes, "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs", ICFP 2000, https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf'
+  - 'John Hughes, "Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane", 2016, https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9'
+  - 'QuickCheck (Haskell), https://hackage.haskell.org/package/QuickCheck'
+  - 'fast-check (JavaScript/TypeScript), https://fast-check.dev/'
+status: draft
+verification: ok
+source_hash: "8d76a9a4053fec8f"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/property-based-testing.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Berhenti mengenumerasi input contoh dengan tangan. Untuk perilaku apa pun dengan invariant yang nyata — round-trip, ordering, idempotence, commutativity — nyatakan invariant itu sebagai property dan biarkan generator mencari input yang melanggar; saat satu ditemukan, simpan counterexample yang sudah di-shrink sebagai regression test bernama. Selalu periksa apa yang benar-benar dihasilkan generator, agar pencarian menjangkau sudut-sudut yang Anda pedulikan alih-alih hanya menyampel tengah yang membosankan.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Test contoh meng-assert output untuk satu input yang terpikir oleh Anda; property meng-assert invariant yang harus berlaku untuk setiap input yang bisa dihasilkan generator. Property-based testing — diperkenalkan oleh Claessen dan Hughes di QuickCheck (ICFP 2000) — mengekspresikan property dalam bahasa programnya, mengetes mereka pada jumlah besar kasus yang di-generate secara acak, dan melaporkan counterexample ketika salah satu gagal; implementasi modern men-shrink kegagalan ke arah input reproduksi yang minimal. Garis keturunannya berjalan dari QuickCheck milik Haskell, lewat versi Erlang yang Hughes ikut mendirikan Quviq untuk mengkomersialkannya pada 2006, hingga port seperti fast-check untuk JavaScript dan TypeScript serta Hypothesis untuk Python. Pergeseran posturnya adalah intinya: contoh memverifikasi kasus yang Anda bayangkan, property menyerang case space yang tidak Anda bayangkan.
+
+## Kapan pakai
+
+- Logika murni dengan invariant yang tajam: codec dan serializer (round-trip), parser (identity print-parse), collection (order, size, membership), aritmetika uang dan tanggal.
+- Domain input yang terlalu luas untuk dienumerasi: unicode, angka negatif dan batas, kasus kosong dan tunggal, struktur bersarang dalam.
+- Disiplin regression: setiap bug yang dilaporkan dari lapangan menjadi property plus seed yang gagal, sehingga pencarian terus meng-cover kelas kegagalan itu, bukan hanya satu kasus yang dilaporkan.
+- Sistem stateful tempat kegagalan yang menarik adalah interleaving: urutan command yang di-generate menjelajahi state yang tak pernah ditebak test tulisan tangan.
+
+## Kapan TIDAK pakai
+
+- Perilaku yang dispesifikasikan oleh konten eksak — snapshot test, golden file, teks copy: contohnya adalah contract-nya, dan property tidak menambah otoritas atasnya.
+- Logika tanpa invariant yang bisa dinyatakan: jika tidak bisa dikatakan apa yang selalu berlaku, masalahnya adalah contract yang tak tertulis (lihat Explicit Contracts), bukan generator yang hilang.
+- Aliran lambat yang penuh side effect: generation melipatgandakan eksekusi; dekatkan property ke logika murni dan cover seam I/O-nya dengan beberapa integration test yang fokus.
+- Skrip sekali-pakai-buang yang seluruh input space-nya adalah satu file yang Anda kendalikan.
+
+## Anti-pattern
+
+- Property tautologi yang menyatakan ulang implementasi — men-test satu fungsi dengan menghitung sisi lain kesetaraannya dengan cara yang sama seperti kode.
+- Property yang benar secara trivial ("output tidak null") yang menggelembungkan kehijauan suite tanpa membatasi apa pun.
+- Generator tanpa batasan yang menghasilkan mayoritas input tak valid, sehingga run budget terbelanjakan untuk kasus-kasus yang di-skip precondition.
+- Tak pernah memeriksa distribusi generator — suite lulus sambil hanya menyampel tengah yang mudah dari input space.
+- Membuang seed yang gagal: counterexample yang tak bisa direproduksi siapa pun adalah laporan bug tanpa alamat.
+- Memperlakukan shrinking sebagai opsional — kegagalan yang tak di-shrink mengubur pemicu sebenarnya di suatu tempat dalam satu layar penuh data acak.
+
+## Contoh kode
+
+Salah — tiga contoh, semuanya dari kepala penulisnya:
+
+```ts
+// urlCodec: decode(encode(s)) seharusnya adalah identity.
+test('encodes a path', () => {
+  expect(decode(encode('users/42'))).toBe('users/42');
+});
+test('encodes a space', () => {
+  expect(decode(encode('new york'))).toBe('new york');
+});
+test('encodes an accent', () => {
+  expect(decode(encode('café'))).toBe('café');
+});
+// Input space yang benar-benar teruji: tiga string. Batas multi-byte,
+// tanda persen, input kosong, control characters — tak pernah di-generate,
+// tak pernah teruji. Caller pertama yang menghasilkannya membuka ticket.
+```
+
+Benar — invariant-nya sebagai property, dengan shrink disimpan sebagai regression:
+
+```ts
+import fc from 'fast-check';
+
+// Invariant-nya: decode setelah encode adalah identity, untuk string APA PUN.
+test('round-trips every generated string', () => {
+  fc.assert(
+    fc.property(fc.string(), (s) => {
+      expect(decode(encode(s))).toBe(s);
+    }),
+    { numRuns: 2000 }, // anggarkan run secara sengaja, bukan karena default
+  );
+});
+
+// Saat gagal, runner mencetak seed dan counterexample yang sudah di-shrink,
+// mis. "Property failed after 12 tests (seed: 1527422598337)".
+// Pin kasus itu berdasarkan nama agar kelas bug itu tetap mati:
+test('regression: percent sign survives the round-trip', () => {
+  expect(decode(encode('%'))).toBe('%');
+});
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Generation harus ditata, bukan sekadar dikagumi:
+
+- **Disiplin seed**: setiap run CI merekam seed yang dicetak runner saat gagal; kegagalan property tanpa seed yang bisa direproduksi diperlakukan sebagai test rusak, bukan test hijau.
+- **Gerbang counterexample-ke-regression**: property yang gagal harus mendarat sebagai regression test bernama yang di-check-in di PR yang sama dengan perbaikannya — kasus yang sudah di-shrink itu sendiri, bukan parafrasenya.
+- **Pemeriksaan distribusi**: generator memberi label pada kategori outputnya, dan suite gagal ketika sebuah label lenyap — pencarian tidak bisa diam-diam mundur ke tengah yang mudah.
+- **Runtime budget**: suite property mendapat budget waktu eksplisit di CI dengan sinyal keras saat terlampaui, agar generation tidak diam-diam membusukkan durasi build.
+- **Review tautologi**: property yang menyermin implementasi yang sedang dites ditolak di review persis seperti assertion yang tidak meng-assert apa pun.
+- **Yang mencegah vs. yang mendeteksi**: gerbang distribusi dan run budget mencegah suite kosong; log seed dan regression yang di-shrink mendeteksi bug yang sudah ditemukan pencarian. Kedua sisinya, selalu.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+John Hughes — rekan penulis paper QuickCheck asli — menceritakan kembali satu dekade hasil industrial dalam "Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane". Proyek QuickCheck terbesar saat tulisan itu dibuat membangun acceptance test untuk kode C AUTOSAR atas nama Volvo Cars, dan sebuah metode deteksi race berbasis QuickCheck "nailed a notorious bug plaguing Klarna" (menjatuhkan bug terkenal yang menghantui Klarna), pemimpin pasar sistem invoicing untuk e-commerce di Eropa utara. Keduanya adalah postur yang sama pada skala industrial: invariant dinyatakan sebagai property yang executable, input space dijelajahi generator, dan interleaving stateful diserang dengan urutan yang di-generate, bukan tebakan tangan. https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9 (verification: ok — fakta dikutip dari abstrak bab tersebut; mekanisme bug Klarna dan detail proyeknya ada di badan bab — belum digali, teks lengkapnya berbayar.)
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Keluasan vs. determinisme**: input acak menjadikan setiap run eksperimen baru; tanpa seed yang direkam, property yang gagal tak bisa dibedakan dari test flaky — disiplin Flaky Test Quarantine adalah harga keluasannya.
+- **Property vs. contoh**: property yang selamat dari ribuan input yang di-generate tetap tidak membuktikan invariant-nya, dan tidak mendokumentasikan apa pun tentang intent; simpan segelintir contoh yang menjelaskan perilakunya dan biarkan generation memburu di antara mereka — pembagian cepat-lambat yang sama dengan yang diresepkan Test Pyramid, diterapkan di dalam satu suite.
+- **Contract vs. cermin**: property terkuat menyatakan contract yang diandalkan user; terlemah menyatakan ulang implementasi dan hanya gagal ketika kodenya ditata ulang — garis yang digambar Test Behavior, Not Implementation untuk test contoh, digambar lebih tajam di sini.
+
+## Prinsip terkait
+
+- [Test Behavior, Not Implementation](/id/docs/principles/testing/test-behavior-not-implementation) — property adalah alat paling tajam untuk mem-pin perilaku observable alih-alih struktur.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — property yang bisa dinyatakan adalah contract yang dieksekusi; yang tak bisa dinyatakan adalah contract yang hilang.
+- [Test Pyramid](/id/docs/principles/testing/test-pyramid) — di mana suite yang di-generate dan cepat berada relatif terhadap coverage integration yang lambat.
+- [Flaky Test Quarantine](/id/docs/principles/testing/flaky-test-quarantine) — seed yang tak direkam adalah test flaky dalam bentuk janin.
+
+## Referensi
+
+- Claessen & Hughes, *QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs*, ICFP 2000 — https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf (paper aslinya: property sebagai fungsi, kasus acak, generator kustom.)
+- John Hughes, *Experiences with QuickCheck: Testing the Hard Stuff and Staying Sane*, Springer 2016 — https://link.springer.com/chapter/10.1007/978-3-319-30936-1_9 (QuickCheck industrial: acceptance test AUTOSAR Volvo Cars, bug race Klarna.)
+- fast-check documentation — https://fast-check.dev/ (property-based testing untuk JavaScript dan TypeScript: runner, arbitrary, shrinking.)
+- Hypothesis documentation — https://hypothesis.readthedocs.io/ (library property-based testing untuk Python.)

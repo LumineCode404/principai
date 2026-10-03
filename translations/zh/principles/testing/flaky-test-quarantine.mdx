@@ -1,0 +1,136 @@
+---
+title: "不稳定测试隔离 · Flaky Test Quarantine"
+id: flaky-test-quarantine
+name: Flaky Test Quarantine
+summary: 在代码未变时间歇失败的测试会毒害整套 suite 的信任——带着 bug 和有效期刻意隔离它，而不是重跑到变绿为止。
+category: testing
+type: practice
+severity: important
+applies_to:
+  - "ci"
+  - "services"
+tags:
+  - "testing"
+  - "flakiness"
+  - "ci"
+aliases:
+  - "Quarantine Flaky Tests"
+sources:
+  - 'John Micco, "Flaky Tests at Google and How We Mitigate Them", https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'
+status: draft
+verification: ok
+source_hash: "08ed98f71eab21e7"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/flaky-test-quarantine.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把一个在代码未变时间歇失败的测试当作一个有期限的缺陷，而不是可以重跑掉的噪声。把它 quarantine 到关键路径之外，挂上一个跟踪 bug，并设一个有效期——过期之后，quarantine 本身就让构建失败。绝不自动重跑失败直到变绿，也绝不静默删除测试——一个无形腐烂的 quarantine，会变成藏住真实 race 的盲区。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+一个 flaky 测试在同一份代码上既出现过通过又出现过失败——这是 Google 自己的定义，出自 John Micco 2016 年的 testing blog 文章。flakiness 摧毁的是 suite 的核心产品：信任。工程师一旦学会「红色可能只是『再跑一次』」，他们就不再读失败——包括真实的那些——而 Micco 的数字给出了 Google 的规模：大约 1.5% 的测试运行报告 flaky 结果，接近 16% 的测试带有某种程度的 flakiness，并且尽管有专人投入，flaky 测试的流入速率大致与修复速率持平。quarantine 是收容实践：把 flaky 测试移出关键路径，为修复它挂上一个 bug，并且 quarantine 本身也被跟踪——有 owner、有有效期——这样收容就永远不会悄悄变成 coverage 上一个永久的窟窿。
+
+## 何时使用
+
+- 任何给 merge 或 release 把门、且间歇性失败已被观察到不止一次的 CI suite。
+- 持续运行的大型测试语料库——flakiness 随 suite 规模和 end-to-end 测试的占比一起增长。
+- 开发者已经开始说「重跑一下就行」的团队——信任的损伤已经开始了。
+- 有 build cop 或人工 triage 失败的工作流——每一个 flake 都在花掉调查时间。
+
+## 何时不该使用
+
+- 失败是确定性的、可复现的——那是一个普通的失败测试；修代码，不要给它贴标签。
+- flakiness 来自被测生产代码里的 race——那是一个借测试之身旅行的产品 bug；把它暴露出来，不要 quarantine 它。
+- flaky 测试现在就能直接修掉的小 suite——quarantine 是为修复吞吐跟不上流入速度的场景存在的。
+- 作为对单次无法解释的失败的回应：没有度量过 pass/fail 方差之前，「flaky」只是猜测，而猜测可能埋掉一个真实的 regression。
+
+## 反模式
+
+- 自动重跑失败的测试直到通过，不留任何记录——每个 flake 都变得不可见，而每一次静默重跑都在扩大盲区。
+- 对 flaky 测试顺手打一个 skip 标注：coverage 无声消失，没有 bug、没有决定、没有痕迹。
+- 「flaky」作为个人裁决——任何开发者都可以自行宣布红色是噪声，于是裁决腐烂成「红色可以无视」。
+- 一张没人 review 的 quarantine 清单：测试离开了关键路径，也离开了所有人的脑海，永远。
+- 责怪工具链（「昨天 runner 慢」），而不是去度量每个测试的 pass/fail 方差。
+
+## 代码示例
+
+错误示范——重跑直到变绿：
+
+```python
+# run_tests.py —— 经典做法：失败靠重试消失，不留记录
+import subprocess
+
+code = 1
+for _ in range(3):  # 一个 3 次里失败 2 次的测试现在「通过」了
+    code = subprocess.call(["pytest", "-x", "--lf"])
+    if code == 0:
+        break
+raise SystemExit(code)  # flake 从未被计数，也从未被认领
+```
+
+正确示范——显式 quarantine，带 bug 与有效期：
+
+```python
+# run_tests.py —— suite 保持确定性；已知 flaky 的测试按名字
+# quarantine，每条带一个跟踪 bug 和一个有效期。
+import datetime
+import subprocess
+
+QUARANTINE = {
+    "tests/test_webhook.py::test_retry_on_timeout": {
+        "bug": "PLAT-1423",  # 为什么 flaky，在活儿所在之处被跟踪
+        "expires": datetime.date(2026, 9, 30),  # quarantine 是临时的
+    },
+}
+
+stale = [t for t, meta in QUARANTINE.items()
+         if meta["expires"] <= datetime.date.today()]
+if stale:
+    # quarantine 会响亮地腐烂：过期条目让构建失败
+    raise SystemExit(f"quarantine expired - fix or re-triage: {stale}")
+
+subprocess.call(["pytest", "-m", "not quarantined"])
+```
+
+## 技术执法
+
+<Enforcement>
+quarantine 是一个工作流，而这个工作流可以被机械化：
+
+- **自动 flake 检测**：CI 记录同一份代码上多次运行中每个测试的 pass/fail 方差；越过配置好的 flakiness 阈值的测试被标记出来，并且可以选择自动 quarantine——Google 描述的那款工具做的正是这件事。
+- **quarantine 登记表即数据**：被 quarantine 的测试放在一份 checked-in 的登记表里，每个条目带 bug 链接和有效期；登记表的变更像任何 diff 一样接受 review。
+- **有效期把门构建**：过期条目让 CI 失败，直到测试被修复、重新 triage，或在一次显式决定下删除——收容永远不会因疏忽而永久化。
+- **禁止静默重试**：失败的自动重跑要么被禁用，要么发出按测试计数的计数器；上升的重试次数本身就是一条 quarantine 触发线。
+- **quarantine dashboard**：flaky 数量、条目年龄、因 quarantine 丢失的 coverage 都汇报给团队，让这笔债保持可见，而不是弥散成背景。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+Google 在 John Micco 的「Flaky Tests at Google and How We Mitigate Them」（2016 年 5 月）中公开描述了这套实践。https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html 在 Google 的语料库上，大约 1.5% 的测试运行报告 flaky 结果——那里的定义是一个「that exhibits both a passing and a failing result with the same code」（在同一份代码上既出现过通过又出现过失败）的测试——并且接近 16% 的测试带有某种程度的 flakiness；按平均约一千个测试的项目算，光是算术就会在每次运行中制造一连串假警报，每一个都需要开发者或 build cop 的调查。已发表的一项缓解措施，是一款监控 flakiness 并在过高时自动 quarantine 测试的工具：quarantine 把测试移出关键路径，并挂上一个 bug 让开发者去降低 flakiness。Micco 自己的告诫正是本原则的张力所在：quarantine「could easily mask a real race condition or some other bug in the code being tested」（很可能掩盖被测代码里一个真实的 race condition 或其他 bug），而更温和的替代方案——把测试标记为 flaky、只在连续失败三次之后才算失败——会把一个十五分钟测试里的真实损坏推迟到大约四十五分钟。已发表的选项清单（重跑、标记为 flaky、带 bug 的 quarantine）正是本原则形式化的政策面：收容噪声，让债务保持可见，并且绝不让收容变成修复。
+</RealCase>
+
+## 张力与权衡
+
+- **Quarantine vs. Fail-Visible**：把一个 flaky 测试移出关键路径，是用信号换稳定——失败仍然存在，只是在更安静的地方；让登记表保持响亮，否则这张面具就变成永久的。
+- **自动重跑 vs. Retry Budget**：把失败的测试重跑到变绿，是一个没有预算的 retry 循环——它花构建时间去购买幻觉；如果一定要有 retry，就必须像任何 retry 一样被设限、被计数、被报告。
+- **与 Observability First 权衡**：这个 flake 可能是一场真实 race 或顺序 bug 的唯一目击者——把按测试的方差当作关于生产行为的 telemetry，而不只是 suite 的债。
+
+## 相关原则
+
+- [测试金字塔 · Test Pyramid](/zh/docs/principles/testing/test-pyramid)——头重脚轻的 suite 是 flakiness 的主要发生器；更少、更低的测试才是结构性的修法。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——过期或膨胀的 quarantine 必须报警，而不是溶解进背景。
+- [重试预算 · Retry Budget](/zh/docs/principles/reliability/retry-budget)——自动重跑就是一次 retry：要么有界、被计数、被报告，要么不存在。
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——按测试的 pass/fail 方差是关于代码的 telemetry，不只是关于 suite 的。
+
+## 参考文献
+
+- John Micco, Flaky Tests at Google and How We Mitigate Them — https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html（Google 的 flakiness 比例与缓解工具：重跑失败测试、标记为 flaky、带 bug 的自动 quarantine）。
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html（为什么 flaky 测试侵蚀开发者信任，以及为什么更小的测试才是可靠的基础）。

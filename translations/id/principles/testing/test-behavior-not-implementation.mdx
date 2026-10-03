@@ -1,0 +1,135 @@
+---
+title: Test Behavior, Not Implementation
+id: test-behavior-not-implementation
+name: Test Behavior, Not Implementation
+summary: Assert apa yang dikerjakan sistem — state dan efek yang observable — bukan bagaimana caranya; test yang terikat pada call graph internal rusak pada setiap refactor yang aman.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "ci"
+  - "libraries"
+  - "services"
+tags:
+  - "testing"
+  - "mocks"
+  - "refactoring"
+aliases:
+  - "Test Behaviour, Not Implementation"
+  - "Classical Testing"
+sources:
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: perlu
+source_hash: "d4e21a415cbaa71b"
+translation_status: draft
+---
+
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/testing/test-behavior-not-implementation.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
+
+<AIInstruction>
+Tulis test yang meng-assert outcome observable — nilai yang dikembalikan, perubahan state, efek yang dikirim ke dunia — alih-alih meng-assert collaborator mana yang dipanggil, dalam urutan apa, dengan argumen apa. Utamakan collaborator nyata yang cepat (repository in-memory, capture adapter) daripada mock urutan pemanggilan, dan sisihkan interaction assertion untuk interaksi yang memang merupakan contract-nya. Ketika sebuah refactor dengan perilaku observable yang identik merusak test Anda, perbaiki test-nya — bukan refactor-nya.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definisi
+
+Test yang berguna gagal ketika perilaku berubah dan lulus ketika tidak. Gaya mockist (aliran London) memverifikasi interaksi — collaborator mana yang dipanggil, dalam urutan apa, dengan argumen apa — yang mengikat test pada call graph implementasi; gaya classical (aliran Detroit) memverifikasi state dan efek lewat collaborator nyata dan tetap buta terhadap struktur internal. "Mocks Aren't Stubs" (2007) karya Martin Fowler mendokumentasikan kedua gaya beserta namanya — Detroit untuk classical, London untuk mockist, mengikuti tempat komunitas XP itu tumbuh — dan menyatakan biayanya secara polos: test mockist "more coupled to the implementation of a method" (lebih terikat pada implementasi sebuah method), dan "changing the nature of calls to collaborators usually cause a mockist test to break" (mengubah sifat pemanggilan ke collaborator biasanya merusak test mockist) bahkan ketika tidak ada apa pun yang berubah secara observable. Men-test perilaku, bukan implementasi, adalah yang menjaga suite tetap menjadi safety net untuk refactoring — satu-satunya alasan tahan lama untuk memilikinya.
+
+## Kapan pakai
+
+- Kode yang sedang aktif di-refactor, tempat suite adalah safety net yang membuat perubahan murah.
+- Test-driven development di level unit: test perilaku observable berikutnya, lalu biarkan implementasinya muncul.
+- Library bersama dan service internal, tempat urutan pemanggilan collaborator bukan bagian dari contract siapa pun.
+- Tim yang mengadopsi mocking framework, memutuskan apa yang di-assert sebelum menulis mock pertama.
+
+## Kapan TIDAK pakai
+
+- Ketika interaksinya adalah spesifikasinya — "payment provider harus di-charge tepat sekali", "audit event harus di-emit sebelum state berubah": meng-assert interaksi itu adalah perilaku, bukan kebocoran implementasi.
+- Boundary adapter di tepi sistem, tempat byte di kabel (event schema, header, encoding) adalah contract yang di-parse consumer — verifikasi kabelnya, bukan object graph-nya.
+- Collaborator third-party yang bukan milik Anda — jangan sama sekali me-mock internalnya; bungkus dan test pembungkusnya (lihat Don't Mock What You Don't Own).
+- Legacy code tanpa seam: pin dulu perilaku saat ini dengan characterization test (lihat Legacy Code Is Untested Code), sebelum menilai gaya test apa pun.
+
+## Anti-pattern
+
+- Mock yang meng-assert urutan pemanggilan presisi antara dua collaborator internal — test itu kini gagal pada setiap rename.
+- Assertion deep-equality pada seluruh objek argumen ketika satu field adalah perilakunya dan sisinya insidental.
+- "Refactor" yang terdiri dari mengedit empat puluh mock sampai cocok dengan struktur pemanggilan internal yang baru, disetujui oleh test yang tak pernah bertanya apa yang dikerjakan sistem.
+- Coverage yang sebagian besar dibangun dari call-assertion: suite hijau tanpa pendapat tentang benar tidaknya outcome.
+- Me-mock value object dan pure function yang cukup dijalankan saja.
+
+## Contoh kode
+
+Salah — test-nya mem-pin call graph:
+
+```ts
+test('order placement', () => {
+  const repo = mock<OrderRepo>();
+  const mailer = mock<Mailer>();
+  const svc = new OrderService(repo, mailer);
+
+  svc.place(cart);
+
+  expect(repo.save).toHaveBeenCalledWithExactly(expectedOrder); // record yang eksak
+  expect(mailer.send).toHaveBeenCalledBefore(repo.save); // urutan internal
+});
+// Mengganti nama repo.save menjadi repo.persist, atau mengirim receipt
+// setelah menyimpan (tanpa perubahan observable), merusak test ini: safety net-nya hilang.
+```
+
+Benar — test-nya meng-assert state dan efek:
+
+```ts
+test('placing an order persists it and sends exactly one receipt', () => {
+  const repo = new InMemoryOrderRepo(); // collaborator nyata dan cepat
+  const mailer = new CaptureMailer(); // menangkap apa yang dikirim, bukan siapa pemanggilnya
+
+  new OrderService(repo, mailer).place(cart);
+
+  expect(repo.findByUser(cart.userId)).toHaveLength(1); // state: order-nya ada
+  expect(mailer.sent.map((m) => m.to)).toEqual([cart.email]); // satu receipt
+});
+// Nama internal, urutan, dan struktur pemanggilan kini bebas berubah;
+// test ini gagal hanya ketika perilaku yang ia sebut benar-benar berubah.
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Gaya tidak bisa ditahan oleh review saja; tancapkan constraint-nya ke tooling:
+
+- **Mock allowlist**: konfigurasi mocking hanya mengizinkan test double untuk collaborator di boundary arsitektural; me-mock seam internal yang dalam memerlukan pengecualian eksplisit yang di-review.
+- **Interaction assertion membawa penanda**: assertion yang memverifikasi pemanggilan harus berada di file yang ditandai sebagai contract test, atau CI menganotasinya untuk review sebelum merge.
+- **Mutation testing**: mutant yang bertahan menyingkap test yang meng-assert struktur alih-alih outcome; lacak tren kelangsungan hidupnya per modul.
+- **Refactor drill di CI**: job terjadwal menerapkan transformasi yang mempertahankan perilaku (rename, penataan ulang pemanggilan yang independen) dan mensyaratkan suite tetap hijau — coupling muncul sebagai kegagalan pada perubahan no-op.
+- **Yang mencegah vs. yang mendeteksi**: allowlist dan penanda menghentikan coupling baru saat review; mutation testing dan refactor drill mendeteksi coupling yang sudah Anda miliki — jalankan keduanya.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+(ilustratif) Sebuah tim mengganti nama sebuah method persistence dan menata ulang dua langkah internal — simpan order, lalu kirim receipt — tanpa perubahan observable: data yang sama tersimpan, email yang sama terkirim. Suite berbasis mock gagal di lusinan test yang meng-assert nama method lama dan urutan lama; seorang developer menghabiskan sorenya menulis ulang mock agar cocok dengan struktur pemanggilan yang baru, dan perubahan itu "disetujui" oleh test yang tidak sekali pun bertanya apa yang dikerjakan sistem. Nilai suite sebagai safety net terkikis senyap sampai sebuah perubahan perilaku yang sungguhan lolos lewat refleks perbaiki-mocknya-saja yang sama. Assertion level perilaku akan mengurangi seluruh kelas kegagalan itu menjadi build hijau dan rename satu baris. (verification: perlu — mekanisme coupling-nya terdokumentasi di "Mocks Aren't Stubs" karya Fowler; belum digali — kisah publik bernama tentang refactor yang mempertahankan perilaku namun merusak suite berbasis mock belum diverifikasi.)
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Classical vs. mockist (Detroit vs. London)**: test mockist menunjuk tepat interaksi mana yang rusak; test classical bertahan dari refactor namun melokalisasi kegagalan lebih kasar — pilih berdasarkan seberapa stabil desainnya saat ini.
+- **Perilaku vs. explicit contract**: ketika interaksinya sendiri adalah spesifikasinya (charge tepat sekali, emit sebelum flip), interaction assertion itu adalah perilaku — timbang terhadap Explicit Contracts dan tulis sebagai contract test, bukan sebagai mock insidental.
+- **Ditimbang terhadap Test Pyramid**: test classical butuh collaborator nyata, yang mendorong sebagian assertion ke layer yang lebih lambat — beli kecepatannya kembali dengan fake in-memory dan capture adapter, bukan dengan mock call-graph.
+
+## Prinsip terkait
+
+- [Don't Mock What You Don't Own](/id/docs/principles/testing/dont-mock-what-you-dont-own) — bentuk coupling implementasi yang paling tajam: me-mock internal dependency yang tak bisa Anda ubah.
+- [Test Pyramid](/id/docs/principles/testing/test-pyramid) — di mana assertion level perilaku tinggal, layer demi layer.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — urutan pemanggilan yang di-assert menjadi contract begitu suite hijau itu diandalkan.
+- [Legacy Code Is Untested Code](/id/docs/principles/testing/legacy-code-is-untested-code) — pin perilaku saat ini sebelum refactor; argumen safety net hanya bekerja ketika net-nya ada.
+
+## Referensi
+
+Slogan "test behavior, not implementation" adalah kependekan komunitas tanpa satu asal-usul kanonik pun; halaman ini menjangkarkannya pada debat terdokumentasi di bawah.
+
+- Martin Fowler, Mocks Aren't Stubs — https://martinfowler.com/articles/mocksArentStubs.html (TDD classical vs. mockist, nama Detroit dan London, dan bagaimana test mockist terikat pada implementasi).
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html (unit test sociable vs. solitary, dan apa yang di-test di tiap layer).

@@ -1,0 +1,131 @@
+---
+title: "测试金字塔 · Test Pyramid"
+id: test-pyramid
+name: Test Pyramid
+summary: 按 feedback 成本配平自动化 test suite——大量快速的 unit test，一定数量的 integration test，少量 end-to-end test。
+category: testing
+type: heuristic
+severity: important
+applies_to:
+  - "ci"
+  - "services"
+  - "libraries"
+tags:
+  - "testing"
+  - "feedback-loop"
+  - "test-suite"
+aliases:
+  - "Testing Pyramid"
+  - "Test Automation Pyramid"
+sources:
+  - 'Mike Cohn, Succeeding with Agile, 2009'
+  - 'Ham Vocke, "The Practical Test Pyramid", https://martinfowler.com/articles/practical-test-pyramid.html'
+status: draft
+verification: ok
+source_hash: "87904a8c01eb68e0"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/test-pyramid.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把每一个自动化 test suite 都塑造成金字塔：底部是大量小而快的 unit test，往上是更薄的一层 integration test，顶部只留少数缓慢的 end-to-end test。把每一条断言压到仍能观察到它所关心行为的最低一层；一个要跑好几个小时的 suite，是 suite 自身的缺陷，不是生活的常态。绝不要用「在顶部加更多测试」去回应一个又慢又 flaky 的 suite——往下走一层。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+测试金字塔——由 Mike Cohn 在 Succeeding with Agile 中提出、经 Ham Vocke 的「The Practical Test Pyramid」普及——是对一个均衡 suite 的隐喻：大量小而快的 unit test、一些更粗粒度的 integration test、极少数高层的 end-to-end test。这个形状编码的是成本：在栈上越高的测试越慢、越 flaky、失败时越难诊断，所以 suite 应该在测试跑得便宜、修得也便宜的地方买 coverage，把昂贵的顶层留给那些真正需要整个系统接线在一起的旅程。这个形状买到的是 feedback 速度——自动化应当「in a matter of seconds and minutes instead of days and weeks」（在几秒几分钟之内，而不是几天几周之后）告诉你软件坏了。Vocke 对倒置形状——「test ice-cream cone」——的警告是：它「will be a nightmare to maintain and takes way too long to run」（将是一场维护噩梦，并且跑起来要花太久）。
+
+## 何时使用
+
+- 任何 CI 测试运行时长会卡住 merge 或 release 的 codebase。
+- 实践 continuous integration 的团队——feedback loop 必须扛得住一天 merge 很多次。
+- 其逻辑不需要完整部署就能被驱动的 service 与 library 代码。
+- 抢救一套因为太慢、开发者已经不在本地跑的 suite。
+
+## 何时不该使用
+
+- 永远不会上线的 throwaway spike 与 prototype——为寿命只有几天的代码制定测试策略是噪声。
+- 需要 end-to-end 证据的安全关键或合同监管路径：金字塔顶层按风险预算，不按口味。
+- wiring 本身就是风险的难测试 legacy system——先钉住当前行为（见 Legacy Code Is Untested Code），再谈强制分层形状。
+- 工具链已把 integration test 做到几乎和 unit test 一样快的前端 codebase——按 return on investment 优化，而不是按形状（Dodds 的 Testing Trophy）。
+
+## 反模式
+
+- 冰淇淋筒：在薄薄一层 unit test 之上压着一座 end-to-end UI 测试的山——慢、flaky，而且什么都诊断不了。
+- 每条业务规则都穿过完整 stack 测试一遍：花四十秒的登录、数据库和 browser，只为知道一个数字。
+- 争论层的名字（「这算 unit test 吗？」），而不是问一个测试观察什么、跑多快——Vocke 明确警告不要执着于层的命名。
+- 按仓库强制规定层比例或 coverage 百分比——金字塔是成本启发式，Goodhart's Law 会把那个指标收走。
+- suite 慢到开发者把改动攒起来围着过夜构建转，第二天早上再看结果。
+
+## 代码示例
+
+错误示范——一条业务规则，只通过整个 browser 来测：
+
+```ts
+// e2e/checkout.spec.ts —— 覆盖 volume-discount 规则的测试只有这一个
+test('volume discount', async ({ page }) => {
+  await page.goto('/login');
+  await page.fill('#email', 'e2e-bot@example.com'); // 一条规则动用整个 stack：
+  await page.click('#login');                        // auth、session、数据库
+  for (let i = 0; i < 11; i++) {
+    await page.click('#add-to-cart');                // 11 次 browser 往返
+  }
+  await expect(page.locator('#total')).toHaveText('104.50'); // ~40s 的铺垫
+});
+```
+
+正确示范——规则做成快速的 unit test，旅程只留一条 smoke test：
+
+```ts
+// unit/discount.spec.ts —— 规则本身，毫秒级
+test('11th item is free', () => {
+  const cart = items(11, unitPrice(9.5));
+  expect(volumeDiscount(cart)).toBe(104.5); // 10 件付费，1 件免费
+});
+
+// e2e/checkout.smoke.spec.ts —— 恰好一条旅程证明接线没问题
+// （登录、加购一件、看到一个合理的总价）；它不去重复证明
+// unit 层已经拥有的那些规则。
+```
+
+## 技术执法
+
+<Enforcement>
+金字塔本身是关于断言住在哪里的建议；由 pipeline 来执法它的后果：
+
+- **CI 运行时长预算**：默认的 merge 门禁 suite 有硬性运行时长上限；超限即构建失败，逼着新测试往下层挪，或者进定时 lane。
+- **分层打标**：每个测试声明自己所在的层；CI 按层报告运行时长与数量趋势，于是正在倒置的金字塔变得可见，而不是弥散在背景里。
+- **快车道上的 merge 门禁**：pull request 由 unit 与 integration test 把门；end-to-end suite 在 merge 之后或按日程运行，并响亮地把结果回报进 backlog。
+- **review 中的 end-to-end 配额**：新增 end-to-end 测试的改动必须说明这条断言为什么不能住在更低层——作为 review checklist 的必答项。
+- **按层追踪 flake**：失败被归因到层；一个层的失败大多是 flaky，就按 Flaky Test Quarantine 处理，而不是加更多测试。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+Google 的 testing blog 在「Just Say No to More End-to-End Tests」（Mike Wacker，2015 年 4 月）里用实践论证了这套经济学。https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html Wacker 给出了一个他明确标注为「composite sketch based on a collection of real experiences」（基于真实经历的拼合素描）的场景：一个团队把 release 门禁押在每夜运行的 end-to-end suite 上，而截止日前一天通过率崩塌——先是登录服务坏掉，而几乎所有测试都需要先登录一个用户；接着又是某个 partner team 往共享测试环境部署了一个坏构建。文章的结论就是金字塔论证的生产版：更小的测试快（「no developer wants to wait hours or days to find out if their change works」）而且可靠，而一个主要押在 end-to-end 测试上的策略，会把每个小缺陷都放大成整场 suite 级别的事件。一套更低层的 suite，本可以把其中每一个缺陷的 blast radius 都缩减为一个失败原因明显的测试。
+</RealCase>
+
+## 张力与权衡
+
+- **测试金字塔 vs. Testing Trophy**：当 integration test 几乎和 unit test 一样快时（很多现代前端工具链正是如此），形状就不再是重点——Kent C. Dodds 提出按 return on investment 而不是按数量给各层配重。
+- **快车道 vs. 真实接线**：只靠快车道给 merge 把门，意味着 integration 缺陷要到 merge 之后才浮出水面；给日程 lane 配上 Fail-Visible 式的报告，让 merge 后的 lane 是在报警，而不是在低语。
+- **与 Goodhart's Law 权衡**：金字塔一旦被当作层比例或 coverage 数字来执法，指标就会被玩坏，而它背后的成本启发式则被遗忘。
+
+## 相关原则
+
+- [测试行为而非实现 · Test Behavior, Not Implementation](/zh/docs/principles/testing/test-behavior-not-implementation)——快速的基础层只有在小测试观察的是行为而不是 call graph 时，才是一项资产。
+- [不稳定测试隔离 · Flaky Test Quarantine](/zh/docs/principles/testing/flaky-test-quarantine)——头重脚轻的 suite 正是 flakiness 的滋生地；要刻意地控制它。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——超支的运行时长预算与 merge 后的失败必须响亮，不能融入背景。
+- [古德哈特定律 · Goodhart's Law](/zh/docs/principles/design/goodharts-law)——层比例与 coverage 百分比，在被当作目标来度量的那一刻，就成了目标。
+
+## 参考文献
+
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html（分层、每层测什么、冰淇淋筒反模式；把概念归功于 Mike Cohn 的 Succeeding with Agile）。
+- Kent C. Dodds, Write tests. Not too many. Mostly integration. — https://kentcdodds.com/blog/write-tests（Testing Trophy——当 integration test 便宜时，按 return on investment 给各层配重）。
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html（为什么押注 end-to-end 的策略在实践中失败：慢、flaky、难诊断）。

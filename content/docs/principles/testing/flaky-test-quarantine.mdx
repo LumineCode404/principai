@@ -1,0 +1,130 @@
+---
+title: Flaky Test Quarantine
+id: flaky-test-quarantine
+name: Flaky Test Quarantine
+summary: A test that fails intermittently on unchanged code poisons trust in the whole suite — isolate it deliberately, with a bug and an expiry, instead of rerunning until green.
+category: testing
+type: practice
+severity: important
+applies_to:
+  - ci
+  - services
+tags:
+  - testing
+  - flakiness
+  - ci
+aliases:
+  - Quarantine Flaky Tests
+sources:
+  - 'John Micco, "Flaky Tests at Google and How We Mitigate Them", https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Treat a test that fails intermittently on unchanged code as a defect with a deadline, not as noise to be rerun. Quarantine it out of the critical path, attach a tracking bug, and set an expiry after which the quarantine itself fails the build. Never auto-rerun failures until green and never delete the test silently — a quarantine that decays invisibly becomes a blind spot that hides real races.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+A flaky test exhibits both passing and failing results with the same code — Google's own definition, from John Micco's 2016 testing-blog post. Flakiness destroys the suite's core product: trust. Once engineers learn that red can mean "try again", they stop reading failures — including the real ones — and Micco's numbers show the scale at Google: about 1.5% of all test runs report a flaky result, almost 16% of tests carry some level of flakiness, and the insertion rate of flaky tests has roughly matched the fix rate despite dedicated effort. Quarantine is the containment practice: the flaky test is removed from the critical path, a bug is filed to fix it, and the quarantine itself is tracked — with an owner and an expiry — so containment can never quietly become a permanent hole in coverage.
+
+## When to use
+
+- Any CI suite gating merges or releases where intermittent failures have been observed more than once.
+- Large test corpora run continuously — flakiness grows with suite size and with the share of end-to-end tests.
+- Teams whose developers have started saying "just rerun it": the trust damage has already begun.
+- Workflows with a build cop or human triaging failures, where every flake costs investigation time.
+
+## When NOT to use
+
+- When the failure is deterministic and reproducible — that is an ordinary failing test; fix the code, do not label it.
+- Flakiness caused by a race in the production code under test — that is a product bug traveling through the test; surface it, do not quarantine it.
+- Small suites where the flaky test can simply be fixed now — quarantine exists for when fix throughput cannot keep pace with arrivals.
+- As a response to a single unexplained failure: without measured pass/fail variance, "flaky" is a guess, and the guess can bury a real regression.
+
+## Anti-pattern
+
+- Auto-rerunning failed tests until they pass, with no record kept — every flake becomes invisible, and each silent rerun widens the blind spot.
+- A drive-by skip annotation on the flaky test: coverage vanishes with no bug, no decision, and no trace.
+- "Flaky" as a personal verdict — any developer may declare red to be noise at discretion, and the verdict decays into red-is-ignorable.
+- A quarantine list nobody reviews: the test is out of the critical path and out of everyone's mind, forever.
+- Blaming the toolchain ("the runners were slow yesterday") instead of measuring per-test pass/fail variance.
+
+## Code example
+
+Wrong — rerun until green:
+
+```python
+# run_tests.py — the classic: failures vanish by retry, no record kept
+import subprocess
+
+code = 1
+for _ in range(3):  # a test failing 2 of 3 runs now "passes"
+    code = subprocess.call(["pytest", "-x", "--lf"])
+    if code == 0:
+        break
+raise SystemExit(code)  # the flake was never counted or owned
+```
+
+Right — explicit quarantine with bug and expiry:
+
+```python
+# run_tests.py — the suite stays deterministic; known-flaky tests are
+# quarantined by name, each with a tracking bug and an expiry date.
+import datetime
+import subprocess
+
+QUARANTINE = {
+    "tests/test_webhook.py::test_retry_on_timeout": {
+        "bug": "PLAT-1423",  # why it is flaky, tracked where work lives
+        "expires": datetime.date(2026, 9, 30),  # quarantine is temporary
+    },
+}
+
+stale = [t for t, meta in QUARANTINE.items()
+         if meta["expires"] <= datetime.date.today()]
+if stale:
+    # the quarantine rots loudly: expired entries fail the build
+    raise SystemExit(f"quarantine expired - fix or re-triage: {stale}")
+
+subprocess.call(["pytest", "-m", "not quarantined"])
+```
+
+## Technical enforcement
+
+<Enforcement>
+Quarantine is a workflow, and the workflow can be made mechanical:
+
+- **Automatic flake detection**: CI records per-test pass/fail variance across runs on unchanged code; a test crossing a configured flakiness threshold is flagged, and optionally auto-quarantined — the tool Google describes does exactly this.
+- **Quarantine registry as data**: quarantined tests live in a checked-in registry, each entry carrying a bug link and an expiry; registry changes are reviewed like any other diff.
+- **Expiry gates the build**: expired entries fail CI until the test is fixed, re-triaged, or deleted with an explicit decision — containment never becomes permanent by neglect.
+- **No silent retries**: automatic rerun of failures is either disabled or emits a per-test counter; a rising retry count is itself a quarantine trigger.
+- **Quarantine dashboard**: flaky count, entry age, and coverage lost to quarantine are reported to the team, so the debt stays visible instead of ambient.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Google described the practice publicly in John Micco's "Flaky Tests at Google and How We Mitigate Them" (May 2016). https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html Across Google's corpus, about 1.5% of all test runs report a flaky result — defined there as a test "that exhibits both a passing and a failing result with the same code" — and almost 16% of tests carry some level of flakiness; with an average project of roughly a thousand tests, the arithmetic alone produces a steady stream of false alarms per run, each requiring investigation by a developer or build cop. One published mitigation is a tool that monitors flakiness and automatically quarantines a test when it is too high: quarantine removes the test from the critical path and files a bug for developers to reduce the flakiness. Micco's own caveat is this principle's tension: quarantine "could easily mask a real race condition or some other bug in the code being tested", and the softer alternative — marking a test flaky so it fails only after three consecutive failures — delays a real breakage in a fifteen-minute test to roughly forty-five minutes. The published menu (rerun, mark-as-flaky, quarantine-with-bug) is exactly the policy surface this principle formalizes: contain the noise, keep the debt visible, and never let containment become the fix.
+</RealCase>
+
+## Tension and trade-off
+
+- **Quarantine vs. Fail-Visible**: moving a flaky test out of the critical path trades signal for stability — the failure still exists, only somewhere quieter; keep the registry loud or the mask becomes permanent.
+- **Auto-rerun vs. Retry Budget**: rerunning failed tests until green is a retry loop with no budget — it spends build time to buy an illusion; if retries exist at all, they are capped, counted, and reported like any other retry.
+- **Weigh against Observability First**: the flake may be the only witness of a real race or ordering bug — treat per-test variance as telemetry about production behavior, not just as suite debt.
+
+## Related principles
+
+- [Test Pyramid](/docs/principles/testing/test-pyramid) — top-heavy suites are the main generator of flakiness; fewer, lower tests is the structural fix.
+- [Fail Visible](/docs/principles/reliability/fail-visible) — an expired or growing quarantine must alarm, not dissolve into the background.
+- [Retry Budget](/docs/principles/reliability/retry-budget) — auto-rerun is a retry: bounded, counted, and reported, or not at all.
+- [Observability First](/docs/principles/reliability/observability-first) — per-test pass/fail variance is telemetry about the code, not only about the suite.
+
+## References
+
+- John Micco, Flaky Tests at Google and How We Mitigate Them — https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html (Google's flakiness rates and mitigation tools: rerun failing tests, mark-as-flaky, automatic quarantine with filed bugs).
+- Mike Wacker, Just Say No to More End-to-End Tests — https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html (why flaky tests erode developer trust, and why smaller tests are the reliable base).

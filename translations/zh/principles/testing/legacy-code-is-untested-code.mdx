@@ -1,0 +1,133 @@
+---
+title: "遗留代码即未经测试的代码 · Legacy Code Is Untested Code"
+id: legacy-code-is-untested-code
+name: Legacy Code Is Untested Code
+summary: 没有快速测试的代码，发布当天就是 legacy code——你无法安全地修改它，只能猜。动任何一行之前，先用 characterization test 把它实际的行为钉住。
+category: testing
+type: principle
+severity: important
+applies_to:
+  - "maintenance"
+  - "services"
+  - "legacy"
+tags:
+  - "legacy"
+  - "refactoring"
+  - "characterization-tests"
+  - "safety-net"
+aliases:
+  - "Code Without Tests Is Legacy Code"
+sources:
+  - 'Michael Feathers, "Working Effectively with Legacy Code", 2004, https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055'
+status: draft
+verification: perlu
+source_hash: "9126548134a8c2ee"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/testing/legacy-code-is-untested-code.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把任何没有快速、可靠测试的代码都当作 legacy code——包括上个 sprint 刚写的代码。绝不要闭着眼睛 refactor、清理或扩展它：先用 characterization test 把它当前的行为钉住——疣子一并包括在内；然后带着绿色的 pin 去做你的改动。如果代码因为焊死在 I/O 上而无法被钉住，就打开一个 seam，穿过它去测——不要把逻辑拷出去、fork 成两个彼此漂移且都没有测试的版本。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+Michael Feathers 在 *Working Effectively with Legacy Code*（2004）里的重新定义，把「legacy」从年龄挪到了风险上：legacy code 就是没有测试的代码——这个定义被广泛归于本书的引言（verification: perlu——逐字原句的具体措辞 belum digali；本书自身的定位，就是面向大型、未经测试的 legacy code base 的工作策略）。它的操作含义是：legacy code 是你不敢改的代码。没有安全网，每一次修改都是考古加祈祷；有了安全网，refactor 就变成证据工作。Feathers 配套的工具箱——断言代码「实际做的」而不是「应该做的」的 characterization test，以及让缠绕代码变得可测的 seam——正是把恐惧先转换成一套绿色 suite、再转换成一次安全改动的机制。
+
+## 何时使用
+
+- 在任何没有快速测试的区域动手清理、refactor 或现代化之前。
+- 在扩展一个没人能解释其怪异边界情形的长寿模块之前。
+- 应急维护之下：把你即将触碰的那条确切路径钉住——一个窄 pin 胜过一个盲目的 hotfix。
+- 接手或审计一个 codebase 时：被测试兜住的部分是有证据地变化的部分；其余的按定义就是 legacy，无论它生于哪一年。
+
+## 何时不该使用
+
+- 已经被快速测试兜住的代码：按这个定义它不是 legacy，无论多丑——丑是设计判断；恐惧才是 legacy 信号。
+- 已验证死掉的代码：带着证据删掉它（见 Chesterton's Fence），而不是给没人需要的行为钉 pin、然后永远背着它。
+- 已排定要替换而非修改的代码——给即将退休的东西钉 pin 是浪费 pin。
+- 作为跳过理解的借口：characterization test 记录行为，不解释行为；那道栅栏的「为什么」仍然要靠人去追查。
+
+## 反模式
+
+- 「推倒重写」作为对恐惧的条件反射——替代品继承了每一个未知行为，同时丢弃了多年安静的修复。
+- 在 feature PR 里顺手清理 legacy：行为变更与意图变更共用一个 diff，谁也无法单独回滚。
+- 从规格而非观察写出的 characterization test——它们撞上真实的怪癖而失败、被删掉，代码又回到了没有 pin 的状态。
+- 把整个模块裹进一个巨型 end-to-end test 就称之为「已钉住」——慢到没法常跑，粗到无法定位一次滑失。
+- 把 legacy 逻辑复制进一个新模块「顺手修一修」，留下两份彼此漂移的拷贝，一份测试都没有。
+
+## 代码示例
+
+错误示范——没有 pin 就 refactor：
+
+```python
+def apply_discount(order):
+    # 传下来的逻辑：没人记得为什么超过 100 要走 fees 那一条路
+    if order.total > 100 and order.coupon:
+        return order.total * 0.9 - order.fees
+    return order.total
+
+# 「清理」：有人觉得那笔费用减法看着不对，删了，上线。
+# 而那个分支一直在为某批客户正确处理账单，
+# 他们会在下个月的发票里发现真相。
+```
+
+正确示范——先钉住观察到的行为，再改动：
+
+```python
+def test_discount_over_100_with_coupon_is_pinned_as():
+    # 不是代码「应该」做什么——而是它今天可观察地「确实」做什么。
+    # 如果钉住的是一个意外，很好：那个意外正是你本来
+    # 要闭着眼睛承担的风险。
+    order = Order(total=120, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 103.0   # 120*0.9 - 5，疣子一并
+
+def test_discount_below_100_ignores_coupon():
+    order = Order(total=80, coupon="SPRING", fees=5)
+    assert apply_discount(order) == 80      # 完全没有折扣——已钉住
+
+# pin 绿了，行为已捕获：现在可以放手 refactor apply_discount。
+# 任何行为上的滑失，都会在 merge 之前变成一个红色测试，
+# 而不是 merge 之后的一张无声的错发票。
+```
+
+## 技术执法
+
+<Enforcement>
+未经测试的代码必须让触碰变贵，而且这份昂贵必须自动化：
+
+- **以改动门禁 coverage**：被触碰的文件丢掉了快速测试 coverage、或被改动的行为路径上没有任何测试时，CI 让 PR 失败——pin 随改动一起到达，而不是等到下个 sprint。
+- **未测试文件清单**：一份生成的报告列出没有快速测试的文件；触碰它们的 diff 被自动标记需要 characterization 工作，而不是靠记忆。
+- **新 pin 上的 mutation 抽查**：对刚被钉住的路径跑一次轻量 mutation，验证 pin 真的能检测变化——一个从不失败的 pin 是装饰，构建就这么对待它。
+- **diff 分离规则**：在没有 pin 的代码上，把清理和行为变更塞进同一个 PR 是 review 阻断项；钉 pin 的 diff 先行、单独落地。
+- **预防 vs. 检测**：改动门禁预防新的未测试代码继续堆积；清单和 mutation 检查检测既有 pin 有多弱。两半都要，永远。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2020 年 4 月，新泽西州的失业保险系统——跑在用 COBOL 编程的 40 岁大型机上——撞上了疫情洪峰：全州申请失业保险的人数达到了空前的 362,000 人，其 IT 部门正在拼命让服务撑住。州长 Phil Murphy 公开征集懂 COBOL 的志愿程序员，州劳工专员对记者说：「Literally, we have systems that are 40 years-plus old, and there'll be lots of postmortems.」（实打实地讲，我们的系统有 40 多岁了，事后会有大量的 postmortem。）靠公开征集志愿者来维护自己的生产系统，就是「legacy code is untested code」在国家尺度上的样子：owner 无法带着信心去改、只能去加人的代码。一套围绕资格规则的 characterization suite 本吸收不了那场洪峰——它本可以降低的，是州 IT 部门当时争分夺秒去完成的那批维护工作的风险：那些没人敢弄坏的代码上的风险。https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html（verification: ok——所引事实属实；文章并没有描述那些大型机的测试 coverage——「代码实际上未被钉住」是由年代与征集行为做出的推断，tidak yakin；引用任何 postmortem 之前，请先把专员承诺的那些 postmortem 挖出来。）
+</RealCase>
+
+## 张力与权衡
+
+- **钉住的成本 vs. 紧急**：紧急事件不会等 suite；可行的折衷是只钉即将改动的路径，而不是整个模块——Test Pyramid 的粒度逻辑，应用于抢救工作。
+- **观察到的行为 vs. 本来的规格**：characterization test 为今天的行为盖印，bug 也包括在内；每一个被钉住的疣子都必须是一次有意的决定——保留它，或知情地改掉它——这是 Test Behavior, Not Implementation 走到诚实尽头的样子。
+- **原地 refactor vs. 重写**：对没有 pin 的代码的恐惧推向大重写，但替代品自己必须从一个能跑的东西长出来（Gall's Law），而那些怪异的分支可能携带着 pin 永远揭示不了的理由（Chesterton's Fence）。
+
+## 相关原则
+
+- [测试行为而非实现 · Test Behavior, Not Implementation](/zh/docs/principles/testing/test-behavior-not-implementation)——characterization test 是最纯粹的案例：行为如所观察，而非结构如所设计。
+- [切斯特顿的栅栏 · Chesterton's Fence](/zh/docs/principles/design/chesterton-fence)——一个 pin 告诉你栅栏做什么，从不告诉你它为什么被立起来。
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——对 legacy 的恐惧诱发的重写反射，需要它来配重。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——在 pin 出现之前，对 legacy 的改动要分阶段、可回滚地上线，因为光靠 review 兜不住它们。
+
+## 参考文献
+
+- Michael C. Feathers, *Working Effectively with Legacy Code* (2004) — https://www.informit.com/store/working-effectively-with-legacy-code-9780131177055（定义与工具箱：characterization test、seam、sprouting；verification: perlu——逐字原句，sudah digali 到书目页层面，确切引文 belum digali。）
+- CNBC, *New Jersey needs volunteers who know COBOL, a 60-year-old programming language* (April 2020) — https://www.cnbc.com/2020/04/06/new-jersey-seeks-cobol-programmers-to-fix-unemployment-system.html（40 岁的大型机、362,000 份申请的洪峰、征集志愿者的呼吁、专员的原话。）

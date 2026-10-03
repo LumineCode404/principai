@@ -1,0 +1,129 @@
+---
+title: Test Behavior, Not Implementation
+id: test-behavior-not-implementation
+name: Test Behavior, Not Implementation
+summary: Assert what the system does — observable states and effects — not how it does it; tests coupled to internal call graphs break on every safe refactor.
+category: testing
+type: principle
+severity: important
+applies_to:
+  - ci
+  - libraries
+  - services
+tags:
+  - testing
+  - mocks
+  - refactoring
+aliases:
+  - Test Behaviour, Not Implementation
+  - Classical Testing
+sources:
+  - 'Martin Fowler, "Mocks Aren''t Stubs", https://martinfowler.com/articles/mocksArentStubs.html'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Write tests that assert observable outcomes — returned values, state changes, effects sent to the world — instead of asserting which collaborators were called, in what order, with which arguments. Prefer real, fast collaborators (in-memory repositories, capture adapters) over call-sequence mocks, and reserve interaction assertions for interactions that are themselves the contract. When a refactor with identical observable behavior breaks your tests, fix the tests — not the refactor.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+A useful test fails when behavior changes and passes when it does not. The mockist (London-school) style verifies interactions — which collaborator was called, in what order, with what arguments — which couples the test to the implementation's call graph; the classical (Detroit-school) style verifies state and effects through real collaborators and stays blind to internal structure. Martin Fowler's "Mocks Aren't Stubs" (2007) documents both styles and their names — Detroit for classical, London for mockist, after the places the XP communities grew up — and states the cost plainly: mockist tests are "more coupled to the implementation of a method", and "changing the nature of calls to collaborators usually cause a mockist test to break" even when nothing observable changed. Testing behavior, not implementation, is what keeps a suite a refactoring safety net — which is the only durable reason to have one.
+
+## When to use
+
+- Code under active refactoring, where the suite is the safety net that makes change cheap.
+- Test-driven development at the unit level: test the next observable behavior, then let the implementation emerge.
+- Shared libraries and internal services, where collaborators' call sequences are part of nobody's contract.
+- Teams adopting mocking frameworks, deciding what to assert before writing the first mock.
+
+## When NOT to use
+
+- When the interaction is the specification — "the payment provider must be charged exactly once", "the audit event must be emitted before the state flips": asserting that interaction is behavior, not implementation leakage.
+- Boundary adapters at the edge of the system, where the bytes on the wire (event schema, header, encoding) are the contract consumers parse — verify the wire, not the object graph.
+- Third-party collaborators you do not own — do not mock their internals at all; wrap them and test the wrapper (see Don't Mock What You Don't Own).
+- Legacy code with no seams: pin current behavior with characterization tests first (see Legacy Code Is Untested Code), before judging any test's style.
+
+## Anti-pattern
+
+- A mock asserting a precise call sequence between two internal collaborators — the test now fails on every rename.
+- Deep-equality assertions on entire argument objects when one field is the behavior and the rest is incidental.
+- A "refactor" that consists of editing forty mocks until they match the new internal call structure, approved by tests that never asked what the system does.
+- Coverage built mostly from call-assertions: a green suite with no opinion about whether outcomes are right.
+- Mocking value objects and pure functions that could simply be run.
+
+## Code example
+
+Wrong — the test pins the call graph:
+
+```ts
+test('order placement', () => {
+  const repo = mock<OrderRepo>();
+  const mailer = mock<Mailer>();
+  const svc = new OrderService(repo, mailer);
+
+  svc.place(cart);
+
+  expect(repo.save).toHaveBeenCalledWithExactly(expectedOrder); // exact record
+  expect(mailer.send).toHaveBeenCalledBefore(repo.save); // internal ordering
+});
+// Renaming repo.save to repo.persist, or sending the receipt after saving
+// (no observable change), breaks this test: the safety net is gone.
+```
+
+Right — the test asserts state and effects:
+
+```ts
+test('placing an order persists it and sends exactly one receipt', () => {
+  const repo = new InMemoryOrderRepo(); // real, fast collaborator
+  const mailer = new CaptureMailer(); // captures what was sent, not who called
+
+  new OrderService(repo, mailer).place(cart);
+
+  expect(repo.findByUser(cart.userId)).toHaveLength(1); // state: order exists
+  expect(mailer.sent.map((m) => m.to)).toEqual([cart.email]); // one receipt
+});
+// Internal names, ordering, and call structure can now change freely;
+// the test fails only when the behavior it names actually changes.
+```
+
+## Technical enforcement
+
+<Enforcement>
+Style cannot be held by review alone; wire the constraint into the tooling:
+
+- **Mock allowlists**: the mocking configuration permits test doubles only for collaborators at architectural boundaries; doubling a deep-internal seam requires an explicit, reviewed exception.
+- **Interaction assertions carry a marker**: assertions that verify calls must sit in files tagged as contract tests, or CI annotates them for review before merge.
+- **Mutation testing**: mutants that survive reveal tests asserting structure instead of outcomes; track the per-module survival trend.
+- **Refactor drill in CI**: a scheduled job applies behavior-preserving transformations (renames, reordering of independent calls) and requires the suite to stay green — coupling shows up as failures on a no-op change.
+- **Enforcement vs. detection**: allowlists and markers stop new coupling at review; mutation testing and refactor drills detect the coupling you already have — run both halves.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+(ilustratif) A team renames a persistence method and reorders two internal steps — save the order, then send the receipt — with no observable change: the same data is stored, the same email is delivered. The mock-based suite fails across dozens of tests asserting the old method name and the old ordering; a developer spends the afternoon rewriting mocks to match the new call structure, and the change is "approved" by tests that never once asked what the system does. The suite's value as a safety net erodes quietly until a genuine behavior change slips through the same just-fix-the-mocks reflex. Behavior-level assertions would have reduced that entire class of failure to a green build and a one-line rename. (verification: perlu — the coupling mechanism is documented in Fowler's "Mocks Aren't Stubs"; belum digali — a named public account of a behavior-preserving refactor breaking a mock-based suite has not been verified yet.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Classical vs. mockist (Detroit vs. London)**: mockist tests pinpoint exactly which interaction broke; classical tests survive refactors but localize failures more coarsely — choose by how stable the design already is.
+- **Behavior vs. explicit contracts**: when the interaction itself is the specification (charge exactly once, emit before flip), the interaction assertion is behavior — weigh against Explicit Contracts and write it as a contract test, not as an incidental mock.
+- **Weigh against Test Pyramid**: classical tests need real collaborators, which pushes some assertions into slower layers — buy the speed back with in-memory fakes and capture adapters, not with call-graph mocks.
+
+## Related principles
+
+- [Don't Mock What You Don't Own](/docs/principles/testing/dont-mock-what-you-dont-own) — the sharpest form of implementation coupling: mocking the internals of a dependency you cannot change.
+- [Test Pyramid](/docs/principles/testing/test-pyramid) — where behavior-level assertions live, layer by layer.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — an asserted call sequence becomes a contract the moment the green suite is depended on.
+- [Legacy Code Is Untested Code](/docs/principles/testing/legacy-code-is-untested-code) — pin current behavior before refactoring; the safety-net argument only works when a net exists.
+
+## References
+
+The slogan "test behavior, not implementation" is community shorthand with no single canonical origin; this page anchors it to the documented debate below.
+
+- Martin Fowler, Mocks Aren't Stubs — https://martinfowler.com/articles/mocksArentStubs.html (classical vs. mockist TDD, the Detroit and London names, and how mockist tests couple to implementation).
+- Ham Vocke, The Practical Test Pyramid — https://martinfowler.com/articles/practical-test-pyramid.html (sociable vs. solitary unit tests, and what to test at each layer).

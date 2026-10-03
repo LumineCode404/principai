@@ -178,7 +178,7 @@ export default function RegistryPage() {
                   : "border-[rgba(77,75,91,0.5)] text-[#8B89A0] hover:border-[rgba(2,130,216,0.4)] hover:text-white"
               }`}
             >
-              All <span className="font-mono text-[11px] opacity-70">{stats.total}</span>
+              All <span className="font-mono text-[11px]">{stats.total}</span>
             </button>
             {REGISTRY_DOMAINS.map((d) => (
               <button
@@ -196,7 +196,7 @@ export default function RegistryPage() {
                     : "border-[rgba(77,75,91,0.5)] text-[#8B89A0] hover:border-[rgba(2,130,216,0.4)] hover:text-white"
                 }`}
               >
-                {d.label} <span className="font-mono text-[11px] opacity-70">{domainCounts.get(d.id)}</span>
+                {d.label} <span className="font-mono text-[11px]">{domainCounts.get(d.id)}</span>
               </button>
             ))}
           </div>
@@ -234,7 +234,7 @@ export default function RegistryPage() {
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-[rgba(2,130,216,0.5)] bg-[rgba(2,130,216,0.08)] px-6 text-sm font-semibold text-[#5CB3F2] transition-colors hover:bg-[rgba(2,130,216,0.16)] focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 Show {Math.min(PAGE_SIZE, filtered.length - visible)} more
-                <span aria-hidden className="font-mono text-xs opacity-70">
+                <span aria-hidden className="font-mono text-xs">
                   {shown.length}/{filtered.length}
                 </span>
               </button>

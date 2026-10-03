@@ -463,3 +463,35 @@ Stage Summary:
 - 7 files written: translations/zh/principles/api/{hyrum-law,postel-robustness,versioned-contracts}.mdx and translations/zh/principles/architecture/{conways-law,gall-law,single-responsibility,dependency-inversion}.mdx — all translation_status: draft, human review required before reviewed.
 - All 7 verified: HTTP 200 with translated content rendered, exemplar structure 1:1, MDX-safe prose, code byte-identical to EN (comments only translated), source_hash unchanged, bilingual related-principles links per the standard table.
 - Known minor inconsistency for a future reviewer: the api/index.mdx card summaries use the loanword 弃用 while the principle bodies keep "deprecation" English per the glossary register used by the least-authority exemplar — harmonize at human-review time if desired.
+
+---
+Task ID: 7
+Agent: Main orchestrator (Z.ai Code)
+Task: Radical exhaustive round — registry (306 entries), 3-language site, ZH voice summaries, Framer Motion overhaul, Principai rebrand
+
+Work Log:
+- Read worklog + assessed state: dev server alive, production live with 100s, 32 EN principles, 9 ID translations.
+- RESEARCH FIRST (user requirement): 24 web searches over primary sources (Saltzer & Schroeder 1975, Google SRE, Deutsch fallacies, Nielsen heuristics, WCAG POUR, Cavoukian PbD, 12factor, PEP 20, Raymond's rules, SOLID, CAP/PACELC, Kerckhoffs, OWASP, ISO 25010, DORA, Release It!, Gray & Reuter, Richardson) — saved to tool-results/research/.
+- REGISTRY: src/data/registry.ts — 306 entries across 18 domains (security 29, reliability 23, data 20, architecture 24, api 16, design 27, testing 18, ops 18, distributed 20, performance 12, accessibility 10, ux 19, humans 17, privacy 12, concurrency 12, aiml 14, formal 6, docs 9); every entry has definition + real source; statuses: 32 sudah digali (linked), 266 belum digali, 8 tidak yakin (folk-attrution items); zero dupes; validated by script.
+- i18n ARCHITECTURE (3 loaders, no middleware): source.ts defines en (content/docs), id (translations/id with files allowlist = 9 translated + 2 index pages only — stubs stay repo-only), zh (translations/zh). New routes: /zh/docs/[[...slug]], /id/docs/[[...slug]] with own layouts (lang wrappers, translated sidebar banners, LanguageSwitcher in nav), /zh + /id localized homepages. PageLanguages per-page chips only offer languages where the page exists. Merged tri-lingual search: /api/search fans one query to all three sources, interleaves results (Chinese query → ZH pages, verified).
+- CRITICAL FIX: translations trees are now compiled by the site build — the ID/ZH 3-line header comments were HTML <!-- --> which raw MDX rejects; converted all 33 files to {/* */} (99 comments).
+- ZH TRANSLATIONS: wrote exemplar least-authority.mdx myself (defines conventions: bilingual title 中文名 · English Name, 10-section structure, terms-English register, 本可以降低/限制 counterfactuals, {/* */} comments, /zh/docs links); dispatched 5 parallel sonnet agents (7-z1 security 7, 7-z2 design 6, 7-z3 reliability 6, 7-z4 data 4 + api 1, 7-z5 api 3 + architecture 4) — all 32 ZH files written and verified 200. Agents reported dev-server OOM kills during parallel compile; recovered via .zscripts/dev-daemon.py each time.
+- VOICE (the crazy feature): scripts/gen-voice-zh.mjs — TTS via z-ai SDK (voice xiaochen, wav → ffmpeg → 56kbps mono mp3); rate-limit retries with backoff; 32 files in public/voice/zh (2.2MB total, ~10s each); VoiceSummary client component (popover with animated equalizer, play/pause, progress, reduced-motion aware) rendered ONLY on ZH principle pages; audio lazy-loaded on click (preload none) so page weight untouched.
+- MOTION OVERHAUL: src/components/motion.tsx (MotionConfig reducedMotion="user", Reveal/Stagger/Item/Lift/ScrollProgress/HeroSpotlight); homepage REBUILT (failure-chain timeline, registry stats section, languages section, typed terminal, staggered cards, numbered section kickers); template.tsx page transition.
+- LCP HARDENING (Lighthouse): hero entrances and page transition converted from framer (hydration-dependent, dev LCP 7.6s) to pure CSS (.hero-up/.page-enter keyframes under prefers-reduced-motion guard) — hero paints without JS; HeroSpotlight also CSS-only (.hero-spotlight drift). Production LCP 0.5-0.8s.
+- A11Y FIXES: section index numbers #4D4B5B→#8B89A0 (2.32:1→pass); registry chip counts dropped opacity-70 (3.37:1→pass).
+- BRANDING: "Principai" (not PRINCIPAI/principai) in all display text (layout metadata, footer, docs nav, llms.txt, README, AGENTS); "private library" → "public library" (docs index description, README, hero copy).
+- AGENT SELF-CHECK (user asked): library IS suitable for agents like me (INDEX→must-follow→on-demand loading matches how I actually work; severity + AIInstruction highest signal); gaps found and fixed: added /llms-full.txt (196KB flattened full bodies via scripts/gen-llms-full.mjs) and /registry.json machine exports.
+- CONCEPT UPDATE: two-repo-sync.mdx rewritten as "Source-of-Truth Sync (EN / ID / ZH)" — 3-language model, ZH voice section, uneven-coverage honesty; glossary/principle-format/concepts index links updated.
+- llms.txt: Principai casing, Registry + Languages sections, /llms-full.txt pointer.
+- CLEANUP EVAL SCRIPT note: gen-llms-full.mjs used a comment containing **/ which closed its own JSDoc — beware globs in block comments.
+- sitemap.ts: +/registry +/zh +/id + all zh/id doc pages.
+- Deployed 3× (a11y fixes); final commit d33db53.
+
+Stage Summary:
+- PRODUCTION LIVE: https://principai.vercel.app — all pages verified 200
+- FINAL LIGHTHOUSE (desktop, production): / = 100/100/100/100 (twice); /registry = 100×4; /zh = 100×4; /id = 100×4; /id/docs = 100×4; /docs/principles/security/least-authority = 100×4; /zh/docs/principles/security/least-authority = 100 perf (first run 97 was sandbox→edge RTT noise; re-run 100, TBT 0ms, CLS 0)
+- principai check: 32/0/0; --against translations/id/principles clean; --against translations/zh/principles clean (CLI accepts any in-repo translations path)
+- bun run lint clean
+- New surfaces: /registry + /registry.json + /llms-full.txt + /zh/** + /id/** + tri-lingual search
+- Recommended next phase: (1) finish remaining 23 ID translations (same subagent pattern); (2) record real eval runs on evals/cleanup-script.mdx; (3) dig registry entries into full pages (priority: testing, ops, distributed — the biggest belum digali domains); (4) og-image refinement; (5) consider CLI sync --lang zh generalization; (6) dev-server memory: sequential page compile still OOMs after ~8 cold compiles — pace crawls or use .zscripts/dev-daemon.py restart loops

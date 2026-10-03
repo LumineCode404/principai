@@ -236,3 +236,38 @@ Notes for other agents:
 - The profiles' must-follow/consider tables and priority orders are editorial content matching the task spec; if profile data files are later added to the repo (e.g., for `principai profile`), keep the pages and the data in sync.
 - evals/cleanup-script.mdx rubric is intentionally left as a blank Pass/Fail column — results are meant to be recorded per-run, not baked into the page; when the first real run happens, consider a separate results section with dates and both conditions, per the methodology page.
 
+
+---
+Task ID: 3
+Agent: Main orchestrator (Z.ai Code)
+Task: Content integration, CLI build, QA (Lighthouse/axe), GitHub push, Vercel production deployment
+
+Work Log:
+- Merged subagent worklogs (2-a..2-f) into this file; all 32 principle files + 10 concept/GS files + 8 profile/eval/cli files verified rendering 200
+- Added machine-readable must_follow/consider frontmatter to 3 profiles (destructive-ops: 6 must-follow/5 consider; database-service: 5/5; public-api: 4/6)
+- Built cli/principai.ts (~700 lines, zero deps): list/show/search/add/copy/all/profile/check/sync/status. All commands tested:
+  - status: reports sudah digali categories (32 principles across 6), belum digali (21 tracked), tidak yakin (open questions)
+  - check: 32 principles, 0 problems, 0 warnings (validates frontmatter, section order, dangling links, profile refs, --against parity, --links network check)
+  - copy --profile destructive-ops: 11 principles + INDEX.md (severity-sorted) + AGENTS.snippet.md
+  - sync: 32 ID stubs with source_hash (sha256-16); full ID translation of least-authority.mdx written with real hash c5288a385c7cbb38; sync correctly marks stale on EN change
+- Wrote README.md, AGENTS.md (repo contribution rules), LICENSE (MIT + attribution), translations/id/principles/security/least-authority.mdx (the EN+ID example pair per the original prompt)
+- Fixed rendering issues found via VLM reviews: Card description prop, removed unresolvable icon: frontmatter (sidebar showed raw names), root title → "Overview"
+- Lighthouse QA loop: ran REAL lighthouse CLI (CHROME_PATH=/home/z/.agent-browser/browsers/chrome-153.0.8010.52/chrome)
+  - Fixed color-contrast: fd-primary #0273c4→#0282d8 (4.08:1→4.97:1), primary-foreground→#051220
+  - Fixed shiki code comment tokens (#6A737D at 4:1) via CSS attribute-selector override → #9ba3af
+  - Fixed page-has-heading-one: h1 rendered from frontmatter title on docs pages
+  - Fixed svg-img-alt: githubUrl→labeled lucide icon link
+  - Fixed React key warning: key on sidebar banner element
+  - Fixed watermark step numbers → SVG background-image (axe-proof)
+- Performance QA: next/image for hero (priority, sizes), right-sized icons (48/96px), static Montserrat weights 700-900, search preload:false
+- CRITICAL FIX: patch script had tab/space mismatch — local file was space-reformatted while npm tarball is tab-indented, so Vercel builds failed. Rewrote scripts/patch-fumadocs.mjs as whitespace-tolerant line scanner; verified against pristine npm tarball; wired into build script too
+- GitHub: repo created LumineCode404/principai (public), 5 commits pushed
+- Vercel: deployed via CLI (bunx vercel --prod), project "principai", production URL https://principai.vercel.app
+
+Stage Summary:
+- PRODUCTION LIVE: https://principai.vercel.app
+- Lighthouse DESKTOP: performance 100, accessibility 100, best-practices 100, SEO 100, agentic-browsing 100 (all perfect)
+- Lighthouse MOBILE (default throttled, from this sandbox — high RTT to edge): performance 96, accessibility 100, best-practices 100, SEO 100; TBT 30ms perfect, CLS clean; remaining gap is network latency, not page weight
+- Production E2E verified: home 200, docs 200, search API works (55 results for "backup"), sidebar navigation works, h1/severity/instruction components render, footer email luminecode@proton.me present
+- Secrets: GitHub + Vercel tokens stored at /home/z/.principai-secrets/credentials.env (chmod 600, outside workspace)
+- CLI: all commands functional; principai check passes with 0 problems

@@ -99,7 +99,7 @@ export default function HomeId() {
               <p className="mt-6 font-mono text-xs text-[#8B89A0]">
                 baca INDEX → patuhi must-follow → verifikasi critical → berhenti sebelum destructive ops
               </p>
-              <p className="mt-3 font-mono text-xs text-[#4D4B5B]">
+              <p className="mt-3 font-mono text-xs text-[#8B89A0]">
                 <Link href="/" prefetch={false} className="text-[#5CB3F2] transition-colors hover:text-white">English</Link>
                 <span aria-hidden className="mx-2">·</span>
                 <Link href="/zh" prefetch={false} className="text-[#5CB3F2] transition-colors hover:text-white">中文</Link>
@@ -116,7 +116,7 @@ export default function HomeId() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Reveal y={12}>
             <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-              <span aria-hidden className="text-[#4D4B5B]">01</span>
+              <span aria-hidden className="text-[#8B89A0]">01</span>
               <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
               Arsip
             </p>
@@ -168,7 +168,7 @@ export default function HomeId() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Reveal y={12}>
             <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-              <span aria-hidden className="text-[#4D4B5B]">02</span>
+              <span aria-hidden className="text-[#8B89A0]">02</span>
               <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
               Registry &amp; aturan kejujuran
             </p>

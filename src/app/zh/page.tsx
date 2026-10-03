@@ -99,7 +99,7 @@ export default function HomeZh() {
               <p className="mt-6 font-mono text-xs text-[#8B89A0]">
                 读 INDEX → 遵守 must-follow → 核实 critical → 破坏性操作前停下
               </p>
-              <p className="mt-3 font-mono text-xs text-[#4D4B5B]">
+              <p className="mt-3 font-mono text-xs text-[#8B89A0]">
                 中文
                 <span aria-hidden className="mx-2">·</span>
                 <Link href="/" prefetch={false} className="text-[#5CB3F2] transition-colors hover:text-white">English</Link>
@@ -116,7 +116,7 @@ export default function HomeZh() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Reveal y={12}>
             <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-              <span aria-hidden className="text-[#4D4B5B]">01</span>
+              <span aria-hidden className="text-[#8B89A0]">01</span>
               <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
               中文区专属
             </p>
@@ -160,7 +160,7 @@ export default function HomeZh() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Reveal y={12}>
             <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-              <span aria-hidden className="text-[#4D4B5B]">02</span>
+              <span aria-hidden className="text-[#8B89A0]">02</span>
               <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
               档案
             </p>
@@ -200,7 +200,7 @@ export default function HomeZh() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Reveal y={12}>
             <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-              <span aria-hidden className="text-[#4D4B5B]">03</span>
+              <span aria-hidden className="text-[#8B89A0]">03</span>
               <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
               注册表与诚实规则
             </p>

@@ -114,7 +114,7 @@ function SectionKicker({ index, children }: { index: string; children: string })
   return (
     <Reveal y={12}>
       <p className="flex items-center gap-3 font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
-        <span aria-hidden className="text-[#4D4B5B]">{index}</span>
+        <span aria-hidden className="text-[#8B89A0]">{index}</span>
         <span aria-hidden className="h-px w-8 bg-[#4D4B5B]/70" />
         {children}
       </p>
@@ -268,7 +268,7 @@ export default function Home() {
               <p className="mt-6 font-mono text-xs text-[#8B89A0]">
                 read INDEX → obey must-follow → verify critical → halt before destructive ops
               </p>
-              <p className="mt-3 font-mono text-xs text-[#4D4B5B]">
+              <p className="mt-3 font-mono text-xs text-[#8B89A0]">
                 <Link href="/zh" prefetch={false} className="text-[#5CB3F2] transition-colors hover:text-white">中文</Link>
                 <span aria-hidden className="mx-2">·</span>
                 <Link href="/id" prefetch={false} className="text-[#5CB3F2] transition-colors hover:text-white">Bahasa Indonesia</Link>
@@ -306,7 +306,7 @@ export default function Home() {
                     <span className="flex h-[13px] w-[13px] items-center justify-center rounded-full border border-[#FF6B6B]/60 bg-[#070707]" aria-hidden>
                       <span className="h-[5px] w-[5px] rounded-full bg-[#FF6B6B]" />
                     </span>
-                    <span className="font-mono text-[10px] font-bold text-[#4D4B5B]">{f.stage}</span>
+                    <span className="font-mono text-[10px] font-bold text-[#8B89A0]">{f.stage}</span>
                   </div>
                   <p className="mt-2.5 text-sm font-semibold text-white">{f.label}</p>
                   <p className="mt-1 text-xs leading-relaxed text-[#8B89A0]">{f.note}</p>
@@ -557,7 +557,7 @@ export default function Home() {
                           voice
                         </span>
                       ) : (
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-[#4D4B5B]">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-[#8B89A0]">
                           {l.extra}
                         </span>
                       )}
@@ -609,7 +609,7 @@ export default function Home() {
                 <span className="h-3 w-3 rounded-full bg-[#4D4B5B]" aria-hidden />
                 <span className="h-3 w-3 rounded-full bg-[#0282D8]/70" aria-hidden />
                 <span className="ml-3 font-mono text-xs text-[#8B89A0]">terminal</span>
-                <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] text-[#4D4B5B]">
+                <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] text-[#8B89A0]">
                   <Database className="h-3 w-3" aria-hidden />
                   .principles/
                 </span>

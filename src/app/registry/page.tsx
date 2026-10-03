@@ -55,20 +55,20 @@ function EntryRow({ entry, index }: { entry: RegistryEntry; index: number }) {
             className="group inline-flex items-baseline gap-1.5 font-semibold text-white hover:text-[#5CB3F2]"
           >
             {entry.name}
-            <ArrowRight className="h-3 w-3 translate-y-[-1px] text-[#4D4B5B] transition-all group-hover:translate-x-0.5 group-hover:text-[#0282D8]" aria-hidden />
+            <ArrowRight className="h-3 w-3 translate-y-[-1px] text-[#8B89A0] transition-all group-hover:translate-x-0.5 group-hover:text-[#0282D8]" aria-hidden />
           </Link>
         ) : (
           <p className="font-semibold text-white">{entry.name}</p>
         )}
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-[#4D4B5B]">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-[#8B89A0]">
             {domain?.label ?? entry.domain}
           </span>
           {statusChip(entry.status)}
         </div>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-[#8B89A0]">{entry.def}</p>
-      <p className="mt-2 font-mono text-[11px] leading-relaxed text-[#4D4B5B]">{entry.src}</p>
+      <p className="mt-2 font-mono text-[11px] leading-relaxed text-[#8B89A0]">{entry.src}</p>
     </motion.li>
   );
 }
@@ -147,7 +147,7 @@ export default function RegistryPage() {
                     setVisible(PAGE_SIZE);
                   }}
                   placeholder="Search name, definition, or source…"
-                  className="h-11 w-72 max-w-full rounded-xl border border-[rgba(77,75,91,0.5)] bg-[#0E0E12] pl-9 pr-4 text-sm text-white placeholder:text-[#4D4B5B] focus:border-[rgba(2,130,216,0.6)] focus:outline-none focus:ring-2 focus:ring-[rgba(2,130,216,0.35)]"
+                  className="h-11 w-72 max-w-full rounded-xl border border-[rgba(77,75,91,0.5)] bg-[#0E0E12] pl-9 pr-4 text-sm text-white placeholder:text-[#8B89A0] focus:border-[rgba(2,130,216,0.6)] focus:outline-none focus:ring-2 focus:ring-[rgba(2,130,216,0.35)]"
                 />
               </div>
               <a

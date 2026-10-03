@@ -1,0 +1,126 @@
+---
+title: "故障安全默认 · Fail-Safe Defaults"
+id: fail-safe-defaults
+name: Fail-Safe Defaults
+summary: 默认拒绝、按动作显式授权——权限要靠逐项挣得，而不是先给足、再等谁想起来去撤销。
+category: security
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "scripts"
+  - "api"
+  - "infrastructure"
+  - "services"
+tags:
+  - "access-control"
+  - "defaults"
+  - "authorization"
+aliases:
+  - "Fail-Secure Defaults"
+  - "Deny by Default"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+status: draft
+verification: ok
+source_hash: "731b3b8df9acb094"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/fail-safe-defaults.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把每一个决策、flag、permission 都默认放在拒绝或非破坏的状态上。绝不让一个破坏性动作仅仅因为安全 flag 被遗忘、或检查 fail-open 而照常执行。如果故障、timeout 或错误让你无法确定某件事是否被允许，先拒绝，再问人。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+当一个系统发生故障、处于不确定状态、或者只是刚刚初始化时，它必须落在一个「拒绝访问、跳过破坏性动作」的状态里。权限是针对每个动作的、正面的、显式的授予——绝不是一种「直到有人想起来才撤销」的默认假设。这就是 Saltzer 与 Schroeder 所说的 fail-safe defaults：访问决策建立在「允许」而非「排除」之上，因为默认状态本来就没有任何权限。
+
+## 何时使用
+
+- 破坏性操作：删除、drop、force-push、purge、teardown、批量更新。
+- API 与 service 的访问控制：每条路径上都要做认证与授权。
+- 由疲惫的人、在错误的时间窗口、错误的服务器上运行的脚本与自动化。
+- 新功能与新 flag：先以禁用状态发布，再按环境逐个审慎开启。
+
+## 何时不该使用
+
+- 公开的只读内容——在这里拒绝访问会毁掉产品存在的意义；匿名授权是显式且全局的，不是被遗忘的默认值。
+- 部分故障期间必须持续应答的 liveness endpoint，免得 orchestrator 一次性杀掉所有实例——一种有意的、写进文档的 fail-open。
+- 明确声明为一次性的环境——在这里拒绝什么也保护不了。
+
+## 反模式
+
+- cleanup CLI 把破坏性运行做成默认，每次都得记得手动加 dry-run flag。
+- admin endpoint 对任何已认证用户开放，因为 role 检查压根没写过。
+- 防火墙规则写成「先允许一切，再拒绝坏端口」。
+- auth service 超时后放行请求，「为了不阻塞用户」。
+- 一个含义早已被遗忘的 flag，如今启用着一段没有人原本打算运行的代码路径。
+
+## 代码示例
+
+错误示范——安全是可选项，破坏才是默认值：
+
+```bash
+# 每一次调用都必须记得带上这个安全 flag。
+./bin/purge-old-records --older-than 30d
+# → 连上 prod，删行，无确认，无预览
+# 操作员哪天一累，安全行为就根本不会发生。
+```
+
+正确示范——破坏需要一次显式的、按次生效的授权：
+
+```python
+# 删除是 opt-in 的；默认路径永远只能打印。
+parser.add_argument("--older-than", required=True, help="age cutoff, e.g. 30d")
+parser.add_argument("--apply", action="store_true",
+                    help="actually delete; without this flag the script only prints")
+args = parser.parse_args()
+plan = select_records_older_than(args.older_than)
+if not args.apply:
+    print_plan(plan)        # fail-safe 默认：只展示，绝不触碰
+    sys.exit(0)
+delete(plan)                # 显式授权，仅本次运行有效
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则不是靠意志力执法的。用真正的控制措施来执法：
+
+- **Deny-first middleware**：一个由构造保证应用到所有路由的授权基础策略——路由是「选择加入某个权限」，而不是「选择退出检查」。
+- **默认禁用的 flag**：feature-flag 平台让新 flag 默认关闭，死代码路径需要按环境显式开启。
+- **fail-closed 的 timeout**：policy 与 auth 查询超时就拒绝请求；fail-open 必须是显式的、经过 review、写进文档的例外。
+- **两步破坏**：不可逆操作要求单独的确认步骤或第二个人，由工具保证，而不是靠记忆力。
+- **预防 vs. 检测**：默认拒绝的 middleware 和默认禁用的 flag，即使 handler 有 bug 也能挡住动作；对 flag 与授权的审计只能在事后发现漂移。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2017 年 1 月 31 日，一位 GitLab 操作员在数小时对抗 replication 故障、精疲力竭之后，在错误的服务器上删除了一个目录——那台服务器上存放着主数据库的在线数据。破坏性命令在他的工作上下文里是默认可用的：在不可逆删除之前，没有任何机制强制一次 dry run、一次确认、或一道第二重检查。约 300 GB 数据丢失，约六个小时的数据库写入被证明无法恢复，因为手头可用的 restore 比预期更慢、更不完整。Fail-safe defaults 挡不住最初那次失误，但它本可以把一行命令的后果降低为一份打印出来的计划和一时的尴尬。Postmortem：https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
+</RealCase>
+
+## 张力与权衡
+
+- **fail-closed vs. 优雅降级**：依赖故障时一律拒绝，等于把它的 outage 变成你自己的 outage——在事故之前、按路径事先决定 fail-closed 是否相称。
+- **默认拒绝 vs. 最小惊讶**：总撞上不可预测拒绝的操作员，会学会条件反射式地加 force flag；授权必须容易给、给的时候看得见、推理起来可预测。
+- **显式授权 vs. 最小权限**：到处都是按动作授权会变成繁文缛节；把每份授权本身收窄，让续期变得安全，而不是烦人。
+
+## 相关原则
+
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——孪生规则：授权要窄，存疑即拒绝。
+- [默认即安全 · Secure by Default](/zh/docs/principles/security/secure-by-default)——同一思想在交付配置上的应用。
+- [纵深防御 · Defense in Depth](/zh/docs/principles/security/defense-in-depth)——默认拒绝只是一层，不是整堵墙。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——当拒绝失效或被绕过时的 containment。
+- [最小惊讶 · Least Astonishment](/zh/docs/principles/design/least-astonishment)——安全默认值也要让撞上它的人觉得合理。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults 是最初的设计原则之一。
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — 默认拒绝、按请求做访问决策：https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

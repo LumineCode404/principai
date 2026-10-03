@@ -1,0 +1,126 @@
+---
+title: "依赖倒置 · Dependency Inversion"
+id: dependency-inversion
+name: Dependency Inversion
+summary: 高层策略依赖抽象而非具体细节——基础设施可以更换，而无需重写核心。
+category: architecture
+type: principle
+severity: advisory
+applies_to:
+  - "architecture"
+  - "libraries"
+  - "services"
+tags:
+  - "abstraction"
+  - "coupling"
+  - "interfaces"
+aliases:
+  - "DIP"
+  - "Depend on Abstractions"
+sources:
+  - 'Robert C. Martin, SOLID writings (Dependency Inversion Principle)'
+status: draft
+verification: perlu
+source_hash: "05498d2ad598f503"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/architecture/dependency-inversion.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让业务逻辑依赖它自己拥有的 interface，把具体的 SDK、driver 和 client 推到外层。绝不从 domain 代码直接 import 供应商 package——先定义 port，再把供应商适配上去。当测试需要真实的供应商凭证才能驱动核心逻辑时，把那当作需要倒置依赖的信号。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+高层策略——计费规则、预订逻辑，一切业务真正为之付钱的东西——不得依赖低层细节，比如支付 SDK、数据库 driver 或 HTTP client。两侧都依赖一个抽象，而关键在于：这个抽象属于高层那一侧——它说 domain 的语言，而不是供应商的语言。细节随后以插件方式接入核心，于是更换或伪造基础设施不再是重写。
+
+## 何时使用
+
+- 必须脱离网络、磁盘或供应商账号也可测试的核心 domain 逻辑。
+- 有现实替换可能的基础设施：支付 provider、存储 backend、邮件 relay、消息 broker。
+- Library 设计：消费者针对你的表面编程，而不是你的内部。
+- 多种部署目标——云 vs. 本地部署、不同区域的 provider。
+
+## 何时不该使用
+
+- 「以防万一」地围绕单一 SDK 包一层 wrapper，而第二个实现遥遥无期——投机性抽象。
+- 全部职责就是与一家供应商对话的薄基础设施代码——一个只给供应商 API 改名的 adapter，增加的是摩擦，不是自由。
+- 重写成本近乎为零的短命脚本和原型。
+- 包一层「全部威力就是意义所在」的技术，比如搜索引擎的查询语言——抽象会泄漏。
+
+## 反模式
+
+- BillingService 直接 import 支付 SDK：策略焊死在供应商身上。
+- 一个与供应商 SDK 一比一镜像的「抽象」，连错误模型都一并照搬。
+- interface 定义在供应商 wrapper package 里——domain 现在依赖的，正是它当初要逃离的细节。
+- 因为没有可供伪造的接缝、需要真实第三方凭证才能跑起来的测试套件。
+
+## 代码示例
+
+错误示范——domain 直接 import 供应商；每次更换 provider 都是一次核心手术：
+
+```ts
+// billing/billing-service.ts
+import Stripe from 'stripe';
+export class BillingService {
+  async charge(cart: Cart) {
+    const s = new Stripe(process.env.STRIPE_KEY!);
+    const charge = await s.charges.create({ amount: cart.totalCents });
+    return charge.id; // domain 现在知道了 Stripe 的 response 形状
+  }
+}
+```
+
+正确示范——domain 拥有 port；供应商是可替换的细节：
+
+```ts
+// billing/payment-gateway.ts——domain 的语言，domain 的文件
+export interface PaymentGateway { charge(cart: Cart): Promise<Receipt>; }
+// infra/stripe-gateway.ts——唯一知道 Stripe 存在的文件
+export const stripeGateway = (key: string): PaymentGateway => ({
+  async charge(cart) {
+    const s = new Stripe(key);
+    return toReceipt(await s.charges.create({ amount: cart.totalCents }));
+  },
+});
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠构建执法，而不是靠意图：
+
+- **CI 中的 import 边界规则**（dependency-cruiser、eslint-plugin-boundaries）：domain 目录不得 import 基础设施或供应商 package——违规即构建失败。
+- **架构测试**：ts-arch 或 ArchUnit 风格的规则，断言 port 位于 domain 层、实现位于其外。
+- **测试接缝证明**：核心逻辑的单元测试跑在内存里的 fake gateway 上，无网络、无供应商凭证——如果做不到，依赖就没有被倒置。
+- **Review 清单**：domain 或 core 下有没有文件 import 了 SDK？有，就停下来先定义 port。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个订阅产品把计费核心硬接到一家支付 provider 的 SDK 上——收费、退款、重试，连错误处理都用供应商的词汇书写。当合同重谈使得更换 provider 成为必须时，这次「集成」变成了一场数月的重写：供应商的概念已经在核心业务规则里承重。一个由 domain 拥有的 gateway port，加上按 provider 区分的 adapter，本可以把这次切换从一次重写缩减为一个 adapter 项目加一次谨慎的数据迁移。（ilustratif——常见失败模式的合成案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **依赖倒置 vs. 你不会需要它**：每个 port 和 adapter 都是必须有人读懂的间接层。当第二个实现说得通、或测试确实需要隔离时，才引入接缝——而不是默认给每个 import 都包一层。
+- **依赖倒置 vs. 保持简单**：围绕单一 SDK 的透传 wrapper 只添一层，不添新能力；把日后更换的成本与当下理解的成本放上同一架天平。
+- **到处是 port vs. 最小惊讶**：太多只有一个实现的 interface 会把代码库变成迷宫。让 port 保持少而小，并用 domain 语言命名。
+
+## 相关原则
+
+- [单一职责 · Single Responsibility](/zh/docs/principles/architecture/single-responsibility)——当 port 本身只有一个变更理由时，倒置才最有效。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——port 就是 contract：声明它，并校验一切穿过它的东西。
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——等第二个需求出现再抽取抽象，而不是在那之前。
+- [你不会需要它 · YAGNI](/zh/docs/principles/design/yagni)——针对投机性 port 的制衡。
+- [保持简单 · Keep It Simple](/zh/docs/principles/design/kiss)——间接即成本；只在它买到解耦的地方支付。
+
+## 参考文献
+
+- Robert C. Martin, SOLID writings——依赖倒置原则作为 SOLID 的「D」（verification: perlu——精确引用前先定位具体文章）。

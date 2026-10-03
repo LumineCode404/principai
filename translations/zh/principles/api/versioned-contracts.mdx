@@ -1,0 +1,121 @@
+---
+title: "版本化契约 · Versioned Contracts"
+id: versioned-contracts
+name: Versioned Contracts
+summary: 公共契约只能通过带 deprecation 窗口的版本来变更——绝不就地篡改既有版本的语义。
+category: api
+type: principle
+severity: important
+applies_to:
+  - "api"
+  - "libraries"
+  - "database"
+tags:
+  - "versioning"
+  - "deprecation"
+  - "compatibility"
+aliases:
+  - "Version Your Interfaces"
+sources:
+  - "https://semver.org"
+status: draft
+verification: perlu
+source_hash: "33e6cdda024716e4"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/api/versioned-contracts.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+已发布的 contract 只能通过新版本变更，并让旧版本在已公布的 deprecation 窗口内继续工作。绝不改动一个既有版本的语义——不改字段的类型，不改错误码，不改默认值。移除任何东西之前，先度量还有谁在用它；下线要凭证据，而不是凭希望。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+contract 一旦公开，其语义即被冻结：变更以新版本的形式发布（library 用 semver 的 major，service 用 API 版本，数据库用 expand-contract 步骤），旧版本则被标记 deprecation、持续监控，并按已公布的日程最终移除。在同一个版本号下静默篡改语义是头号大忌——它伤害的恰恰是把每件事都做对的消费者。版本化保住了变更的自由，却不赋予你吓人一跳的权利。
+
+## 何时使用
+
+- 拥有你无法控制的消费者的公共 API 表面和共享 library。
+- 消费者独立部署的、面向团队的内部 API。
+- 被其他 service 读取的数据库 schema 变更——与 expand-contract 搭配。
+- 对任何已发布之物的移除、重命名、类型变更或行为变更。
+
+## 何时不该使用
+
+- 消费者明知且自愿接受变动的 pre-1.0 实验期——那正是 semver 自己的 0.x 约定。
+- 与调用方同步部署、只有单一消费者的内部工具。
+- 安全紧急事件：仍然要版本化，但窗口压缩为「大声公告、立即修复」——把危害与破坏放上天平，而不是等日历走完。
+
+## 反模式
+
+- 同一个版本内，response 字段的类型悄悄从 string 变成 number。
+- 一个「minor」版本重命名了列，或收紧了以前能通过的校验。
+- 靠异常做 deprecation——现在会抛异常了，调用方「自然知道」。
+- 以「不应该有人在用」为由移除字段或 package——海勒姆定律保证一定有人在用。
+- 没有使用指标的 deprecation：下线日期是猜出来的，而这个猜测就是某个人的事故。
+
+## 代码示例
+
+错误示范——同一个版本，新的语义：
+
+```ts
+// GET /v1/plans——price 以前是 "19.99"（十进制字符串）；现在是 1999（分）
+app.get('/v1/plans', (req, res) => {
+  res.json(plans.map(p => ({ ...p, price: p.priceCents }))); // 静默的类型翻转
+});
+```
+
+正确示范——只做增量变更，旧语义贯穿整个 deprecation 窗口：
+
+```ts
+app.get('/v1/plans', (req, res) => {
+  res.json(plans.map(p => ({
+    ...p,
+    price: (p.priceCents / 100).toFixed(2), // v1 语义保留——原样不动
+    price_cents: p.priceCents,              // 增量新增；旧字段带上 deprecation header
+  })));
+});
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠 CI 闸门和计数器执法，而不是靠 release note：
+
+- **Semver linter 与 API diff 闸门**：当破坏性的形状变更没有伴随版本升级就发布时，semantic-release 或 API diff 工具让构建失败。
+- **CI 中的 OpenAPI diff**：每个 PR 的 contract 差异都被分类（破坏性 / 增量 / 兼容），破坏性变更必须携带新的版本标记。
+- **Deprecation header 与指标**：用 response header 公告，按字段、按 endpoint 追踪使用量，并把移除的闸门设在被度量的消费者计数归零上。
+- **消费者驱动的 contract 测试**（Pact）：让旧消费者持续通过，直到下线真正执行。
+- **数据库**：expand-contract 迁移——先加新的、双写、迁移读方，然后才移除旧的。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个 API 团队把某个 response 字段的类型从十进制字符串改成了数字——一次「清理」，没有版本号，混在一次例行发布里。因为 JSON 两者都装得下，没有任何东西大声失败：用严格 parser 的集成方在自己的运行时里崩溃，另一些则静默地把价格舍算错了。一位客户几周后才在账单对账中发现问题，而事故复盘时根本没有 deprecation 指标，连谁受了影响都无法度量。带窗口的版本升级本可以降低破坏的规模，却谈不上杜绝——集成方仍然要改代码，只是能按自己选定的日程来。这种「毫无预警的移除」的近亲是 2016 年的 left-pad：一个 package 凭空消失，没有版本、没有窗口，数千个构建随之破裂——https://www.theregister.com/2016/03/23/npm_left_pad_chaos/（verified URL）。（ilustratif 用于类型翻转场景；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **兼容性 vs. 速度**：每次变更都版本化是繁文缛节；折中是默认只做增量——backward compatible 的新增不需要新 major，只有语义变更才需要。
+- **版本化 vs. 泄漏的行为**：海勒姆定律保证，即使是版本化的表面也会泄漏可观察细节（时序、分页顺序）。能版本的版本化，不能版本的持续监控。
+- **窗口 vs. 紧迫**：漫长的 deprecation 窗口保护慢的消费者，却让你维护的表面翻倍。窗口大小按使用指标定，而不是按礼貌定。
+
+## 相关原则
+
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——为什么旧版本的行为即便没写进文档，也会有人依赖。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——从未声明过的东西，你无从版本化。
+- [扩展-收缩 · Expand-Contract](/zh/docs/principles/data/expand-contract)——这条原则在数据库 schema 上的版本。
+- [软删除 · Soft Delete](/zh/docs/principles/data/soft-delete)——deprecation 就是 contract 的软删除：只凭证据移除。
+- [健壮性原则 · Postel's Robustness](/zh/docs/principles/api/postel-robustness)——退役一份被容忍的偏差，本身也必须走过一个版本。
+- [供应链审查 · Supply Chain Vetting](/zh/docs/principles/security/supply-chain-vetting)——趁别人的版本变更还没变成你的事故，先锁定并审查你所依赖的东西。
+
+## 参考文献
+
+- Semantic Versioning 2.0.0：https://semver.org（verified URL）。
+- The Register, npm left-pad aftermath, March 2016：https://www.theregister.com/2016/03/23/npm_left_pad_chaos/（verified URL）。

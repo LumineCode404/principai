@@ -1,0 +1,17 @@
+---
+title: "可靠性 · Reliability"
+description: 让失败保持小、可见、可恢复——幂等、爆炸半径、能恢复的备份、看得见的系统。
+---
+
+可靠性不是没有失败——而是失败的尺寸、可见性与可恢复性。这个类别里的原则假设事情一定会出问题：重试一定会发生、组件一定会降级、凌晨三点赶来救火的操作员知道的一定比你此刻少。
+
+<Cards>
+  <Card title="幂等性 · Idempotency" description="同一操作执行两次必须产生与一次相同的结果——意外的重跑变得无聊，而不是致命。" href="/zh/docs/principles/reliability/idempotency" />
+  <Card title="爆炸半径 · Blast Radius" description="限制任何单一动作能造成的最大伤害——批量上限、分阶段 rollout、按步确认。" href="/zh/docs/principles/reliability/blast-radius" />
+  <Card title="显性失败 · Fail Visible" description="大声地、立刻地失败——静默失败把小 bug 变成几周后才发现的损坏状态。" href="/zh/docs/principles/reliability/fail-visible" />
+  <Card title="优雅降级 · Graceful Degradation" description="组件降级时，砍掉可选的、保住核心的——部分服务胜过全面中断。" href="/zh/docs/principles/reliability/graceful-degradation" />
+  <Card title="可观测性优先 · Observability First" description="你看不见的东西你就运维不了——日志、指标、trace 在事故之前就存在，而不是之后。" href="/zh/docs/principles/reliability/observability-first" />
+  <Card title="重试预算 · Retry Budget" description="重试会放大事故——指数退避加 jitter，加上对总重试量的硬预算。" href="/zh/docs/principles/reliability/retry-budget" />
+</Cards>
+
+幂等性、爆炸半径与经过测试的备份构成 [destructive-ops profile](/docs/profiles/destructive-ops) 的核心——三个把重跑灾难变成无事发生的控制。

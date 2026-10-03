@@ -1,0 +1,26 @@
+---
+title: "Mulai dari Sini"
+description: Pintu masuk arsip bahasa Indonesia Principai — perpustakaan prinsip rekayasa perangkat lunak yang dirancang untuk AI agent.
+---
+
+Ini arsip bahasa Indonesia dari Principai — perpustakaan prinsip rekayasa perangkat lunak dalam format yang ramah AI agent: satu prinsip satu file, urutan section tetap, severity bertingkat, dan profile sebagai lapisan kurasi. Prinsip menasihati (advise); kontrol teknis yang menegakkan (enforce). Kalimat itu fondasi seluruh perpustakaan ini.
+
+## Apa yang ada di area Indonesia
+
+- **[Prinsip](/id/docs/principles)** — 9 dari 32 prinsip sudah diterjemahkan penuh; sisanya bisa dibaca dalam bahasa Inggris di [area bahasa Inggris](/docs). Penerjemahan berlanjut — setiap file yang selesai langsung muncul di sini.
+- **[Registry](/registry)** — katalog 306 prinsip rekayasa perangkat lunak hasil riset, lengkap dengan sumbernya (bahasa Inggris).
+- Konsep, profile, eval, dan dokumentasi CLI ada di [area bahasa Inggris](/docs).
+
+## Protokol loading untuk agent
+
+1. Baca dulu INDEX ringkasan — [kategori prinsip](/id/docs/principles), satu layar per kategori.
+2. Buka prinsip lengkap hanya ketika tugas menyentuh `applies_to`-nya.
+3. Sebelum melanggar prinsip critical — atau menjalankan aksi destruktif yang tidak bisa dibatalkan — **berhenti dan minta persetujuan manusia.**
+
+## Aturan kejujuran
+
+Perpustakaan ini tidak membuat klaim kelengkapan dan tidak memasang angka target. Status hanya memakai tiga kata: *sudah digali* (sudah diteliti dan ditulis), *belum digali* (belum), *tidak yakin* (belum pasti). Peta kategori ada di [taxonomy](/docs/taxonomy).
+
+## Model terjemahan
+
+Bahasa Inggris adalah sumber kebenaran tunggal. Bahasa Indonesia dan bahasa Mandarin adalah pohon turunan: struktur 1:1 dengan bahasa Inggris, dan setiap terjemahan membawa `source_hash` (16 karakter pertama sha256 file Inggris) di frontmatter untuk deteksi drift. Arti mengalir satu arah — dari Inggris keluar, tidak pernah balik. Semua terjemahan berstatus `translation_status: draft` sampai disetujui manusia.

@@ -1,0 +1,120 @@
+---
+title: "仅追加日志 · Append-Only Logs"
+id: append-only-logs
+name: Append-Only Logs
+summary: 把事实记录为只追加的事件，永不修改历史——一条仅追加日志既是证据，也是撤销。
+category: data
+type: principle
+severity: important
+applies_to:
+  - "database"
+  - "distributed"
+  - "audit"
+  - "destructive-ops"
+tags:
+  - "audit-log"
+  - "events"
+  - "immutability"
+aliases:
+  - "Event Sourcing Lite"
+  - "Write-Ahead Log"
+sources:
+  - 'Pat Helland, "Immutability Changes Everything", CIDR 2015'
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+status: draft
+verification: perlu
+source_hash: "61cc39f28820810c"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/data/append-only-logs.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把状态变更记录为追加的、不可变的事件——带上 timestamp 和 actor——而不是就地修改行。永远不要对历史执行 UPDATE 或 DELETE：更正是取代旧事件的新事件，物理移除只能通过显式的、受治理的 purge 进行。在权限层面保护 audit log，让任何 role——包括你自己的——都无法悄悄改写它。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+仅追加日志把事实记录为永不修改、永不移除的事件——把数据库的 write-ahead log 和 event sourcing 的 event log，应用到业务与审计数据上。因为历史无法改写，日志同时是证据（谁、按什么顺序、做了什么）和恢复手段（靠重放事件重建状态）。更正是补偿事件，不是编辑：日志既留下错误，也留下修复——这正是一次调查所需要的东西。
+
+## 何时使用
+
+- Audit trail：权限变更、支付、管理员操作、敏感数据访问。
+- 必须可重建的状态：event-sourced 聚合、靠重放重建的 materialized view。
+- 系统之间的集成——日志就是那个持久的接口；consumer 按自己的节奏和位点读取。
+- 调试需要时间线而不只是当前状态的多步骤 workflow。
+
+## 何时不该使用
+
+- 高频变动的可变状态，事件历史会让状态本身相形见绌——保留计数器，只记录异常。
+- 当前一行就是全部真相的简单 CRUD；event log 增加的是机制，不是答案。
+- 保留期受法律约束的数据——仅追加必须搭配一条受治理的 purge 路径，否则日志自己就成了合规问题。
+- 热路径读取：consumer 查询从日志构建的 projection，永远不碰原始日志本身。
+
+## 反模式
+
+- 一张可由同一个应用 role 写入的 audit 表，INSERT 旁边还发着 UPDATE 和 DELETE 权限。
+- 用 UPDATE「修正」历史——一次连 actor 列一起改写的重命名，从此对谁做了什么撒谎。
+- 事件带着客户端给的时间戳，且没有任何顺序保证。
+- 把日志当存储用：每个请求都去查它，而不是维护一个 projection。
+
+## 代码示例
+
+错误示范——历史被随手改写：
+
+```sql
+-- 用编辑来「修正」一条错误的 audit 记录——历史从此撒谎
+UPDATE audit_log SET action = 'refund:corrected', amount = 4200 WHERE id = 991;
+DELETE FROM audit_log WHERE id = 992;   -- 「那条是噪音」
+```
+
+正确示范——更正是新事件；由权限来执法：
+
+```sql
+-- 此前的一切永不被编辑或移除；更正引用它所修正的那条记录
+INSERT INTO audit_log (id, ts, actor, action, amount, supersedes)
+VALUES (next_id(), now(), 'ops@corp', 'refund:corrected', 4200, 991);
+
+-- DBA 侧一次性执行：真正执法的是数据库，不是代码
+-- REVOKE UPDATE, DELETE ON audit_log FROM app_role;
+```
+
+## 技术执法
+
+<Enforcement>
+不可变性是存储的属性，不是代码的承诺：
+
+- **数据库权限**：应用 role 对日志只持有 INSERT 和 SELECT，永远没有 UPDATE 或 DELETE——把它们 REVOKE 掉，这条原则就从结构上得到了执法（参见「最小权限」）。
+- **单次写入的存储层**（在可用时）：object-lock bucket 和类 WORM 存储让改写成为「不可能」，而不是「不允许」。
+- **防篡改证据**：hash chaining 或对日志摘要的定期锚定，让篡改可被检测，而不只是可被预防。
+- **用于读取的 projection**：consumer 查询从日志维护的派生视图；原始日志永远不进热路径。
+- **受治理的 purge**：从日志中移除本身也是一个被记录、被批准的事件，有自己的 audit trail——删除必须在历史中可见。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一场针对可疑资金转账的调查停滞了，因为 audit 表允许 UPDATE。多年前，一个出于好意的清理脚本把旧记录「规范化」过一遍；后来在数据质量冲刺期间，新加的记录又被就地修正。等调查人员到达时，这张表已经无法区分合法修正与篡改，重建只能退回到面谈和记忆，而不是数据。如果当时 REVOKE 了 UPDATE，本可以把「发生了什么」这个问题从证人证词降级为一次查询。（verification: perlu——此案例为综合构造；被可变 audit trail 拖住的真实调查确实存在，belum digali——引用任何具体来源前请先核实。）
+</RealCase>
+
+## 张力与权衡
+
+- **仅追加 vs. 隐私与保留期**：个人数据的不可变日志与清除义务相冲突——必须保留的事实记下来，不能保留的 PII 做 hash 或干脆不记（与「软删除」权衡）。
+- **仅追加 vs. 可查询性**：日志回答「发生了什么」，projection 回答「现在是什么」——两者都得维护，还得对账。
+- **与「保持简单」权衡**：完整的 event sourcing 是一种架构；对关键动作做仅追加审计，只是一张 REVOKE 了 UPDATE 的表——从这里开始，直到被证明不够为止。
+
+## 相关原则
+
+- [软删除 · Soft Delete](/zh/docs/principles/data/soft-delete)——删除作为历史中的一个事件，而不是对历史的编辑。
+- [经过测试的备份 · Tested Backups](/zh/docs/principles/data/tested-backups)——可重放的日志只有排练过重放才算真的。
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——那条 REVOKE 就是这条原则应用于历史的样子。
+- [幂等性 · Idempotency](/zh/docs/principles/reliability/idempotency)——稳定的事件 ID 让重放既安全又可行。
+
+## 参考文献
+
+- Pat Helland, *Immutability Changes Everything*, CIDR 2015 — 不可变、仅追加记录的论证（verification: perlu——引用前请先确认论文与出处）。
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — write-ahead log、log-structured storage 与 event sourcing（verification: perlu）。

@@ -1,0 +1,123 @@
+---
+title: "最小权限 · Least Authority"
+id: least-authority
+name: Least Authority
+summary: 只授予任务真正需要的权限——一个拥有全量写权限的清理脚本，会把一个小 bug 变成一次被删掉的数据库。
+category: security
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "scripts"
+  - "infrastructure"
+  - "services"
+  - "database"
+  - "ml"
+tags:
+  - "authorization"
+  - "credentials"
+  - "scoping"
+  - "blast-radius"
+aliases:
+  - "Least Privilege"
+  - "Principle of Least Privilege"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+status: draft
+verification: perlu
+source_hash: "c5288a385c7cbb38"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/least-authority.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+始终把 credentials、permissions 和运行时权限限定在当前任务所需的最小范围内。只要存在更窄的 role，就绝不以 admin/root/write-everything 权限运行脚本、agent 或 service。如果一个任务看起来需要宽泛的权限，先停下来，征得人类同意后再继续。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+每一个程序、脚本、agent 和人，都应当只以完成任务所必需的最小权限集合运行——仅此而已。这里的「权限」指 credentials、IAM role、数据库用户、文件权限、API scope，以及运行时能力。如果任务只需要读取，那么凭证就必须只能读取。
+
+## 何时使用
+
+- 运维脚本（cleanup、backfill、migration、export）——本原则的默认场景。
+- CI/CD pipeline 与部署任务。
+- 长期运行的 service，以及对外部系统进行操作的 AI agent。
+- 任何同时拥有日常非 admin role 的人类账号。
+
+## 何时不该使用
+
+- 一次性的、有明确时限的 incident response：人类操作员为了救火而刻意提权——并且事后撤销。
+- 不接触共享状态或生产环境的本地开发 sandbox。
+- 给一个全新的、明确声明为一次性的空环境做种子数据。
+
+## 反模式
+
+- 清理脚本「因为 env 文件里本来就有」而使用 admin 账号连接。
+- Agent 拿到的 AWS key 和 lead developer 的一模一样。
+- 一个 cron job 以 root 运行，只为删除一张表里的行。
+- 只读报表工具「以防万一」地持有读写连接串。
+
+## 代码示例
+
+错误示范——权限过宽，破坏半径失控：
+
+```bash
+# 使用的是属于 migration 工具的 DATABASE_URL：完整 DDL + 删除权限
+psql "$DATABASE_URL" -c "DELETE FROM audit_events WHERE created_at < now() - interval '30 days';"
+```
+
+正确示范——权限收窄，最小授权：
+
+```bash
+# 专用 role 只拥有这个 job 需要的权限（连 SELECT 都不需要）
+psql "postgresql://cleanup_app:${CLEANUP_PASSWORD}@db/crm?options=--role=audit_purger" \
+  -c "CALL purge_audit_events_older_than(interval '30 days');"
+```
+
+```sql
+-- DBA 一次性创建这个窄 role；脚本继承它
+CREATE ROLE audit_purger NOLOGIN;
+GRANT EXECUTE ON FUNCTION purge_audit_events_older_than(interval) TO audit_purger;
+GRANT audit_purger TO cleanup_app;
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则不是靠 prompt 执法的。用真正的控制措施来执法：
+
+- **范围受限的凭证**：每个 job 使用独立的只读/限写数据库用户与 IAM role；admin secret 放在 vault 里，绝不进入 job 的环境变量。
+- **CI 中的静态分析 + 策略检查**：拒绝在 scheduled job 中引用 admin role 的 PR（例如自定义 lint、云策略引擎）。
+- **运行时策略**：数据库权限、IAM boundary、Kubernetes RBAC 让「不小心给多了」即使脚本写错也不可能发生。
+- **审计**：每一次授权、每一次特权 role 的使用都被记录并接受审查。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2017 年 1 月，一位 GitLab 操作员在处理了一整天 replication 故障、精疲力竭之后，误删了主数据库服务器上的错误目录——他以为那是 secondary 的数据，而目录里存的是 primary 的在线数据。因为他当时所处 shell 的工具与凭证允许这个动作，数百 GB 数据（issues、merge request、用户）瞬间消失；由于备份恢复得比预期更慢、更不完整，六个小时的写入被永久丢失。事后报告：https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ —— 如果当时那个 shell 里的权限更窄，并且在不可逆删除前要求人类确认，这次失误本可以被限制在更小的范围内。（verification: perlu for link details——引用前请先阅读事后报告原文。）
+</RealCase>
+
+## 张力与权衡
+
+- **速度 vs. 安全**：宽凭证接线快，拆分烦。最小权限的成本花在搭建上，而不是事故上——每个环境付一次就好。
+- **最小权限 vs. 自动化雄心**：一个「什么都能干」的 agent 演示效果更好。请把权限限定在你实际拥有的任务图上，等新需求被证明后再审慎扩展，而不是预先放开。
+- **与「最小惊讶」原则权衡**：不要把权限切分得细到操作员无法预测哪个凭证管哪件事——少数几个边界清晰的 role 胜过一堆让人迷惑的 role。
+
+## 相关原则
+
+- [安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——默认拒绝、显式授权；最小权限的互补面。
+- [纵深防御 · Defense in Depth](/zh/docs/principles/security/defense-in-depth)——当权限范围无法完美时，用分层控制兜底。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——限制任何单一动作的最大伤害。
+- [经过测试的备份 · Tested Backups](/zh/docs/principles/data/tested-backups)——当其他一切失效时的最后防线。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 —「least privilege」的起源（verification: perlu——引用前需找到稳定的公开副本）。
+- NIST SP 800-207, *Zero Trust Architecture* — 按任务授权的现代表述（verification: perlu）。

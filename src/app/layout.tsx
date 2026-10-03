@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import "./globals.css";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import { SiteFooter } from "@/components/site-footer";
+import { MotionRoot, ScrollProgress } from "@/components/motion";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,11 +26,11 @@ const siteUrl = "https://principai.vercel.app";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "PRINCIPAI — Software engineering principles, curated for AI agents",
-    template: "%s | PRINCIPAI",
+    default: "Principai — Software engineering principles, curated for AI agents",
+    template: "%s | Principai",
   },
   description:
-    "A curated library of software engineering principles in an AI-friendly format. Copy a small, relevant, sharp subset into your project so agents obey it — backed by technical enforcement, not just prompts.",
+    "A public library of software engineering principles in an AI-friendly format. Copy a small, relevant, sharp subset into your project so agents obey it — backed by technical enforcement, not just prompts.",
   keywords: [
     "software engineering principles",
     "AI agents",
@@ -49,17 +50,17 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
-    title: "PRINCIPAI — Software engineering principles, curated for AI agents",
+    title: "Principai — Software engineering principles, curated for AI agents",
     description:
-      "A curated library of software engineering principles in an AI-friendly format. Exhaustive archive, curated profiles, technical enforcement, evals.",
+      "A public library of software engineering principles in an AI-friendly format. Exhaustive archive, curated profiles, technical enforcement, evals.",
     url: siteUrl,
-    siteName: "PRINCIPAI",
+    siteName: "Principai",
     type: "website",
-    images: [{ url: "/images/og.png", width: 1200, height: 630, alt: "PRINCIPAI" }],
+    images: [{ url: "/images/og.png", width: 1200, height: 630, alt: "Principai" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "PRINCIPAI",
+    title: "Principai",
     description:
       "Software engineering principles, curated for AI agents. Read INDEX, obey must-follow, verify critical.",
     images: ["/images/og.png"],
@@ -96,8 +97,11 @@ export default function RootLayout({
             },
           }}
         >
-          <div className="flex-1 flex flex-col">{children}</div>
-          <SiteFooter />
+          <MotionRoot>
+            <ScrollProgress />
+            <div className="flex-1 flex flex-col">{children}</div>
+            <SiteFooter />
+          </MotionRoot>
         </RootProvider>
       </body>
     </html>

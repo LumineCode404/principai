@@ -1,0 +1,116 @@
+---
+title: "康威定律 · Conway's Law"
+id: conways-law
+name: Conway's Law
+summary: 你的架构会镜像你团队的沟通结构——要么设计组织，要么组织替你设计系统。
+category: architecture
+type: law
+severity: advisory
+applies_to:
+  - "architecture"
+  - "teams"
+  - "services"
+tags:
+  - "organization"
+  - "communication"
+  - "boundaries"
+aliases: []
+sources:
+  - 'Melvin Conway, "How Do Committees Invent?", 1967, http://www.melconway.com/Home/Committees_Paper.html'
+status: draft
+verification: perlu
+source_hash: "73a77aa98b3630f9"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/architecture/conways-law.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把团队结构和沟通路径当作每一项架构决策的一等输入。提出 service boundary 时，先画出谁拥有什么、谁实际上在和谁说话——无论你是否规划，设计终将收敛到这张图。如果目标架构要求的协作模式是组织不具备的，要么改变组织，要么改变目标。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+组织设计出的系统会镜像其沟通结构：module 之间的 interface，会长得像构建它们的人之间的连线。康威在 1967 年把它表述为一条关于设计委员会的观察——设计组织的产出，反映其内部的沟通模式。工程上的推论是：组织设计就是架构设计；如果你改不动软件，去看看产出它的那些沟通路径。
+
+## 何时使用
+
+- 拆解 monolith 或划定 service boundary。
+- 在架构之前、或与架构同步，规划 team topology 与所有权。
+- 解释为什么「同一个坏掉的共享玩意」在每次重写之后都会卷土重来。
+- 并购与重组：预期架构会朝着新的组织结构图漂移。
+
+## 何时不该使用
+
+- 沟通本就廉价的小团队——不要为了模仿某个目标组织，把一个团队拆成 microservices。
+- 正确的边界确实横切现有团队线的领域——选定 domain，再去谈判组织调整（「逆向康威机动」），并且心里清楚这很慢。
+- 合规强制的职责分离：那种组织形状本身就是需求，不是要绕着躲开的坏味道。
+
+## 反模式
+
+- 一个四个团队都往里 bolt 模块的「共享」service，每个模块都在打破其他模块的假设。
+- 由一个没有交付权力的中央委员会设计的架构——真正发布的系统跟随的是交付团队的连线。
+- 按技术层（一个前端团队、一个数据库团队）而不是按领域变更来切分的 service。
+- 一个拥有其他团队所触碰一切的「platform team」，最终变成每个 feature 的串行化点。
+
+## 代码示例
+
+错误示范——一个共享 service 镜像了坏掉的沟通模式：
+
+```text
+services/shared-core/
+  billing.ts    # 由 Payments 团队修改
+  search.ts     # 由 Search 团队修改
+  reports.ts    # 由那周需要图表的人修改
+# 一个可部署单元、四个 review 队列：每次发布都在等所有人
+```
+
+正确示范——所有权边界让组织结构图显式而便宜：
+
+```yaml
+# CODEOWNERS——组织结构图成为边界
+/billing/**   @org/payments
+/search/**    @org/search
+/reports/**   @org/analytics
+# 每个团队发布自己的 service；跨团队沟通走 contract
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠所有权机制执法，而不是靠幻灯片上的组织架构图：
+
+- **CODEOWNERS**：按路径强制 review——一个 PR 碰到两个团队的 module，就是需要抽取边界的自动信号。
+- **CI 中的 import 边界规则**（dependency-cruiser、eslint-plugin-boundaries），与所有权图对齐，而不只是与目录美学对齐。
+- **Service 目录元数据**：每个 service 记录其归属团队；无主的 service 过不了审计。
+- **Contract review 流程**：跨团队的 interface（API、event、共享 schema）在合并前需要双方所有者签字。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+四个团队——payments、search、reports 和 mobile——「为了避免重复」共享一个 shared-core service。每个团队往里 bolt 自己的 module：支付批处理挨着搜索索引，再挨着报表查询，整体无人负责。部署变成四方谈判，每个团队的变更都在打破其他团队的假设，因为 module 之间没有 contract，只有物理上的相邻。沿着四条既有的团队线拆分这个 service，降低了协调税；跨团队依赖并没有因此消失——它们转移进了显式、版本化的 contract。（ilustratif——常见失败模式的合成案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **领域纯度 vs. 组织现实**：技术上正确却横切团队的那条边界，迟早会侵蚀回团队线。要么挪人，要么接受这条接缝；假装组织不存在的做法，撑不过 deadline。
+- **复用 vs. 自治**：一个共享 service 省下代码，却耦合了每个团队的发布日历；有清晰所有者的小段重复代码，往往上线更快。
+- **康威 vs. 稳定**：不断重组团队，意味着架构不断漂移——每次重组都搭配迁移预算，否则系统会替组织付一笔它永远看不见的税。
+
+## 相关原则
+
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——组织与系统必须共同演化，没有谁是设计一次就完事的。
+- [单一职责 · Single Responsibility](/zh/docs/principles/architecture/single-responsibility)——一个所有者，一个变更理由。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——跨团队的接缝需要的是声明过的 schema，不是物理相邻。
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——多个团队如何变更共享 interface 而不互相破坏。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——所有权边界同时也限制故障蔓延的距离。
+
+## 参考文献
+
+- Melvin Conway, "How Do Committees Invent?", 1967：http://www.melconway.com/Home/Committees_Paper.html（verified URL）。
+- 「逆向康威机动」——朝目标架构刻意重塑团队——在 Skelton 与 Pais 的 *Team Topologies* 中有讨论（verification: perlu）。

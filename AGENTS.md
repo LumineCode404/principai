@@ -1,4 +1,4 @@
-# AGENTS.md — working on PRINCIPAI itself
+# AGENTS.md — working on Principai itself
 
 This file governs AI agents (and humans) contributing to this repository.
 

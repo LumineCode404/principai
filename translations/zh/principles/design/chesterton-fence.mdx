@@ -1,0 +1,120 @@
+---
+title: "切斯特顿的栅栏 · Chesterton's Fence"
+id: chesterton-fence
+name: Chesterton's Fence
+summary: 在弄清栅栏为什么立起来之前，绝不拆除它——在代码里，理由很少活在注释里。
+category: design
+type: heuristic
+severity: advisory
+applies_to:
+  - "maintenance"
+  - "code-review"
+  - "infrastructure"
+  - "legacy"
+tags:
+  - "change"
+  - "legacy"
+  - "understanding"
+  - "risk"
+aliases: []
+sources:
+  - 'G.K. Chesterton, "The Thing", 1929'
+status: draft
+verification: ok
+source_hash: "c64335ab03c37bb9"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/chesterton-fence.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+在删除或改动不是你写的代码之前，先弄清它为什么存在：git 历史、测试、关联的 incident，以及当时在场的人。在证明相反之前，把无法解释的代码当作承重结构对待。如果你查不清一道栅栏当初为什么立，就不要拆它——升级给可能知道的人。把删除动作拆成小步、可单独 revert、附带监控的变更来落地。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+切斯特顿的栅栏：一位改革者看见田里横着一道栅栏，要求拆掉它；田主拒绝——除非改革者能说清这道栅栏当初为什么立。在代码里，栅栏是那个奇怪的分支、那层多余的校验、那段没人解释得了的延迟、那个没人记得起来的 flag——而理由很少写在注释里；它活在一次 incident、一次客户 escalation、或一条五年前的 commit message 里。改动你不理解的东西不叫 refactor；那是拿生产流量在猜。
+
+## 何时使用
+
+- 接触 invariant 不明确的存量代码。
+- review 删除类和「cleanup」类 PR。
+- 基础设施变更：security group、cron 调度、retry 循环、timeout。
+- 复用旧名字——flag、config key、状态码、endpoint。
+
+## 何时不该使用
+
+- 当栅栏可以被证明是残留物：已验证的死代码，没有调用方、配置和文档里没有引用、历史记录能说明它为何死去——删掉它（见「你不会需要它」）。
+- 当行为已被一个可执行的测试捕获、invariant 写在其中——理由如今活在测试套件里，而不是口述历史里。
+- 你自己写的、还没有任何人依赖的全新代码。
+
+## 反模式
+
+- 整个 PR 描述只有一句「这看起来是死的，删了」。
+- 因为名字「差不多够像」，就把一个现有 flag 拿去承载新行为。
+- 「因为它拒绝了我们新的合法输入」就删掉一个校验，却不去找它当初挡下的是什么坏输入。
+- 一个 diff 里一口气删掉五十个无法解释的东西的大爆炸式 cleanup PR。
+- 把 cleanup 混进一个无关的功能变更里，导致两者谁也无法单独 revert。
+
+## 代码示例
+
+错误示范——凭外表拆栅栏：
+
+```ts
+// PR 标题：「cleanup: remove pointless delay in order submit」
+async function submit(order: Order) {
+  return api.submit(order); // delay 已删除——没人知道它是干什么用的
+}
+```
+
+正确示范——先找到理由，再做决定：
+
+```ts
+// 这段 delay 在为下游一个会丢弃突发流量的队列削峰
+// （incident 2021-04，现已写入 ADR-114）。
+// 在队列修复上线前保留它；要删就把两者一起删。
+async function submit(order: Order) {
+  await delay(1500);
+  return api.submit(order);
+}
+```
+
+## 技术执法
+
+<Enforcement>
+当流程要求证据时，尊重栅栏的成本很低：
+
+- **删除证据规则**：删除代码的 PR 必须附上证明——git blame 摘要、静态分析给出的无调用方证据（knip、vulture）、或引入这段代码的那次 incident。「看起来是死的」不算证据。
+- **先隔离、后删除**：优先用 flag 关停加一段监控窗口，而不是硬删——expand-contract 的路数——让删除本身可 revert。
+- **带自动 rollback 的分阶段 rollout**：删除类变更以 canary 优先部署，并在受影响路径上配置告警（见「爆炸半径」「可观测性优先」）。
+- **review 清单**：reviewer 必须能回答「它当初为什么存在」——作者和 reviewer 都答不上来，这个删除就先等一等。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2012 年 8 月 1 日，Knight Capital 为其 Retail Liquidity Program 部署新代码。新代码复用了一个旧 feature flag，而这个 flag 曾用于激活一个已被停用的「Power Peg」下单功能——那段代码当时被留在服务器上，而没有被删除。这次部署只到达了八台服务器中的七台。开市后，携带这个被复用 flag 的订单触发了漏部署那台服务器上休眠的 Power Peg 代码——曾经约束过它的一个保护机制已在数年前退役——于是它在近一个小时里持续向市场灌注错误订单。Knight 亏损超过 4.6 亿美元，最后靠被收购才得以存续。一次经过验证的部署本可以减少那一天的损失；不复用一个旧含义仍在生产环境里活着的 flag，本可以消除这个失败模式本身。SEC 令状：https://www.sec.gov/litigation/admin/2013/34-70694.pdf（verification: ok——事故与令状本身；确切数字 perlu——引用精确数字前请先阅读令状原文。）
+</RealCase>
+
+## 张力与权衡
+
+- **守栏 vs 代码卫生**：死代码是真实的负债——腐烂、review 成本、虚假信心。规则不是「永远不删」；而是「先理解，再删」。已验证为死代码的应当删掉（见「你不会需要它」）。
+- **找栏 vs 速度**：等那个唯一懂某个子系统的工程师，要花掉好几天。用受监控的小步、可 revert 的删除来缓解，而不是大爆炸式移除——或者先把移除藏在 flag 后面发布。
+- **口述历史 vs 编码化知识**：一道理由只活在某一个人记忆里的栅栏，本身已经在失效了。耐久的修法是把理由搬进测试、ADR 和 runbook——让意图也可观测，而不只是行为。
+
+## 相关原则
+
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——你无法评判一道你看不见它在工作的栅栏。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——把删除分阶段，让最坏情况保持很小。
+- [扩展-收缩 · Expand-Contract](/zh/docs/principles/data/expand-contract)——分安全阶段移除；永不大爆炸。
+- [单一职责 · Single Responsibility](/zh/docs/principles/architecture/single-responsibility)——Knight 那个 flag 正是因为同时承载两个含义而失败。
+- [你不会需要它 · YAGNI](/zh/docs/principles/design/yagni)——对可证明已死的代码，它是反向的制衡。
+
+## 参考文献
+
+- G.K. Chesterton, *The Thing*（1929）— 栅栏寓言；通常收录于散文 "The Drift from Domesticity"（verification: ok——书名与年份；逐字引用前请先定位确切段落）。
+- SEC Administrative Order, Release No. 34-70694 (2013) — In the Matter of Knight Capital Americas LLC. https://www.sec.gov/litigation/admin/2013/34-70694.pdf

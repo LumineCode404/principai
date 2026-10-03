@@ -1,0 +1,120 @@
+---
+title: "显式契约 · Explicit Contracts"
+id: explicit-contracts
+name: Explicit Contracts
+summary: 一切跨越边界的数据都要携带显式、经过校验的 contract——隐式假设会静默腐烂，直到凌晨三点爆发。
+category: api
+type: principle
+severity: important
+applies_to:
+  - "api"
+  - "services"
+  - "distributed"
+  - "database"
+tags:
+  - "schemas"
+  - "validation"
+  - "boundaries"
+aliases:
+  - "Explicit over Implicit Contracts"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+  - 'Kleppmann, Designing Data-Intensive Applications'
+status: draft
+verification: perlu
+source_hash: "ac3110f7cfcb81fc"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/api/explicit-contracts.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+给每一次边界穿越——HTTP 请求、队列消息、webhook、数据库行、环境变量——一个声明式的 schema，并在入口处校验它。把任何没有写下来的假设（字段顺序、可空性、单位、时区、编码）当作一个等待排期的缺陷。如果你在消费某个 producer 的输出，坚持把 schema 落在代码和测试里，而不是落在口口相传里。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+每一份跨越进程、服务或所有权边界的数据，都应当携带一个显式 contract：一个由接收方拥有并校验的 schema。显式意味着机器可检查——共享 package 里的一个类型、一份 JSON Schema、一个 protobuf 定义——而不是一页 wiki。隐式 contract（关于顺序、格式、默认值的假设）仍然是 contract；只是它们无人作证、未经测试，并且在 production 里才被发现。
+
+## 何时使用
+
+- 服务之间和 client-server 之间的调用；第三方 webhook 与 callback。
+- producer 和 consumer 独立部署的 event stream 与队列。
+- 读别的团队的表、导出文件——包括你自己过去的 migration 的输出。
+- 启动时消费配置与环境变量。
+
+## 何时不该使用
+
+- 已被编译器检查过的进程内热调用——在那里重复校验纯属开销；在边界校验，进去之后就信任类型。
+- 对你在同一进程里自己写、自己读的文件跑的一次性脚本。
+- 格式还在原型里被积极发明的阶段——但要在第二个 consumer 出现之前，把它升级成 schema。
+
+## 反模式
+
+- 按位置解包 JSON 字段——依赖没人写下的顺序。
+- 「producer 发的永远是分」「timestamp 永远是 UTC」——哪里都没写，哪里都不查。
+- 把类型复制粘贴进 consumer，而不是共享一个带版本的 schema package。
+- Schema 漂移：producer 演化了 payload，没有 diff 变红，consumer 的假设悄悄过期。
+
+## 代码示例
+
+错误示范——contract 活在一个没有文档的假设里：
+
+```ts
+// 「getJob 返回的字段永远按插入顺序排列」——从没有谁白纸黑字这么说过
+const [id, status] = Object.values(await getJob(jobId)) as [string, string];
+if (status === 'done') markComplete(id);
+```
+
+正确示范——命名字段，在边界校验：
+
+```ts
+const Job = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'running', 'done', 'failed']),
+});
+const job = Job.parse(await getJob(jobId)); // 与字段顺序无关，未知字段被拒绝
+if (job.status === 'done') markComplete(job.id);
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则在数据进入的地方执法，而不是在讨论它的地方：
+
+- **每个边界的 schema 校验**（zod、JSON Schema、protobuf/Avro）：用 parse，不要手工检查；拒绝未知字段；在入口处快速失败。
+- **Consumer 驱动的 contract test**（Pact）：producer 的 CI 跑在真实 consumer 的期望之上，在部署前抓住漂移。
+- **作为 CI 事实源的 OpenAPI spec**：spec 存在，通过往返测试与实现对得上，每个 PR 的 diff 都被归类。
+- **带兼容性检查的 schema registry**（用于 event）：producer 无法合并一个破坏性的形状变更。
+- **共享的 contract package**，带版本发布——一份定义，而不是 N 份拷贝。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个 consumer 把自己的映射建立在 producer JSON 响应的字段顺序上——从没写成文档，只是观察到的。后来 producer 修了一个它自己认为无害的排序 bug，改变了元素顺序。consumer 的按位逻辑随即把 ID 映到了错误的记录上，错配流进下游报表好几天，才被一次对账标记出来；没有人把那个「无害」的排序修复与被污染的映射联系起来。如果有一个命名字段的 schema，本可以把一场持续数天的静默损坏降级为 CI 里一个失败的 contract test。（ilustratif——常见失败模式的综合案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **校验成本 vs. 吞吐量**：在高吞吐下对每条入境消息做 parse 会消耗 CPU；在边界校验，向内传递类型化的、可信的数据——而不是在进程内反复检查。
+- **严格 vs. 宽容**：健壮性原则主张接受不完美的输入；这条原则主张拒绝未定义的东西。调和方式：宽容是 contract 之内一个有文档、有日志的例外——永远不是口口相传。
+- **schema 的仪式开销 vs. 开发速度**：先写 contract 感觉很慢；它仍然比凌晨三点的那个版本便宜，而且 consumer 驱动的测试把它变成安全网，而不是文书工作。
+
+## 相关原则
+
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——一个声明出来的 contract 如何安全地演化。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——为什么没声明的部分仍然表现得像 contract。
+- [输入校验 · Input Validation](/zh/docs/principles/security/input-validation)——针对敌意边界的、安全等级的版本。
+- [健壮性原则 · Postel's Robustness](/zh/docs/principles/api/postel-robustness)——声明式 contract 之内的有界宽容。
+- [扩展-收缩 · Expand-Contract](/zh/docs/principles/data/expand-contract)——修改 consumer 已经在读的 schema 的流程。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——在边界大声拒绝，而不是在里面悄悄损坏。
+
+## 参考文献
+
+- Google SRE Book — 把可靠性当作边界与 API 问题：https://sre.google/sre-book/（URL 已验证）。
+- Kleppmann, *Designing Data-Intensive Applications* — 数据模型与演化即 contract 设计（verification: perlu——精确引用前请先确认章节）。

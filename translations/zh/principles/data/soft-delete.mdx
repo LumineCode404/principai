@@ -1,0 +1,117 @@
+---
+title: "软删除 · Soft Delete"
+id: soft-delete
+name: Soft Delete
+summary: 删除分两个阶段——先标记，恢复窗口过后再真正清除——这样一次误点就是可撤销的。
+category: data
+type: practice
+severity: advisory
+applies_to:
+  - "database"
+  - "services"
+  - "destructive-ops"
+tags:
+  - "deletion"
+  - "recovery"
+  - "audit"
+aliases:
+  - "Mark Deleted"
+  - "Purge Later"
+sources:
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+status: draft
+verification: perlu
+source_hash: "ef920c1e1985f4bc"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/data/soft-delete.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+永远不要对业务数据一步发出物理删除。删除行时用 audit trail 记录（谁、何时、为何），默认把已删除的行从查询里过滤掉，只在确定的恢复窗口结束之后才真正清除——并且 purge job 本身也要可观测。当被要求删除某样东西时，先确认对方真正想要的是两个阶段中的哪一个；不可逆的 purge 必须经过人类之手。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+软删除把删除拆成两个阶段：立即生效、可撤销的逻辑删除（写入 deleted_at 时间戳、从查询中隐藏），以及 retention window 之后延迟执行的、不可逆的 purge。恢复窗口把一次误点、一个有 bug 的脚本、一位顾客的一时糊涂，变成一次 undo 而不是一次 incident。删除不再是一个不可逆的动词；它变成一个带 audit trail 的状态迁移，很久之后才跟上一个真正的移除。
+
+## 何时使用
+
+- 用户生成的内容：账号、帖子、消息、文件——任何用户能在 UI 里「删除」的东西。
+- 管理员与内容审核操作——诚实的失误和滥用调查在这里交织。
+- 有外键依赖的引用数据——硬删除的级联正是 schema 走向死亡的地方。
+- 业务需要对删除留痕的任何地方：谁删了什么、何时、为何。
+
+## 何时不该使用
+
+- 当法律或合同规定了硬删除期限——恢复窗口的上限是那个期限，不是你的舒适度；被遗忘权请求是最典型的案例。
+- 安全敏感的值——被软删除的 API key 仍然是一份凭证；立刻吊销、立刻销毁。
+- 高吞吐的临时行（session、cache 条目），两阶段机制的成本比数据本身还高；改用 TTL 过期。
+- 你本来就不该保留的数据：把无权持有的 PII 软删除，那叫保留，不叫删除。
+
+## 反模式
+
+- 「删除账号」按钮直连带级联的硬 DELETE。
+- 软删除却没有默认的查询过滤——已删除的行在每个报表里重新浮出水面，直到有人发现。
+- 唯一索引无视删除状态，导致已删除的行挡住重新注册；改用 partial unique index。
+- 没有负责人的 purge job；那根「临时」的 deleted_at 列悄悄变成永久存储和合规负债。
+
+## 代码示例
+
+错误示范——不可逆、即时：
+
+```python
+def delete_account(user):
+    db.run("DELETE FROM users WHERE id = ?", user.id)        # 立刻、真正地消失
+    db.run("DELETE FROM orders WHERE user_id = ?", user.id)  # 手工级联，剩下靠祈祷
+```
+
+正确示范——先带审计地标记，之后再清除：
+
+```python
+def delete_account(user, actor):
+    # 阶段 1：可撤销的标记 + 审计，立即生效
+    db.run("UPDATE users SET deleted_at = now(), deleted_by = ? WHERE id = ?",
+           actor.id, user.id)
+# 阶段 2（按计划，30 天窗口之后）：分批清除，每次运行带指标
+```
+
+## 技术执法
+
+<Enforcement>
+这两个阶段由数据库和查询层来执法，而不是靠记性：
+
+- **查询层的默认过滤器**：ORM 默认排除已删除的行，除非查询显式 opt-in；软删除的数据对正常代码路径不可见。
+- **权限拆分**：应用 role 对软删除表不持有硬 DELETE；只有 purge job 的专用 role 持有，且仅限窗口已过的行（参见「最小权限」）。
+- **Partial unique index**：唯一性只作用于存活行之间，删除永远不会挡住重新注册。
+- **Purge 作为一等 job**：分批、可 dry-run、发射指标、带告警——对删除的删除也仍然是删除（参见「爆炸半径」）。
+- **审计字段强制**：deleted_by、deleted_at 和 reason 是必填列；一次没有来源记录的删除就是 bug。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一位顾客正在处理一个令人恼火的支持工单，中途在另一个标签页里删除了自己的账号。请求是合法的，确认对话框一路点了下去，整个 workspace 连同所有文件在负责这个工单的 agent 看到之前就被硬删除了。如果有 30 天的软删除窗口，账号几分钟内就能恢复，支持对话继续进行；没有的话，回答就变成「你有没有确认过你的数据重不重要」。（verification: perlu——这个综合情节是构造的；回收站/撤销窗口是常见且真实存在的产品模式，但这一具体序列是示意性的，belum digali。）
+</RealCase>
+
+## 张力与权衡
+
+- **软删除 vs. 合规**：retention window 必须收缩到法律期限之内；当法规说「没了」，「没了」说了算——按数据类别跟踪最紧的适用期限。
+- **软删除 vs. 存储与负债**：删了却永不清除的数据，是穿着功能外衣的负债；purge 是这条原则的一部分，不是可选配件。
+- **与「爆炸半径」/用户预期权衡**：一个可见的回收站和一个明确的 undo 是诚实的 UX；一个隐藏的、永久留存的 deleted_at 标记会让用户和工程师同样惊讶。
+
+## 相关原则
+
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——恢复窗口是时间维度上的爆炸半径上限。
+- [仅追加日志 · Append-Only Logs](/zh/docs/principles/data/append-only-logs)——删除作为历史中的一个事件，而不是对历史的修改。
+- [经过测试的备份 · Tested Backups](/zh/docs/principles/data/tested-backups)——窗口已经关闭之后的最后手段。
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——只有 purge role 可以销毁，且只在窗口过后。
+
+## 参考文献
+
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — log-structured storage 与 retention（verification: perlu——引用前请先确认其表述）。
+- 隐私清除类法规（例如欧盟 GDPR 的被遗忘权）为「已删除」状态能停留多久设了上限——写 retention 政策前请与法务核实确切义务（verification: perlu）。

@@ -1,0 +1,26 @@
+---
+title: "从这里开始"
+description: Principai 中文档案的入口——面向 AI agent 的软件工程原则库，中文版包含全部 32 条原则。
+---
+
+这里是 Principai 的中文档案。Principai 是一个面向 AI agent 的软件工程原则库：一个原则一个文件，固定章节顺序，severity 分级，profile 策展。原则只负责建议（advise），技术控制才负责执法（enforce）——这句话是整个库的地基。
+
+## 中文区有什么
+
+- **[原则](/zh/docs/principles)**——32 条原则的全部中文翻译，按六个类别组织。
+- **[注册表](/registry)**——306 条经过研究的工程原则目录（英文，带来源）。
+- 概念说明、profile、eval、CLI 文档在[英文区](/docs)——目前这些页面只有英文版本。中文区的原则页面里，指向这些页面的链接会直接跳到英文。
+
+## Agent 如何使用
+
+1. 先读 [INDEX 式摘要](/zh/docs/principles)——每个类别一屏。
+2. 任务触及某条原则的 `applies_to` 时，再打开该原则的完整页面。
+3. critical 级别被违反、或即将发生不可逆的破坏性操作时：**停下来，找人类确认。**
+
+## 诚实规则
+
+这个库不做完整性声明，不设目标数字。状态只用三个词：*sudah digali*（已深挖）、*belum digali*（尚未深挖）、*tidak yakin*（不确定）。类别状态见[分类图](/docs/taxonomy)。
+
+## 翻译模型
+
+英文是唯一事实源（source of truth）。中文和印尼语是从属翻译树：结构与英文 1:1 对应，每份译文的 frontmatter 带有 `source_hash`（英文源文件的 sha256 前 16 位）用于漂移检测。含义只从英文流向中文，绝不反向。中文译文当前均为 `translation_status: draft`——在人工审核之前不会标为 reviewed。

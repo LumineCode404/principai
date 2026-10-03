@@ -26,12 +26,12 @@ Every field is machine-readable. The CLI, the INDEX generator, and [profiles](/d
     sources: { type: "list of strings", description: "Where the principle comes from: papers, books, postmortems. Checkable — or marked verification perlu." },
     status: { type: "draft | reviewed", description: "reviewed only after a human has approved the file. Draft is the default and the honest state." },
     verification: { type: "ok | perlu", description: "ok means citations were checked against primary sources. perlu means the check is still needed." },
-    source_hash: { type: "string", description: "SHA-256 of the English source file. Present only in derived ID translations — see Two-Repo Sync." },
+    source_hash: { type: "string", description: "SHA-256 of the English source file. Present only in derived translations — see Source-of-Truth Sync." },
     translation_status: { type: "draft | reviewed | stale", description: "Present only in derived ID translations. A source_hash mismatch marks the file stale automatically." },
   }}
 />
 
-Two fields deserve emphasis. `summary` is the workhorse of progressive loading: INDEX.md carries it so an agent can judge relevance without opening files. `verification` is the honesty valve: it separates what we have checked from what we still cite on trust. Categories and their dig status live in the [Taxonomy](/docs/taxonomy); `source_hash` and `translation_status` appear only in derived ID translations, explained in [Two-Repo Sync](/docs/concepts/two-repo-sync).
+Two fields deserve emphasis. `summary` is the workhorse of progressive loading: INDEX.md carries it so an agent can judge relevance without opening files. `verification` is the honesty valve: it separates what we have checked from what we still cite on trust. Categories and their dig status live in the [Taxonomy](/docs/taxonomy); `source_hash` and `translation_status` appear only in derived translations, explained in [Source-of-Truth Sync](/docs/concepts/two-repo-sync).
 
 ## Section order
 

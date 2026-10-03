@@ -1,0 +1,124 @@
+---
+title: "健壮性原则 · Postel's Robustness"
+id: postel-robustness
+name: Robustness Principle
+summary: 发送时保守，接收时宽容——但要把「多宽容」写清楚，否则宽容会变成无法证明的行为。
+category: api
+type: law
+severity: advisory
+applies_to:
+  - "api"
+  - "protocols"
+  - "parsing"
+  - "services"
+tags:
+  - "tolerance"
+  - "protocols"
+  - "interop"
+aliases:
+  - "Postel's Law"
+  - "Be Conservative in What You Send"
+sources:
+  - 'RFC 1122, section 1.2.2, https://www.rfc-editor.org/rfc/rfc1122'
+status: draft
+verification: perlu
+source_hash: "c26471c7049bb096"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/api/postel-robustness.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让你的输出严格符合已发布的 contract——在发送侧保持严格。在接收侧，只接受那些你已经写明的偏差，其余一律以清晰的报错拒绝。把每一个被容忍的偏差都记录下来，让宽容保持可观察。绝不静默地猜测畸形输入的意图。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+健壮性原则（RFC 1122 第 1.2.2 节）有两半：发送方的实现必须保守——严格符合规范；接收方的实现可以宽容，容忍不完美但可以解释的输入。现代的纪律补上了第三条：宽容必须有边界、有文档、可观察。既没有写下来、也没有被记录的宽容不是健壮性，而是一场等着变成别人依赖的意外。
+
+## 何时使用
+
+- 服务大量异构或 legacy 客户端的公共 API 和协议 endpoint。
+- 解析不由你控制的格式：email、feed、CSV 导出、第三方的 webhook。
+- 必须撑住不完美伙伴、让它们继续运转的 gateway 或 proxy 层——等生态慢慢完成清理。
+
+## 何时不该使用
+
+- 解析不可信输入、畸形数据即是攻击向量的场合——严格才是这里的安全姿态。
+- 两端都归你控制的内部 service mesh：严格地拒绝，能让生产者的 bug 在最早、最便宜的时刻暴露。
+- 任何宽容掩盖的是数据损坏而不只是不便的场合——一个被「宽容」接受、解析得通但取值有误、进而污染状态的值，比一个被拒绝的请求更糟。
+
+## 反模式
+
+- 什么都接受，然后猜意图：缺失的字段静默补上一个「看似合理」的默认值，不留日志。
+- 静默的类型强转——字符串 "42" 悄悄变成数字 42，"abc" 变成 1。
+- 因为「对面也很宽容」，所以在发送侧也宽容。
+- 容忍偏差多年，然后在没有任何版本、没有过渡窗口的情况下撤掉宽容。
+
+## 代码示例
+
+错误示范——什么都接受、靠猜、谁也不告诉：
+
+```ts
+app.post('/orders', (req, res) => {
+  const qty = Number(req.body.qty) || 1;   // "abc" 静默变成 1
+  const note = req.body.note ?? '';        // null、undefined、false——统统没问题
+  res.json({ ok: true, qty });            // 上线了；永远没人知道
+});
+```
+
+正确示范——严格为核，宽容只限于一处有文档、有日志的特例：
+
+```ts
+// 默认严格；唯一一处写进文档的宽限（qty 以数字字符串发送）
+const OrderIn = z.object({ qty: z.number().int().positive() }).strict();
+app.post('/orders', (req, res) => {
+  if (typeof req.body?.qty === 'string') {
+    metrics.count('tolerated.qty_as_string'); // 宽容是可观察的
+    req.body.qty = Number(req.body.qty);     // 唯一写进文档的特例
+  }
+  const parsed = OrderIn.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error.flatten());
+  createOrder(parsed.data);                  // 特例之外一律严格
+});
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠 schema 和测试执法，而不是靠客气：
+
+- **边界上的严格 schema**（zod、JSON Schema、protobuf）：未知键一律拒绝、类型精确——宽容是 schema 或 adapter 里一张显式、逐项列举的例外清单。
+- **CI 中的输出一致性测试**：golden test 断言你的 response 与已发布规范逐字一致——「发送保守」这一半是可测试的。
+- **宽容预算**：每一个被接受的偏差都有一条日志和一个看板计数；当计数连续一个季度保持为零，这个宽容就成为下一个版本升级里等待退役的 deprecation 候选。
+- **Fuzzing**：在 CI 中对 parser 做模糊测试，证明它面对畸形输入是拒绝，而不是即兴发挥。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个 API 接受 ISO 风格的日期字符串，并且「贴心地」把缺失的时区当作 UTC——多年来一直如此，悄无声息。后来有一个合作方开始发送本地时间的时间戳，他们存储的记录随之漂移了几个小时；损坏在几个月后才在对账环节浮出水面，却查不到错误的解读发生在何时、因何而起——因为这份宽容从来没有被记录过。严格的 parser 本可以在畸形日期到达的那一刻就让它现形，而不是等到几个月之后。（ilustratif——常见失败模式的合成案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **现代批评——宽容会累积**：数十年的宽容接收训练出一个生态，让畸形输出成为事实上的必需品（见海勒姆定律），这也是严格协议设计主张接收方应拒绝、逼生产者修掉自己 bug 的原因。把宽容留给修不了的伙伴，和已经排好期的过渡。
+- **互操作性 vs. 安全**：每一个被接受的偏差都是一块未校验的表面积；对不可信输入，严格在安全上胜出。
+- **善意 vs. 可观察性**：静默的宽容今天体贴、明天无法维护——中间道路是「容忍并记录」，再通过一次版本化变更让宽容退役。
+
+## 相关原则
+
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——每一个被容忍的偏差，都会变成某个人的依赖。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——允许哪些宽容，应当写进 contract，而不是靠代码口口相传。
+- [输入校验 · Input Validation](/zh/docs/principles/security/input-validation)——敌意边界上那个严格的对应面。
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——如何让一份宽容体面退役，而不是突然抽走。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——当拒绝胜过猜测。
+
+## 参考文献
+
+- RFC 1122, section 1.2.2——经典表述：https://www.rfc-editor.org/rfc/rfc1122（verified URL）。
+- Hyrum's Law——无界宽容的依赖代价：https://www.hyrumslaw.com（verified URL）。

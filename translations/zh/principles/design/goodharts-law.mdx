@@ -1,0 +1,120 @@
+---
+title: "古德哈特定律 · Goodhart's Law"
+id: goodharts-law
+name: Goodhart's Law
+summary: 当一个度量成为目标，它就不再是好度量——代理指标会被你指过去的那批优化者精准地玩坏。
+category: design
+type: law
+severity: advisory
+applies_to:
+  - "metrics"
+  - "process"
+  - "ml"
+  - "teams"
+tags:
+  - "metrics"
+  - "optimization"
+  - "gaming"
+aliases: []
+sources:
+  - 'Marilyn Strathern, 1997 formulation — "When a measure becomes a target, it ceases to be a good measure"'
+status: draft
+verification: perlu
+source_hash: "2182e645dfaf7e6f"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/goodharts-law.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+永远不要在只设定或优化单个代理 metric 时，不配上一个能暴露 gaming 的反向指标（counter-metric）。在承诺一个目标之前，先问：一个有动机的优化者会怎样在不改善底层目标的前提下把数字做大？然后专门为此埋好监控。把任何与考核或薪酬挂钩的 metric，视为早已处于压力之下。报告成组的均衡 panel，从不报告孤立数字。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+metric 是你真正关心之物的代理——覆盖率代理安全性，uptime 代理用户体验，velocity 代理价值。当代理成为目标的那一刻，努力就会流向「把数字做大」，而不是流向数字所代表的那个东西，因为做大数字更容易。这么做的优化者通常并不是在作弊；他们做的恰恰是你指给他们的事。
+
+## 何时使用
+
+- 设定团队目标、SLA 和绩效激励时。
+- ML 工作：选择并冻结一个目标函数——reward hacking 就是带梯度下降的古德哈特定律。
+- 选择测试覆盖率、uptime、latency 或 velocity 目标。
+- 搭建别人会据此行动的 dashboard。
+
+## 何时不该使用
+
+- 不要把它当作反对一切度量的论据——没有度量的系统会静默失败（见「可观测性优先」）；解法是配对的 metric，不是失明。
+- 探索阶段：只要没有人的考核依赖它，用于引导发现的领先指标没有问题。
+- 从未被提升为目标的一次性诊断读数。
+
+## 反模式
+
+- 强制要求 100% 行覆盖率——最便宜的路径是那种只执行代码、什么也不断言的测试。
+- 奖金与单一数字挂钩：uptime、关闭的 ticket 数、删除的行数。
+- 在一个事实上已经变成训练集的 benchmark 上评估模型。
+- 在一个团队自己看得见的 dashboard 上给团队排名——可见性会加速 gaming。
+- 给被玩坏的 metric 换个名字，然后一切照旧。
+
+## 代码示例
+
+错误示范——指标满足了，目标被抛弃了：
+
+```ts
+// 为了关掉覆盖率 ticket 而写：代码跑了一遍，什么都没验证
+it("processes refunds", () => {
+  processRefund(paidOrder); // 不抛异常的执行就算「已覆盖」
+  expect(true).toBe(true);  // 这个断言是装饰品
+});
+```
+
+正确示范——给目标配上反向指标：
+
+```ts
+// 变异测试奖励的是真正可能失败的断言
+it("refunds the card and marks the order refunded", async () => {
+  const result = await processRefund(paidOrder);
+  expect(result.status).toBe("refunded");
+  expect(gateway.refunds).toHaveLength(1); // 钱真的动了
+  const stored = await orders.find(paidOrder.id);
+  expect(stored.state).toBe("refunded");   // 状态真的落库了
+});
+```
+
+## 技术执法
+
+<Enforcement>
+gaming 是一种系统属性；要用系统设计来对抗它：
+
+- **metric 配对政策**：每个目标都和它的反向指标出现在同一个视图里——覆盖率配变异分数，velocity 配逃逸缺陷率，uptime 配变更失败率和恢复时间。
+- **CI 里的变异测试**（Stryker、PIT、mutmut）作为覆盖率的反向指标：不可能失败的断言会让 mutant 存活，而存活的 mutant 会让构建失败。
+- **禁止单一指标薪酬**：考核只挂钩成组的均衡 panel（DORA 式组合），绝不挂钩单个数字。
+- **目标复核节奏**：每季度重读每个目标，问一句「它现在正被怎样玩坏？」；被玩坏的 metric 要轮换或退役，而不是替它辩护。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个工程团队给一个关键 service 定下了 100% 行覆盖率的目标，并把 review 评分与它挂钩。一个季度内覆盖率就爬上去了——而新增测试中空心的比例越来越大：它们用 fixture 数据调一遍代码，断言顶多到「没有抛异常」，或者对空 mock 做快照。数字说安全；逃逸的缺陷说不，incident 也持续追溯到那些被指标记为「已覆盖」的分支。这个目标后来被换成一个配对面板：覆盖率阈值加变异分数，无断言的测试会被自动标记。空心测试开始让 CI 失败，覆盖率数字降了下去，真实的缺陷检出却升了上来。（ilustratif——广为报道的失败模式的合成案例，不是具名事故；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **古德哈特 vs 可观测性优先**：度量不是敌人——没有度量的系统只会静默漂移。规则是配对，不是戒断：每个 metric 都配一个针对其特定 gaming 策略调校过的反向指标。
+- **古德哈特 vs 流程的简单性**：单一的北极星数字容易传达、也容易被玩坏；一个小的均衡 panel 更难传达、也更难被玩坏。把沟通成本付了吧。
+- **古德哈特 vs ML 优化**：模型是不折不扣的古德哈特引擎——它们会利用 reward 与意图之间的任何缝隙（reward hacking）。留出优化者永远看不见的 ground-truth 评估集，并在目标变更时让人类留在环路里。
+
+## 相关原则
+
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——你需要这些 metric；只是永远不要只有一个。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——被玩坏的代理会藏住失败；让真实的失败发出巨响。
+- [保持简单 · Keep It Simple](/zh/docs/principles/design/kiss)——极简的 dashboard 更简单；但 metric 的简单与信号的诚实之间有权衡。
+- [切斯特顿的栅栏 · Chesterton's Fence](/zh/docs/principles/design/chesterton-fence)——在移除或改名一个长期存在的 metric 之前，先弄清它当初为什么被装上去。
+
+## 参考文献
+
+- Marilyn Strathern, 1997 年的表述 — "When a measure becomes a target, it ceases to be a good measure"（verification: perlu——引用前请先定位确切的论文与页码；通常归于她 1997 年关于英国大学审计的研究）。
+- Google SRE Book — 监控与告警实践；对症状而非原因做告警是一种部分性的结构性缓解。https://sre.google/sre-book/

@@ -23,9 +23,9 @@ source_hash: "61cc39f28820810c"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/data/append-only-logs.mdx -->
-<!-- source_hash EN: 61cc39f28820810c -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/data/append-only-logs.mdx */}
+{/* source_hash EN: 61cc39f28820810c */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Record state changes as appended, immutable events — with timestamp and actor — instead of editing rows in place. Never UPDATE or DELETE history: corrections are new events that supersede old ones, and physical removal happens only through an explicit, governed purge. Protect audit logs at the permission level so that no role, including yours, can quietly rewrite them.

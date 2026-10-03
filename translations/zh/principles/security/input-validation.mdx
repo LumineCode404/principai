@@ -1,0 +1,129 @@
+---
+title: "输入校验 · Input Validation"
+id: input-validation
+name: Input Validation
+summary: 在 trust boundary 上校验每一个输入，然后才让它触碰状态——尽早拒绝，完整拒绝，明确拒绝。
+category: security
+type: principle
+severity: critical
+applies_to:
+  - "api"
+  - "services"
+  - "database"
+  - "ui"
+  - "ml"
+tags:
+  - "validation"
+  - "boundaries"
+  - "parsing"
+aliases:
+  - "Validate at the Boundary"
+sources:
+  - 'Hunt & Thomas, "The Pragmatic Programmer", 1999'
+  - 'RFC 1122, "Requirements for Internet Hosts", 1989'
+status: draft
+verification: ok
+source_hash: "4de461ecb1b707e6"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/input-validation.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+在 trust boundary 上校验每一个输入——request body、header、query string、文件内容、队列消息、模型输入——在它抵达存储、命令或业务逻辑之前。绝不假设 caller、partner service、或你自己的 frontend 已经校验过了。如果你说不清楚「合法」长什么样，先停下来问人，再写 handler。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+数据从低信任上下文进入高信任上下文的每一处，都是一道 trust boundary；凡是跨越它的东西，在触碰状态之前都必须检查类型、形状、大小、范围和编码。校验是门口的保安，不是下游的 cleanup 班组：畸形输入在门口就被拒绝，而不是流到含义不明的下游再修补。长度与边界同理——检查属于边界，不属于「迟早」。
+
+## 何时使用
+
+- API endpoint 与 webhook——最典型的边界。
+- 接受多个 producer 写入的数据库层。
+- 队列与 stream 消费者：消息往往比产出它的代码活得更久。
+- 导入、上传、ML pipeline：训练数据、文件、第三方数据源。
+- 任何用输入拼 shell 命令、查询语句或文件路径的地方。
+
+## 何时不该使用
+
+- 单个模块内部、输入已经在公共边界校验过的情况——对每次内部调用重复校验是噪音。
+- 绝不能崩溃的 telemetry 与日志 pipeline：能解析的收下，其余的记为丢弃。
+- 契约就是「不透明地保存字节」的存储——校验属于之后解释这团 blob 的人。
+
+## 反模式
+
+- 只校验当前 UI 会发送的字段；新字段来了，没有检查。
+- 用字符串替换做「消毒」——去引号、转义横线——而不是解析成已知良好的结构。
+- 信任内部 service「因为是我们自己的」；边界依然存在。
+- 在 frontend 强制长度，并假设只有 frontend 会调这个 API。
+- 静默修补畸形输入：强转、trim、猜测——然后拿着一个没人发送过的值继续往下走。
+
+## 代码示例
+
+错误示范——用未校验的输入拼字符串查询：
+
+```python
+# 没有边界检查：类型、形状、长度全是假设
+def find_orders(request):
+    user_id = request.args.get("user_id")
+    status = request.args.get("status", "open")
+    sql = f"SELECT * FROM orders WHERE user_id = {user_id} AND status = '{status}'"
+    return db.execute(sql)     # 一个精心构造的 user_id 就能读走整张表
+```
+
+正确示范——在边界上解析、校验、拒绝：
+
+```python
+def find_orders(request):
+    try:
+        user_id = parse_uuid(request.args["user_id"])       # 精确类型
+        status = request.args.get("status", "open")
+        if status not in {"open", "paid", "shipped"}:       # 封闭的 allowlist
+            raise ValueError("bad status")
+    except (KeyError, ValueError) as e:
+        return reject(400, str(e))     # 门口即拒，状态未被触碰
+    return db.query(Order).filter_by(user_id=user_id, status=status).all()
+```
+
+## 技术执法
+
+<Enforcement>
+校验必须是结构性的，不是口头愿景：
+
+- **Schema-first API**：带类型的 request schema 在 handler 代码运行之前就拒绝未知或畸形字段——校验是管道，不是纪律。
+- **只允许参数化的访问路径**：参数化查询、prepared statement、安全的 path-join 工具；CI 禁止字符串拼接的 SQL 和 shell 命令。
+- **网关处的限额**：请求大小上限、字段长度上限，在昂贵的解析开始之前就生效。
+- **CI 里的 fuzzing**：对每个 endpoint 生成畸形输入；崩溃和泄漏让构建失败。
+- **预防 vs. 检测**：schema 与参数化让畸形数据根本到不了逻辑层；fuzzing 与日志在攻击发生后发现缺口——两个都跑，绝不要假设第一个已经完整。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+Heartbleed（CVE-2014-0160）于 2014 年 4 月披露，正是 trust boundary 上缺失的一次边界检查：OpenSSL 的 TLS heartbeat 扩展接受对端声明的 payload 长度，并回显那么多字节，却不去验证 buffer 里是否真的存着它们。一条声称超大 payload 的恶意消息让攻击者读取服务器内存——session token、密码，最坏情况下还有 private key——日志里不留痕迹。这个输入恰恰在最该被度量的地方被信任了。严格的边界校验挡不住未来的每一个 OpenSSL bug，但它本可以把这一件事从「远程读取任意进程内存」降低为「拒绝一个畸形 heartbeat」。详情：https://heartbleed.com/
+</RealCase>
+
+## 张力与权衡
+
+- **校验 vs. 健壮性原则**：宽容地接受换来互操作性，也藏起了 caller 的 bug；在安全边界上，严格获胜——只在你赔得起的猜测上宽容。
+- **收紧校验 vs. 版本化契约**：更严的规则会拒绝旧 contract 曾允许的 client——通过新版本收紧，不要伏击存量用户。
+- **尽早拒绝 vs. 优雅降级**：快速拒绝畸形输入保护了状态，但一场坏流量风暴可能演变成用户可见的灾难——把拒绝与限流、清晰报错配套使用。
+
+## 相关原则
+
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——遇到你没料到的输入时怎么办。
+- [纵深防御 · Defense in Depth](/zh/docs/principles/security/defense-in-depth)——校验是外墙，不是唯一的墙。
+- [完全仲裁 · Complete Mediation](/zh/docs/principles/security/complete-mediation)——访问控制上的孪生闸门：数据要校验，权限要仲裁，每次都是。
+- [健壮性原则 · Postel's Robustness](/zh/docs/principles/api/postel-robustness)——这场张力，诚实地说出来。
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——如何收紧校验而不伏击 client。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——校验规则属于 contract，不属于口口相传的记忆。
+
+## 参考文献
+
+- Hunt & Thomas, *The Pragmatic Programmer*, 1999 — 关于宁可早崩溃，也不带着不可信的数据继续工作。
+- RFC 1122, *Requirements for Internet Hosts — Communication Layers*, 1989 — 健壮性原则，以及它在 trust boundary 上的代价：https://www.rfc-editor.org/rfc/rfc1122

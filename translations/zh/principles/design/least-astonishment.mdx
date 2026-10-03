@@ -1,0 +1,126 @@
+---
+title: "最小惊讶 · Least Astonishment"
+id: least-astonishment
+name: Principle of Least Astonishment
+summary: 做读者期望的事——贴合惯例，让显而易见的读法就是正确的读法。
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "api"
+  - "ui"
+  - "libraries"
+  - "developer-experience"
+tags:
+  - "surprise"
+  - "conventions"
+  - "ergonomics"
+aliases:
+  - "Principle of Least Surprise"
+  - "POLA"
+sources:
+  - 'Eric Raymond, "The Art of Unix Programming" — Rule of Least Surprise'
+status: draft
+verification: perlu
+source_hash: "193a9ab5f779cdd6"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/least-astonishment.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让显而易见的读法成为正确的读法：命名、默认值和 API 形状必须遵循平台的主流惯例。把一个操作的每一个副作用，都写进它的名字、文档或响应里。发布一个行为之前，先问一句：只凭签名，读者能不能预测到它？如果连你作为调用方都会惊讶，就改掉它，或者大声写进文档。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+当一个组件的行为，与一个合格的读者依据它的名字、签名和周围惯例所做的预测相符，它就是设计良好的。惊讶是一个设计 bug，哪怕这个行为在技术上完全正确——读者会按错误的假设行动，而伤害最终落在数据上。惯例承担了大部分工作：遵循平台的默认约定，通常比局部的聪明更重要。
+
+## 何时使用
+
+- 给任何公开的东西命名：endpoint、函数、flag、config key。
+- 选择默认值——默认值应当是最安全、最常见的情形，而不是最灵活的那一个。
+- API 与库的表面设计，包括 error 响应和空响应。
+- 靠肌肉记忆带动用户的 UX 流程和 CLI 交互。
+
+## 何时不该使用
+
+- 当惯例本身很危险时——「惊讶但安全」胜过「熟悉但毁灭」（见「默认即安全」）。
+- 已有大量调用方的存量表面——改动「虽然令人惊讶但已经发布」的行为会砸掉整个世界（见「海勒姆定律」）；给变更做版本化。
+- 还没有形成惯例的领域——你的选择会变成惯例；只做一次、集中做，并写进显眼的文档。
+
+## 反模式
+
+- 一个顺带删掉依赖记录却只字不提的 delete endpoint。
+- 会写数据的 getter；分页方式与代码库里其他所有 list 都不一样的 list 方法。
+- 名字承诺得比实际做得少的 flag——比如一个还会顺手断开连接的 purgeCache。
+- 被吞掉、替换成空成功响应的 error。
+- 全球产品里对时区或 locale 无感知的默认值。
+
+## 代码示例
+
+错误示范——「贴心」的魔法：
+
+```ts
+// DELETE /users/:id —— 还会悄悄抹掉该用户的 invoices 和 tokens
+async function deleteUser(id: string) {
+  await db.users.delete(id);
+  await db.invoices.deleteMany({ userId: id }); // 惊讶：没写进文档的级联删除
+  await db.tokens.deleteMany({ userId: id });   // 惊讶：会话无声地死掉
+}
+```
+
+正确示范——显而易见的读法就是正确的读法：
+
+```ts
+// 删除用户就是删除用户。仅此而已。
+async function deleteUser(id: string) {
+  await db.users.delete(id);
+}
+
+// 清除数据是另一个独立、具名、显式的操作
+async function purgeUserData(id: string) {
+  await db.users.delete(id);
+  const invoices = await db.invoices.deleteMany({ userId: id });
+  return { deletedInvoices: invoices.count }; // 响应坦白承认了发生过什么
+}
+```
+
+## 技术执法
+
+<Enforcement>
+只要愿意，惊讶是可以被测试出来的：
+
+- **contract 测试**：自动化测试断言每个 endpoint 只执行其文档写明的影响；没写进文档的级联删除会让 CI 失败。
+- **API review 清单**：「列出这个操作的所有影响——每一条都写进名字、文档或响应里了吗？」没列出完整影响清单的，不许发布。
+- **schema 执法**：在 CI 里用实际响应校验 OpenAPI（或同类）schema，让惊讶在消费者之前先浮出水面。
+- **惯例 lint**：对 flag、config key 和 endpoint 施加命名规则；偏离项目既定模式需要一份 ADR。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个内部平台暴露了一个删除用户记录的 endpoint。为了「帮调用方省一次往返」，它还顺带删掉了该用户的依赖记录——invoices、API key、审计条目——既没写进文档，也不在响应里报告这次级联。调用方按照公司里其他所有 delete endpoint 的模式（存在依赖时返回 conflict）行事，以为这是一次单行删除。一个例行 offboarding 脚本在一个下午删掉了数百条依赖记录；因为级联是静默的，损失几天后才被对账发现，而不是被操作员发现。修复不只是补文档：级联被拆成一个独立、显式的 purge endpoint，其响应报告它删掉的一切——这降低的是、而不是杜绝下一次错误假设造成的损失。（ilustratif——合成案例，不是具名事故；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **最小惊讶 vs 健壮性原则**：静默接受并修复畸形输入同样是一种惊讶——调用方永远不知道自己的请求是错的。比起安静的宽容，优先选择带响亮、可操作 error 的显式 contract。
+- **最小惊讶 vs 海勒姆定律**：你发布的任何东西都会变成承重结构；已经发布的令人惊讶的行为，没法在不弄坏依赖方的前提下简单修掉。给纠正做版本化（见「版本化契约」）。
+- **便利 vs 可预测**：convention-over-configuration 和聪明的默认值给老手省时间，却让新人震惊。给「魔法」设个预算，并让隐藏的默认值可被发现。
+
+## 相关原则
+
+- [健壮性原则 · Postel's Robustness](/zh/docs/principles/api/postel-robustness)——永远的制衡砝码：在「你接受什么」上保持宽容。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——已发布的行为，无论是否出于本意，都会变成 contract。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——被写进文档并强制执行的影响，是不会让人惊讶的影响。
+- [软删除 · Soft Delete](/zh/docs/principles/data/soft-delete)——可逆的删除降低错误假设的代价。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——当惊讶终究发生时，它必须被看见。
+
+## 参考文献
+
+- Eric Raymond, *The Art of Unix Programming*, Rule of Least Surprise — 设计符合这个文化所预期的接口。http://www.catb.org/~esr/writings/taoup/ （verification: perlu）。

@@ -1,0 +1,119 @@
+---
+title: "优雅降级 · Graceful Degradation"
+id: graceful-degradation
+name: Graceful Degradation
+summary: 组件降级时，砍掉可选的、保住核心的——部分服务胜过全面中断。
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - "services"
+  - "distributed"
+  - "ui"
+tags:
+  - "partial-failure"
+  - "load-shedding"
+  - "resilience"
+aliases:
+  - "Fail Gracefully"
+sources:
+  - 'Google SRE Workbook, https://sre.google/workbook/'
+status: draft
+verification: ok
+source_hash: "aca446228531fc88"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/graceful-degradation.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+在事故替你分类之前，先把每一个依赖归类为核心（essential）或可选（optional）。给每一个出站调用配 timeout，包上 circuit breaker，并为每一个可选功能设计具体的 fallback。过载时先砍可选的工作——绝不让一个慢依赖占住你的 worker 线程。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+当一个组件的故障或过载削减的是能力而不是可用性时，系统就是优雅降级的：推荐轮播消失了，结账仍然能用。这要求在事故之前就把依赖归类为核心或可选，并把每一个可选依赖的 fallback 写下来。部分失败是分布式系统的常态；真正的选择只在于：有计划的部分服务，还是没有计划的全面中断。
+
+## 何时使用
+
+- 由许多 service 组装而成的用户可见页面与 API：返回核心响应，丢弃慢的增强内容。
+- 高扇出的请求路径——一个慢依赖就能饿死整个 worker 池。
+- 流量尖峰与依赖 brownout：在进程倒下之前显式甩负载。
+- ML 系统：当新的训练或 feature pipeline 落后时，serve 上一次的好模型。
+
+## 何时不该使用
+
+- 正确性与安全路径——auth、支付、安全检查——在这里「降级」意味着 fail-open；那是 fail-unsafe，不是优雅（见「故障安全默认」）。
+- 核心路径本身就是那个可选组件的产品（一个翻译服务没有翻译就是中断，不是降级）。
+- 「降级」意味着静默持久化不完整数据的写路径——那是用一场中断换一场数据损坏（见「显性失败」）。
+
+## 反模式
+
+- 页面渲染阻塞在一个推荐 widget 上；一个慢的 recs service 把每一页都变成错误页。
+- 不带 timeout 的出站调用；一个慢依赖逐渐占满每一个 worker 线程。
+- 全有或全无的聚合：要么响应的每个区块都组装成功，要么什么都不返回。
+- 对正在失败的依赖重试得更狠，而不是甩掉它（见「重试预算」）。
+- 给用户和 dashboard 的降级内容毫无信号——没人能区分健康与降级。
+
+## 代码示例
+
+错误示范——一个可选 widget 扣住了整个页面：
+
+```python
+def render_page(user):
+    recs = recs_client.get(user.id)      # 无 timeout、无 fallback，核心路径被阻塞
+    cart = cart_client.get(user.id)
+    return template(recs=recs, cart=cart)
+```
+
+正确示范——砍掉可选的，保住核心的：
+
+```python
+def render_page(user):
+    cart = cart_client.get(user.id, timeout=0.1)          # 核心：硬 timeout
+    try:
+        recs = recs_client.get(user.id, timeout=0.05)     # 可选：短预算
+    except (Timeout, Unavailable):
+        recs = Recommendations.empty()                   # fallback，而不是 500
+    return template(recs=recs, cart=cart)
+```
+
+## 技术执法
+
+<Enforcement>
+降级是一种被设计出来的行为，所以也可以像行为一样被执法：
+
+- **每个出站调用都有 timeout**，按依赖的延迟 SLO 定尺寸——由 HTTP client 与 service mesh 的默认值执法，不靠每个开发者的自律。
+- **在框架层接线、带命名 fallback 的 circuit breaker**；没有 fallback 的依赖不能被声明为可选。
+- **在资源耗尽之前做准入控制**：queue 上限与带 retry 指引的显式 busy 响应；内核的 OOM killer 不是负载削减策略。
+- **降级必须可观测**：「served degraded」metric 与用户可见的信号（空状态、过期标记）是功能的一部分，不是可选配件。
+- **Game day**：按计划在 staging 里杀死一个依赖；核心路径活下来是通过标准。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2019 年 11 月 2 日，Cloudflare 部署了一条新的 WAF 规则，其中包含一个会在某些输入上发生灾难性回溯的正则表达式。由于部署规则的软件存在 bug，它没有渐进上线，而是同时出现在全世界的 edge 机器上；这个正则耗尽了这些机器的 CPU，全世界的请求都返回 502，直到工程师用全局 kill switch 彻底关掉 WAF。Postmortem：https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/ —— 内联的安全层把核心路径一起拖垮了；请求是被丢弃的，而不是被降级服务的。同一份 postmortem 也是「爆炸半径」与分阶段 rollout 的教训：原定的渐进部署本可以把这条规则的影响限制在一个可测试的子集内。
+</RealCase>
+
+## 张力与权衡
+
+- **优雅降级 vs. 显性失败**：甩负载可能掩盖真实错误；每一次降级都必须在 metric 与响应里可见，否则你是在用一场中断换一种缓慢的静默腐烂。
+- **优雅降级 vs. 故障安全默认**：永远不要为了保住响应时间而降级安全或保安检查——被降级的安全是一次入侵，不是一次中断。
+- **与「最小惊讶」权衡**：告诉用户什么缺失了、什么过期了；一个对新鲜度悄悄撒谎的页面，比一个诚实的降级状态侵蚀更多信任。
+
+## 相关原则
+
+- [重试预算 · Retry Budget](/zh/docs/principles/reliability/retry-budget)——别再喂一个失败的依赖；甩掉它。
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——你看不见的降级与故障无法区分。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——在拥有决策权的层大声失败，在拥有用户的层降级。
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——默认拒绝；核心检查永远不「降级」为放行。
+
+## 参考文献
+
+- Google SRE Workbook — https://sre.google/workbook/（「Cascading Failures」一章直接讲了 load shedding 与资源耗尽）。
+- Cloudflare, *Details of the Cloudflare Outage on November 2, 2019* — https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/

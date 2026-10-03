@@ -1,0 +1,21 @@
+---
+title: "原则"
+description: 档案本体——一个原则一个文件，严格的 frontmatter 契约，按类别组织。
+---
+
+每条原则都是一个 markdown 文件：一段为 INDEX 加载而设计的摘要、固定的章节顺序、[severity](/docs/concepts/severity)、`applies_to`、tags 和 aliases。下面的类别都标记为 *sudah digali*（已深挖）——文件已在盘上。未深挖的类别在[分类图](/docs/taxonomy)中追踪。
+
+这是档案本体。什么被加载进 agent 是另一件事——由 [profile](/docs/profiles) 和 [`principai copy`](/docs/cli/reference) 命令处理。
+
+<Cards>
+  <Card title="安全 · Security" description="限定授权范围、校验输入、默认关闭——让小 bug 无法升级成被删除的数据库。" href="/zh/docs/principles/security" />
+  <Card title="可靠性 · Reliability" description="幂等、爆炸半径、经过测试的备份、可观测性——让失败保持小、可见、可恢复。" href="/zh/docs/principles/reliability" />
+  <Card title="数据 · Data" description="能恢复的备份、分阶段迁移、可逆的删除、作为证据的历史。" href="/zh/docs/principles/data" />
+  <Card title="架构 · Architecture" description="系统与组织如何互相塑造——边界、依赖、从简单开始生长。" href="/zh/docs/principles/architecture" />
+  <Card title="API" description="边界上的契约——显式、版本化，并对用户真正会依赖什么保持诚实。" href="/zh/docs/principles/api" />
+  <Card title="设计 · Design" description="简单性、对重复与臆测的判断，以及支配度量与惊讶的定律。" href="/zh/docs/principles/design" />
+</Cards>
+
+## 如何加载
+
+按类别浏览，或从 [profile](/docs/profiles) 开始——为某类工作策展的 must-follow 与 consider 集合。[destructive-ops profile](/docs/profiles/destructive-ops) 是经典范例，从清理脚本失败链构建而来。

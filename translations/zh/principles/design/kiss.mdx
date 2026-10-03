@@ -1,0 +1,122 @@
+---
+title: "保持简单 · Keep It Simple"
+id: kiss
+name: Keep It Simple
+summary: 选择可行的最简单设计——你今天加的每个活动部件，都是某人明天凌晨三点要 debug 的部件。
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "architecture"
+  - "services"
+  - "libraries"
+  - "scripts"
+  - "ui"
+tags:
+  - "simplicity"
+  - "complexity"
+  - "maintenance"
+aliases:
+  - "KISS"
+  - "Keep It Simple, Stupid"
+sources:
+  - 'Attribution to Kelly Johnson (Lockheed Skunk Works) — widespread, unverified'
+status: draft
+verification: perlu
+source_hash: "ad831368bf721f8f"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/kiss.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+优先选择能满足既定需求的最简单设计。当两种做法都行得通时，选活动部件更少、依赖更少、读者需要同时记住的概念更少的那一种。每一处复杂度来源，在实现之前都必须给出明确的理由。不要为想象中的未来需求添加机制。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+在两个都能满足需求的设计之间，更简单的那个胜出：部件更少、依赖更少、要装进脑子的概念更少。复杂度不是功能——它是一笔债务，每次有人阅读、测试、debug 或扩展这段代码，它都在计息。这里的「简单」指满足今天已被证明的需求所需的最小活动部件数，而不是最短或最聪明的代码。
+
+## 何时使用
+
+- 为任何新组件挑选实现方案时。
+- 设计与 code review：复杂度必须自我辩护，简单永远不需要。
+- debug 与 incident response——最简单的复现路径和最简单的修法获胜。
+- 一切读的次数多于写的次数的东西：脚本、配置、runbook、on-call 工具。
+
+## 何时不该使用
+
+- 为真实出现过的失败模式（timeout、retry、backpressure）做失败处理——这类复杂度是用证据买来的，不是臆测出来的。
+- 安全与防护层——见「纵深防御」；每一层都必须证明自己值得存在，但绝不能为了整洁而整层删掉。
+- 本质复杂度无法再削减的领域（税务规则、协议边界情况、定价）——把复杂度藏起来不等于移除它；聪明的捷径只是把它挪出视线而已。
+
+## 反模式
+
+- 为了少写一次四十行无聊代码而搭起的微型框架。
+- 为没人使用的行为准备的 config flag。
+- 只有一个调用方、又没有 roadmap 的 service 里的「enterprise-ready」抽象。
+- 用一个带着四十个传递依赖的包，替换一个十行函数。
+- 写起来省几分钟、读起来费几小时的 regex 和 one-liner。
+
+## 代码示例
+
+错误示范——一个表达式就能搞定的事，上了整套框架：
+
+```ts
+// 「灵活」的免运费引擎：三个类、一个解释器、零需求
+class RuleEngine {
+  constructor(private rules: Rule[]) {}
+  run(order: Order): boolean {
+    return this.rules.some((r) => r.matches(order));
+  }
+}
+const eligible = new RuleEngine([new OrPredicate(new ThresholdRule(50), new CustomerTierRule("gold"))]);
+```
+
+正确示范——满足需求的最简做法：
+
+```ts
+// 一个布尔表达式：凌晨三点也读得懂，测试轻而易举，正确性一目了然
+export function freeShippingEligible(order: Order): boolean {
+  return order.total >= 50 || order.customer.tier === "gold";
+}
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则不是靠感觉执法的。把它接进 CI：
+
+- **复杂度 linter**：强制圈复杂度与认知复杂度上限（ESLint `complexity`、SonarQube），外加单函数长度上限；违反者必须在代码里写明理由，否则直接 fail。
+- **依赖预算**：新增第三方包，PR 描述必须回答「它替代了什么，在升级风险上要付出什么代价」。
+- **死代码检测**：跑 knip / ts-prune，让没人用的「灵活性」在 dashboard 上可见、可删。
+- **Review 清单**：对每个设计，reviewer 都要问「能通过测试的最简单版本是什么」——必须由复杂版本为自己辩护，而不是反过来。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2019 年 11 月 2 日，Cloudflare 给自家的 web application firewall 部署了一次规则更新，其中一条正则表达式带有嵌套量词。遇到只能部分匹配的输入时，灾难性回溯让求值时间爆炸，全球 edge server 的 CPU 飙升；各地访客收到错误页面，相当大一部分流量出现降级。复杂度就藏在一段 review 时毫不起眼的十几个字符的 regex 里，而分阶段 rollout 让故障是逐渐爬升的，不是一下子爆发的。工程师靠全局关闭 WAF 恢复了服务。更简单的规则构造、或对模式求值加一道复杂度防护，本可以缩小那次故障的影响范围——规则本身仍然会被需要，能缩小的只有故障的规模。事后报告：https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/（verification: perlu for 确切数字与时间线——引用数字前请先阅读事后报告原文。）
+</RealCase>
+
+## 张力与权衡
+
+- **KISS vs 纵深防御**：分层安全看起来像复杂度，但每一层的存在都是为了以各自不同的方式失效。在层内做简化；不要靠删掉各自都在挣饭钱的层来买「简单」。
+- **KISS vs 优雅降级**：timeout、retry、fallback 都要加代码——但它们处理的是生产环境确凿会撞上的失败模式。把复杂度预算先花在失败处理上，再花在功能上。
+- **KISS vs 盖尔定律**：真正简单的设计是能演化的设计。一个纸面上极简、却改不动的设计，在实践中比一个稍大但接缝干净的设计更复杂。
+
+## 相关原则
+
+- [你不会需要它 · YAGNI](/zh/docs/principles/design/yagni)——投机性功能是无谓复杂度的最大来源。
+- [DRY 的张力 · DRY, With Judgment](/zh/docs/principles/design/dry-tension)——每个抽象都是复杂度；只统一已被证明的重复。
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——能用的系统从简单系统里长出来；简单让演化成为可能。
+- [纵深防御 · Defense in Depth](/zh/docs/principles/security/defense-in-depth)——制衡的砝码：有些复杂度是承重的安全结构。
+
+## 参考文献
+
+- Kelly Johnson（Lockheed Skunk Works）被广泛认为提出了这条格言；归属流传很广但未经验证——尚未找到一手来源（verification: perlu）。
+- Eric Raymond, *The Art of Unix Programming*, Rule of Simplicity — 为简单而设计，只在不得已处添加复杂度。http://www.catb.org/~esr/writings/taoup/ （verification: perlu）。

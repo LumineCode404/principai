@@ -27,9 +27,9 @@ source_hash: "ffdb846b9ce43614"
 translation_status: draft
 ---
 
-<!-- Terjemahan bahasa Indonesia dari content/docs/principles/reliability/fail-visible.mdx -->
-<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
-<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/reliability/fail-visible.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
 Buat setiap kegagalan terdengar keras, seketika, dan jelas asalnya: raise error-nya, keluar dengan exit code nonzero, buat build-nya gagal. Jangan pernah menelan exception, jangan pernah mengembalikan nilai default setelah operasi gagal, jangan pernah lanjut melewati precondition yang gagal. Hasil parsial yang senyap lebih buruk daripada crash — jika sebuah kegagalan tidak bisa digolongkan sebagai tidak berbahaya, sampaikan kepada manusia.

@@ -1,0 +1,15 @@
+---
+title: "数据 · Data"
+description: 能恢复的备份、分阶段迁移的 schema、可逆的删除、作为证据的历史。
+---
+
+数据比写它的代码活得更久。这个类别把数据视为系统中爆炸半径最长的部分——schema 变更会破坏部署顺序、删除是永久的、而历史是事故之后唯一的证人。
+
+<Cards>
+  <Card title="经过测试的备份 · Tested Backups" description="没有测试过恢复的备份只是愿望，不是控制——按计划的恢复演练才能证明它有效。" href="/zh/docs/principles/data/tested-backups" />
+  <Card title="扩展-收缩 · Expand-Contract" description="分兼容阶段变更 schema——先加新的、迁移数据，等没有任何东西读旧的之后再删。" href="/zh/docs/principles/data/expand-contract" />
+  <Card title="软删除 · Soft Delete" description="两阶段删除——先标记，恢复窗口过后再清除——一次误点可以撤销。" href="/zh/docs/principles/data/soft-delete" />
+  <Card title="仅追加日志 · Append-Only Logs" description="把事实记录为追加的事件，绝不编辑历史——仅追加日志同时是证据和撤销。" href="/zh/docs/principles/data/append-only-logs" />
+</Cards>
+
+[database-service profile](/docs/profiles/database-service) 是拥有自己数据库的 service 的策展加载——经过测试的备份和扩展-收缩领先它的 must-follow 集。

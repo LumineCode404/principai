@@ -1,0 +1,119 @@
+---
+title: "盖尔定律 · Gall's Law"
+id: gall-law
+name: Gall's Law
+summary: 能正常工作的复杂系统，都是从能正常工作的简单系统演化来的——为生长而设计，不为终局愿景。
+category: architecture
+type: law
+severity: important
+applies_to:
+  - "architecture"
+  - "services"
+  - "product"
+tags:
+  - "complexity"
+  - "evolution"
+  - "systems"
+aliases: []
+sources:
+  - 'John Gall, Systemantics: How Systems Really Work and How They Fail'
+status: draft
+verification: perlu
+source_hash: "03377707577109b1"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/architecture/gall-law.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+先发布端到端能正常工作的最简系统，然后在真实使用之下让它生长。绝不要把一个全新项目规划成最终架构的一次性 big-bang 交付——把它规划成一串能正常工作的系统。当一个设计无法增量抵达时，把它当作设计缺陷，而不是排期问题。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+能正常工作的复杂系统，无一例外都是从能正常工作的简单系统演化来的；从零设计的复杂系统无法被调试到能工作，因为你没法调试一个从未运行过的东西。因此，设计任务不是描述终局系统，而是描述下一个能正常工作的小系统，以及各步之间的生长路径。野心可以有；把野心一次性交付上线，不行。
+
+## 何时使用
+
+- 需求仍是假设的全新产品与平台。
+- Migration 与重写——把它们规划成分阶段的、strangler 风格的步骤，每个阶段都有在运行的产出价值。
+- 架构路线图：每个阶段都必须能工作，而不只是向终态拼装。
+- 任何真实使用模式要到用户到来才揭晓的东西。
+
+## 何时不该使用
+
+- 重新实现一个已被证明、完全明确的系统——最终设计是真正已知的；把它当工程做，而不是当探索做。
+- 契约或监管在事前钉死范围的交付物：交付简单核心加必需的控制面，而不是投机性的 feature。
+- 本身就已经是简单系统的小工具——不需要演化。
+- 它不是跳过「难以逆转的思考」的借口：data model、安全边界和 service 接缝值得在其余一切从简的同时，先行投入。
+
+## 反模式
+
+- 两百页的规格书、一年的开发、一个系统首次运行就是在上线那天。
+- 在第一个会跑在平台上的产品出现之前，先建「平台」。
+- 为想象中的未来规模做抽象——multi-region、multi-tenant、一个没有任何插件的 plugin 系统。
+- 因为「我们已经设计好了」而冻结失败的第一个版本，而不是去演化它。
+
+## 代码示例
+
+错误示范——必须全部完工才能开始工作的企业脚手架：
+
+```ts
+// 14 个 package，0 个被服务的请求：EventBus、TenantResolver、RegionRouter……
+export class EnterprisePlatform {
+  async start() { /* 还在接线——不存在任何可供测试的行为 */ }
+}
+```
+
+正确示范——一个能跑通的垂直切片，加上一条言明的生长路径：
+
+```ts
+// 第一天：一个请求走通；团队从真实流量中学习
+export async function signup(req: Request) {
+  const user = await db.users.insert(parseSignup(req));
+  await mailer.send(welcome(user));
+}
+// 生长路径：当第二个发送方出现时，把 mailer 抽到 port 之后；
+// 当实测负载需要时再分片 db.users——而不是在那之前。
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠流程闸门执法，而不是靠意图：
+
+- **里程碑闸门**：任何增量要算完成，必须有在类生产环境里端到端跑起来的 demo。
+- **WIP 上限**：限制并行的未完成层数——一个不断长高的未完成平台，正是这条定律警告的那种标志性失败。
+- **RFC 纪律**：每个提案必须回答「能运行的最小版本是什么」和「我们能从中学到什么」。
+- **先指标后规模**：dashboard 和负载数据，是批准下一个复杂度台阶的前置条件。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一家公司立项了一个为期一年、两百页规格书的「企业平台」：共享 auth、工作流引擎、报表框架，然后才是第一个业务 module。集成测试到第十个月才开始，发现各层彼此不合；与此同时，需求在没有任何反馈的情况下漂移了一年。项目在服务第一个客户之前被取消。另一支内部团队用六周发布了一个粗糙的单用途 service，从真实用户身上学习，悄悄吸收掉了那项业务需求。（ilustratif——常见失败模式的合成案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **演化 vs. 事前设计**：有些决策（data model、安全边界、service 接缝）逆转起来代价高昂——趁其余一切保持简单时，尽早向这些地方投入；至于已经存在的东西，见「切斯特顿的栅栏」。
+- **生长路径 vs. 你不会需要它**：YAGNI 说不要建造未来；这条定律说要规划通往未来的路径。折中：只建当前能工作的系统，但避免堵死下一个系统的决策。
+- **先简单 vs. 安全义务**：「从简单开始」绝不等于「从危险开始」——auth、backup 和最小权限必须在第一个版本就存在，可以简单，但必须在场。
+
+## 相关原则
+
+- [康威定律 · Conway's Law](/zh/docs/principles/architecture/conways-law)——组织必须能随系统一起演化，否则系统演化不了。
+- [保持简单 · Keep It Simple](/zh/docs/principles/design/kiss)——起点系统应当简单，而不只是小。
+- [你不会需要它 · YAGNI](/zh/docs/principles/design/yagni)——对投机性平台层的制衡。
+- [扩展-收缩 · Expand-Contract](/zh/docs/principles/data/expand-contract)——schema 演化的安全步长。
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——看不见的东西，你无法演化。
+- [切斯特顿的栅栏 · Chesterton's Fence](/zh/docs/principles/design/chesterton-fence)——移除继承来的行为之前，先弄清它为何存在。
+
+## 参考文献
+
+- John Gall, *Systemantics: How Systems Really Work and How They Fail*——定律出处（verification: perlu——引用前确认版本与确切措辞）。
+- Google SRE Book——增量 rollout 作为演化设计的运维近亲：https://sre.google/sre-book/（verification: perlu for chapter-level claims）。

@@ -1,0 +1,113 @@
+---
+title: "经过测试的备份 · Tested Backups"
+id: tested-backups
+name: Tested Backups
+summary: 没有经过 restore 测试的 backup 只是一种期望，不是控制——按计划执行的 restore drill 才能证明它真的有效。
+category: data
+type: principle
+severity: critical
+applies_to:
+  - "database"
+  - "infrastructure"
+  - "destructive-ops"
+tags:
+  - "backups"
+  - "restore"
+  - "disaster-recovery"
+aliases:
+  - "A Backup Is Only Real After a Restore Test"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: ok
+source_hash: "47a6c470547f3be8"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/data/tested-backups.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+除非已经从某个 backup 完成过一次 restore 并核验过其中的内容，否则永远不要声称数据已备份。在真实系统上按固定节奏安排 restore drill，测量 recovery time 与 recovery point，把任何从未 restore 过的 backup 当作不存在。任何破坏性操作之前，先与人类确认：restore point 是新鲜的，restore path 已被验证可用。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+backup 只有在成功通过一次 restore 测试之后才真实存在；其余的都只是带日程表的期望。restore path 才是真正的产品：它的 recovery point objective（会丢多少数据）和 recovery time objective（会宕机多久）是测量出来的属性，不是愿望。按固定节奏进行的 drill 能抓住那些静默的腐坏——几天前就已经停掉的 backup、过期了的凭证、变了格式的文件、比所有人以为的都要慢得多的 restore。
+
+## 何时使用
+
+- 任何丢失了就无法接受的数据存储：production 数据库、内容无法重新推导的 blob storage、secrets vault。
+- 破坏性操作之前——批量删除、schema migration、手工修数——先核验 restore point（参见「爆炸半径」）。
+- 每次备份基础设施变更之后：新工具、新加密方式、新存储位置。
+- restore 能力需要接受审计的场合（合规、合同、保险）。
+
+## 何时不该使用
+
+- 可以完整重新推导的数据——重建的 cache、从源 event 重新物化的 dataset；要演练的是重新推导本身。
+- 明确声明为一次性的环境；给 sandbox 做 restore 只是表演。
+- 永远不要 restore 到线上 primary 上——drill 本身不能威胁 production；restore 到一个隔离副本里。
+
+## 反模式
+
+- 「我们有备份」——没人问过：上一次备份是什么时候？谁曾经真的 restore 过一次？要花多久？
+- backup job 的成功被监控着；restore 却一次都没有执行过。
+- 只在工具装好的第一周测过 restore，那是两年前的事。
+- backup 的凭证就存在被备份的那个系统里。
+- retention 窗口比发现数据损坏所需的时间还短——你备份下来的是已经损坏的状态。
+
+## 代码示例
+
+错误示范——从来没人 restore 过的 dump：
+
+```bash
+# 每晚由 cron dump 并上传；成功只是假设，从未被证明
+pg_dump "$DATABASE_URL" | gzip | aws s3 cp - "s3://backups/db-$(date +%F).sql.gz"
+```
+
+正确示范——必须通过的、按计划执行的 drill：
+
+```bash
+# 把最新 backup restore 进一个隔离数据库，并计时——那个数字就是你的 RTO
+aws s3 cp "s3://backups/$LATEST" - | gunzip | psql "$DRILL_DB_URL"
+psql "$DRILL_DB_URL" -c "SELECT assert_fresh_data();"   # 数据不新鲜则 build 变红
+```
+
+## 技术执法
+
+<Enforcement>
+如果 restore 没有被排进日程并自动化，它就不会发生——把它做成一个 job：
+
+- **作为 CI job 的 restore drill**：按计划把最新 backup restore 到隔离环境并运行数据断言；红色 build 意味着 backup 已经坏了。
+- **RTO 与 RPO 作为指标**：每次 drill 都测量 recovery time 与数据新鲜度；随时间出现的漂移是 incident，不是趣闻。
+- **对备份的沉默告警**：N 小时内没有成功的 backup 事件就要 page 到人——无声的跳过和响亮的失败一样致命。
+- **破坏前的门禁**：ops 工具要求存在一个已验证的新鲜 restore point 才允许执行破坏性任务；这由工具强制，而不是靠操作员的记性。
+- **有主人的、演练过的 runbook**：按固定节奏举行全环境 restore 的 game day，并且有一个对它负责的名字。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2017 年 1 月 31 日，一位 GitLab 操作员在与 replication 故障缠斗数小时、精疲力竭之后，在主数据库服务器上删错了目录——他以为那是 secondary 的数据，而目录里存放的是 primary 的在线数据。团队随后发现，他们的五套备份与复制机制中，大多数在那一刻都不可用：损坏的、过期的、或者拿不出最新数据的；剩下那条可用的 restore path 比预期更慢、更不完整，六个小时的用户数据（issues、merge request、评论）被永久丢失。事后报告：https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ ——五套机制，零次演练过的 restore。如果当时有一个按计划执行的 restore drill，本可以把损失从六个小时的永久数据丢失缩减为一个有界的、已知的 recovery point。
+</RealCase>
+
+## 张力与权衡
+
+- **经过测试的备份 vs. 成本**：drill 消耗 storage、compute 和工程时间；把 drill 当作交付物，把 backup 当作它的输入。
+- **经过测试的备份 vs. 软删除 / 仅追加日志**：backup 是最后一道防线，不是第一道——分层恢复（event replay、软删除、然后才是 restore）的每一层，都在缩短最后手段需要回溯的距离。
+- **RPO vs. 写入延迟**：更频繁的 backup 或同步复制会真实地消耗写入性能；按数据集用明确的数字做决策，而不是凭感觉。
+
+## 相关原则
+
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——一次失误能摧毁的东西越少，backup 的负担就越小。
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——删掉那个目录的操作员，本来就不该拥有那种权限。
+- [仅追加日志 · Append-Only Logs](/zh/docs/principles/data/append-only-logs)——可重放的历史，是你每天都在使用的 backup。
+- [软删除 · Soft Delete](/zh/docs/principles/data/soft-delete)——对那些用不着最后手段的失误，提供可撤销的删除。
+
+## 参考文献
+
+- GitLab, *GitLab.com Database Incident, 2017-01-31* — https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
+- Google SRE Book — https://sre.google/sre-book/（数据完整性与应急响应实践；引用前请先核对章节指引）。

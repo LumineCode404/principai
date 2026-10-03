@@ -1,0 +1,118 @@
+---
+title: "海勒姆定律 · Hyrum's Law"
+id: hyrum-law
+name: Hyrum's Law
+summary: 用户足够多时，你系统的每一个可观察行为都会被某个人依赖——包括那些你从未承诺过的。
+category: api
+type: law
+severity: important
+applies_to:
+  - "api"
+  - "libraries"
+  - "services"
+  - "distributed"
+tags:
+  - "compatibility"
+  - "observable-behavior"
+  - "dependencies"
+aliases:
+  - "Law of Implicit Interfaces"
+sources:
+  - "https://www.hyrumslaw.com"
+status: draft
+verification: ok
+source_hash: "b074e646fc72db90"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/api/hyrum-law.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把消费者能观察到的一切——字段顺序、报错文本、时序、package 是否存在——都当作 contract 的一部分。在变更任何可观察行为之前，先查明谁在依赖它，通过一个版本和一段 deprecation 窗口来沟通，并持续度量使用量，直到最后一个消费者完成迁移。绝不要用「文档里没写」来打发一次破坏性变更。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+当一个 interface 的消费者数量足够大时，每一个可观察行为都会被某个人依赖，无论 contract 承诺了什么。真正的 interface 是消费者实际使用的东西：response 的形状、报错信息、rate limit 的时序、一个没人写进文档的字段是否存在。变更这类行为——哪怕是在修 bug——也算一次破坏性变更，必须按破坏性变更来计价、沟通并升级版本。
+
+## 何时使用
+
+- 任何带有你无法控制的消费者的公共或共享 API、library 或 event stream。
+- 评估那些会改变可观察输出的「无害」bug 修复。
+- 规划 deprecation、移除或 major 版本升级。
+- Review 其他团队直接读取的数据库或存储形状。
+
+## 何时不该使用
+
+- 不要拿这条定律否决安全或正确性修复——当行为本身有害时，发布修复，并且大张旗鼓地管理好过渡窗口。
+- 只有一个消费者、且同样归你所有、与你同步部署的内部代码。
+- 尚无真实消费者的上线前代码——在有人依赖这些行为之前，这条定律没有作用对象。
+
+## 反模式
+
+- 「文档里没写，所以我们可以改」——消费者基数一大，这句话永远不成立。
+- 消费者去 parse 报错字符串，或靠请求耗时去推断内部状态——而生产者则永远配合。
+- endpoint 直接返回 ORM 的原始行：每一个内部列都变成某个人的 contract。
+- 以「没人用」为由移除某个 dependency 或字段——却拿不出使用指标来证明。
+
+## 代码示例
+
+错误示范——存储形状泄漏出去，ORM 的列成了 contract：
+
+```ts
+app.get('/users/:id', async (req, res) => {
+  const row = await db.users.find({ id: req.params.id });
+  res.json(row); // createdAt、内部标记、未来的列：全都被观察到，全都被依赖
+});
+```
+
+正确示范——contract 是被刻意选择、定型和校验过的：
+
+```ts
+const UserDTO = z.object({ id: z.string(), name: z.string() }).strict();
+app.get('/users/:id', async (req, res) => {
+  const row = await db.users.find({ id: req.params.id });
+  res.json(UserDTO.parse({ id: row.id, name: row.display_name })); // 只挑选，不泄漏
+});
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠机器执法，而不是靠细心的消费者：
+
+- **消费者驱动的 contract 测试**（Pact）在生产者与消费者两侧都接入 CI：被验证的 contract 是消费者实际使用的东西，而不是文档声称的东西。
+- **显式的 DTO 与 serializer**：内部形状绝不未经筛选就穿过边界。
+- **API diff 闸门**：CI 中的 OpenAPI diff 工具对变更分类，拦下缺少版本升级的破坏性变更。
+- **Deprecation 指标**：按字段、按 endpoint 追踪使用量；只有当计数归零——或一个明确公布并沟通过的下线日期到期——才允许移除。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2016 年 3 月，一位开发者在一场命名争端之后，把自己发布的 package 从 npm 撤下，其中包括 left-pad——一个只做字符串补齐的小工具。JavaScript 生态里的全新安装和 CI pipeline 随之失败——数千个受影响的构建，包括各大框架的工具链。从没有任何人与那个 package 的持续存在订立过契约；生态的构建 pipeline 却照样依赖它。精确的版本锁定（exact-version pinning）与 registry 层面的下架策略本可以缩小爆炸半径，但改变不了依赖早已形成这个事实——有没有 contract，依赖都在那里。报道：https://www.theregister.com/2016/03/23/npm_left_pad_chaos/（verified URL）。
+</RealCase>
+
+## 张力与权衡
+
+- **稳定 vs. 进步**：这条定律给每一次修复都标了价。诚实的应对是带 deprecation 窗口的版本化变更，而不是冻结（见「版本化契约」）。
+- **海勒姆定律 vs. 最小表面**：你暴露的可观察细节越少——用 DTO 而不是原始行、用不透明的 ID 而不是自增 ID——可被依赖的东西就越少。按「一切可见之物终将成为永久承诺」来设计。
+- **共情 vs. 纵容**：有些依赖属于消费者滥用（parse 报错字符串）。你仍然可以打破它们，但要刻意为之——给出通知和迁移路径，而不是让人措手不及。
+
+## 相关原则
+
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——变更消费者所依赖之物的正道。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——用显式声明收缩隐式表面。
+- [健壮性原则 · Postel's Robustness](/zh/docs/principles/api/postel-robustness)——宽容的接收会成倍增加消费者可以依附的可观察行为。
+- [供应链审查 · Supply Chain Vetting](/zh/docs/principles/security/supply-chain-vetting)——left-pad 同时也是一个供应链故事：弄清你的传递依赖都有什么。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——一次破坏能拖垮的范围。
+- [扩展-收缩 · Expand-Contract](/zh/docs/principles/data/expand-contract)——把海勒姆定律记在心里的 schema 变更流程。
+
+## 参考文献
+
+- Hyrum's Law：https://www.hyrumslaw.com（verified URL）。
+- The Register, npm left-pad aftermath, March 2016：https://www.theregister.com/2016/03/23/npm_left_pad_chaos/（verified URL）。

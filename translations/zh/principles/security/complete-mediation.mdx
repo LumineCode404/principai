@@ -1,0 +1,128 @@
+---
+title: "完全仲裁 · Complete Mediation"
+id: complete-mediation
+name: Complete Mediation
+summary: 每条路径上的每次访问都要授权——被缓存的权限和被遗忘的侧门，也仍然是门。
+category: security
+type: principle
+severity: important
+applies_to:
+  - "api"
+  - "services"
+  - "security-critical"
+tags:
+  - "authorization"
+  - "access-control"
+  - "caching"
+aliases:
+  - "Check Every Access"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
+status: draft
+verification: perlu
+source_hash: "e76a30c10164db56"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/complete-mediation.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+对每条路径上的每次访问做授权——每个请求、每个后台 job、每扇侧门。绝不信任更早做出的权限决定：不在登录时，不在 session 开始时，也不因为「上一个请求里这个对象是可达的」。发现一条跳过检查的路径，就把它当作漏洞上报。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+对每个受保护对象的每次访问都必须经过授权检查——不在登录时，不在页面加载时，而在访问发生的那一刻、在执行访问的那条路径上。缓存下来的授权决定是过去的快照：role 会变、所有权会变、token 会被撤销，而那个「我们已经查过了」而被跳过的检查，恰恰在最不该跳过的时刻被跳过。Saltzer 与 Schroeder 把它命名为 complete mediation，它也是最容易向便利让步的原则：有的 endpoint 挂了 decorator、有的假设「上游已经查过」、有的 worker 绕过闸门直接读同一批数据。
+
+## 何时使用
+
+- 带按对象访问规则的 API：document、project、workspace 级别的资源。
+- 长生命周期的 session 与 token：web 应用、移动应用、agent。
+- 异步与后台路径：worker、scheduler、webhook——人们最容易忘记的那些门。
+- 任何 role、成员关系或所有权可能在 session 存活期间发生变化的系统。
+
+## 何时不该使用
+
+- 完全公开的资源，授权是空操作——空检查就是噪音；把路由显式标记为 public 即可。
+- 不可变、不敏感、所有权不会变化的元数据——把假设写进文档，等对象模型变化时再回头看。
+- 以「撤销时真正失效」为后盾的短时缓存——这是带工程手段的仲裁，不是例外；只要 invalidation 确实有效，就可以保留。
+
+## 反模式
+
+- 把「已登录」当作授权模型——把 authentication 复用成 permission。
+- admin 检查做在菜单渲染代码里；endpoint 本身假设「只有 admin 才知道这个 URL」。
+- 权限决定在 session 开始时缓存一次，从此不再复核。
+- 一个「临时」新增、没走 middleware 的 admin endpoint，因为当时只是个内部 demo。
+- worker 处理 job 时直接从数据库读 document，「因为 API 在 job 创建时已经查过了」。
+
+## 代码示例
+
+错误示范——查一次，信到底：
+
+```python
+# role 在登录时解析一次，存进 session
+@app.post("/login")
+def login(user):
+    session["role"] = db.get_role(user.id)      # 过去的快照
+
+@app.delete("/documents/{doc_id}")
+def delete_document(doc_id):
+    if session["role"] != "admin":              # 已过时数小时，仍然照查
+        abort(403)
+    db.delete(doc_id)                           # 今早那份授权
+```
+
+正确示范——在访问发生的那一刻、在执行它的路径上检查：
+
+```python
+# 授权按每次访问解析，对照当前 role 和「这一个」对象
+@app.delete("/documents/{doc_id}")
+@require_permission("document:delete", doc_id)  # 新鲜的 role + 这份 document
+def delete_document(doc_id):
+    db.delete(doc_id)
+
+# decorator 解析的是「此刻」的 role（仅在撤销会触发 invalidation 时才缓存）
+# 以及「这一份」document 的所有权——每个请求，每条路径。
+```
+
+## 技术执法
+
+<Enforcement>
+仲裁必须是结构性的，让新代码无法选择退出：
+
+- **唯一的授权点**：framework 层的 guard，每条路由都必须声明——没有显式 policy 的路由让启动直接失败，路由层默认拒绝。
+- **对象级检查，而不只是路由级**：policy 针对具体资源求值，由 ABAC/RBAC 库或 policy engine 集中收口。
+- **会传播的撤销**：role 变更与 token 撤销让缓存的判定失效或过期；短 session 生命周期与 token introspection 让 staleness 有设计上的上界，而不是靠祈祷。
+- **覆盖测试与路由清单审计**：任何路由或 worker 未经 policy 点就触碰受保护模型时，测试失败。
+- **预防 vs. 检测**：guard 与启动失败挡住未仲裁的路径上线；审计与覆盖测试抓漏网之鱼——仲裁会悄悄腐化，所以检测这一半要一直留着预算。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+场景（ilustratif）：一个应用在 session 开始时解析一次用户的 role，并在整个 session 生命周期里缓存它。用户的 admin role 在 session 中途被撤销——一次人员离场、一次安全处置——但每个请求仍然带着昨天的答案：在接下来的几个小时、直到 session 过期之前，这位前 admin 仍能以已被收回的权限创建、读取和删除。这里没有单个可以修复的 bug；是这个设计在错误的时刻问了「这个用户是不是 admin」，然后永远相信了那个答案。对每次访问都做仲裁——在使用的那一刻解析权限、撤销即让缓存判定失效——本可以把暴露时间从数小时的完整访问降低到几秒钟。（ilustratif；verification: perlu——此处未引用公开的 postmortem。）
+</RealCase>
+
+## 张力与权衡
+
+- **按次检查 vs. 延迟**：每次访问都过 policy 点要付出一次查询；缓存是诚实的折中——但过期的缓存要么过度授权（违反最小权限），要么授权不足（把真实用户锁在门外，违背最小惊讶）。显式设定 staleness 预算，并把撤销接到 invalidation 上。
+- **fail-closed 仲裁 vs. 优雅降级**：policy 存储不可达时，fail-closed 保护数据却让产品变暗；fail-open 则敞开大门——按路径决定，并且在 outage 之前就决定好。
+- **单一仲裁点 vs. 单一职责**：执法点唯一正是要点，但一个「人人有份」的 policy 模块等于无人负责——把 policy 定义分散，执法点保持唯一。
+
+## 相关原则
+
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——每次检查的答案应该是什么。
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——检查者自己失效时，仲裁该怎么办。
+- [输入校验 · Input Validation](/zh/docs/principles/security/input-validation)——边界上的孪生闸门：校验数据，仲裁权限。
+- [单一职责 · Single Responsibility](/zh/docs/principles/architecture/single-responsibility)——让 policy 点保持唯一，又不让它变成垃圾场。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——权限要求按路由显式声明，而不是含蓄暗示。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — complete mediation 是最初的设计原则之一。
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — 持续的、按请求的评估，取代一次性的边界信任：https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

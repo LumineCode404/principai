@@ -1,0 +1,127 @@
+---
+title: "默认即安全 · Secure by Default"
+id: secure-by-default
+name: Secure by Default
+summary: 把安全配置作为开箱默认交付——安全应该是你拿到手的东西，而不是你记得开启的东西。
+category: security
+type: principle
+severity: important
+applies_to:
+  - "infrastructure"
+  - "libraries"
+  - "services"
+  - "api"
+tags:
+  - "defaults"
+  - "hardening"
+  - "configuration"
+aliases:
+  - "Safe by Default"
+  - "Secure Defaults"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
+status: draft
+verification: ok
+source_hash: "9b31331a409239dd"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/secure-by-default.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把安全配置作为开箱默认交付，任何有风险的能力都要求显式 opt-in。绝不要因为「demo 方便」就启用一个强大的功能——远程代码执行、动态 lookup、admin 界面、debug endpoint。如果你说不出某个功能的安全默认值是什么，停下来，先问人，再交付。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+一个库、framework 或 service 交付时默认启用的东西，就是大多数安装会永远运行的东西。默认即安全意味着：全新的、未改动的安装就是加固过的那一个——加密开着，危险功能关着，debug 界面不可达，没有默认凭证。任何削弱安全姿态的改动都需要显式的、写进文档的 opt-in——默认值是替每一个永远不会读文档的用户做出的决定。
+
+## 何时使用
+
+- 分发给那些你永远不会见面、也永远无法审计的人的库与 framework。
+- 创造出别人要来继承的环境的基础设施模板与基础镜像。
+- 任何带 demo 模式的东西——demo 配置有变成生产配置的惯性。
+- 默认设置会悄悄渗进成千上万个应用的 client SDK。
+
+## 何时不该使用
+
+- 有书面 threat model、显式接受了风险的一次性内部工具。
+- 目的就是演示不安全机制的教学示例——标注清楚，绝不面向互联网。
+- 最安全的默认值让大多数用户根本用不起来的时候：选一个仍然开箱可用的最强默认值，再把加固开关暴露给剩下的人。
+
+## 反模式
+
+- 一个会解析并抓取日志文本中 URL 的日志库。
+- 绑定到所有网卡、带着默认密码的 admin dashboard。
+- 示例代码里关闭 TLS 校验，然后所有人把示例原样复制进了生产。
+- 由生产环境也会设置的环境变量驱动的 debug 模式。
+- 拿「加固指南」当安全默认值的替代品——文档不是控制。
+
+## 代码示例
+
+错误示范——你若不知道要关，强大功能就是开着的：
+
+```javascript
+// 库的默认值：传给 logger 的任何字符串都可能触发一次远程 lookup。
+const logger = createLogger({ app: "billing" });
+// "messageLookup" 默认为 true——demo 方便，prod 是灾难
+
+logger.warn(`Payment failed for ${userInput}`);
+// userInput 来自请求字段；logger 会去抓取它在那里找到的东西
+```
+
+正确示范——默认惰性，显式 opt-in 且带 scope：
+
+```javascript
+// 默认是惰性的：日志文本是数据，绝不执行、绝不抓取。
+const logger = createLogger({ app: "billing" });
+logger.warn(`Payment failed for ${userInput}`);   // 永远只是文本
+
+// 功能仍然存在——留给指名道姓要用它的人：
+// const logger = createLogger({
+//   app: "billing",
+//   messageLookup: { enabled: true, allowHosts: ["metrics.internal"] },
+// });
+```
+
+## 技术执法
+
+<Enforcement>
+默认值必须在用户跳不过去的地方执法：
+
+- **加固的基础镜像与模板**：组织级镜像，debug 关闭、无默认凭证、补丁最新——团队不采取任何行动就继承安全。
+- **CI 中的配置 lint**：已知不安全的 flag 让构建失败——TLS 校验关闭、部署产物里的 debug 模式、通配网络绑定、默认密码。
+- **默认行为测试**：一个全新安装的测试，断言危险功能是关的、安全功能是开的——默认值是行为，就按行为来测。
+- **预防 vs. 检测**：交付安全默认值，保护的是从不配置任何东西的沉默大多数；lint 与审计抓住少数主动 opt-out 的人——两者都留，它们覆盖的是不同的人。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2021 年 12 月，Log4Shell（CVE-2021-44228）展示了不安全默认值在生态规模上的代价。Apache Log4j 2 会对流经日志消息的字符串执行 JNDI lookup，而该功能默认启用：任何记录了攻击者可控输入的应用——用户名、header、表单字段——都可能被诱导去远程服务器抓取并执行代码。这个易受攻击的配置不是任何人犯的错；它是每个人拿到的配置。全世界的团队花了数周打补丁、盘点暴露面。默认即安全——lookup 默认关闭、显式开启才生效——移除不了解析缺陷本身，但本可以把暴露人群从「所有默认安装」降低到「刻意开启该功能的少数」。Advisory：https://logging.apache.org/log4j/2.x/security.html
+</RealCase>
+
+## 张力与权衡
+
+- **安全默认 vs. 最小惊讶**：没人能启动的最安全默认值保护不了任何东西——选那个仍然能在头五分钟里跑起来的最强默认值。
+- **默认即安全 vs. 海勒姆定律**：默认值一旦交付，就有人依赖它；之后改动它就是 breaking change，今天上线的方便就是明天被迫的迁移。
+- **加固 vs. YAGNI**：为想象中的 threat model 全副武装的默认值会变成用户绕着走的配置迷宫——为这东西实际面对的威胁做加固。
+
+## 相关原则
+
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——访问控制上的兄弟：不授予即拒绝。
+- [纵深防御 · Defense in Depth](/zh/docs/principles/security/defense-in-depth)——默认值是第一层，从来不是唯一一层。
+- [最小惊讶 · Least Astonishment](/zh/docs/principles/design/least-astonishment)——安全默认值也应该让撞见它的人觉得合理。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——opt-in 开关要有清晰的名字和写进文档的 blast radius。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——为什么改动已交付的默认值是 breaking change。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults 与心理可接受性：人们能够且愿意长期与之共处的默认值。
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — 企业架构中的安全默认值：https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Hyrum's Law — 你的默认值终将成为的那份 contract：https://www.hyrumslaw.com

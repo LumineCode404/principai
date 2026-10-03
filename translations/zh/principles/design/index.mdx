@@ -1,0 +1,15 @@
+---
+title: "设计 · Design"
+description: 简单性、对重复与臆测的判断，以及支配度量与惊讶的定律。
+---
+
+设计原则在这个库中承载最低的 severity——多为 advisory——因为它们关乎复杂度的长期成本，而不是失败的即时爆炸半径。但它们照样咬人：一个错误的抽象或一个被玩坏的指标会安静地复利，直到成为系统里最贵的东西。
+
+<Cards>
+  <Card title="保持简单 · Keep It Simple" description="选择可行的最简单设计——你今天加的每个活动部件，都是某人明天凌晨三点要 debug 的部件。" href="/zh/docs/principles/design/kiss" />
+  <Card title="DRY 的张力 · DRY, With Judgment" description="重复比错误的抽象便宜——只统一因同一理由而变化的知识。" href="/zh/docs/principles/design/dry-tension" />
+  <Card title="你不会需要它 · YAGNI" description="为已证明的需求构建，不为想象中的未来——投机性的通用性是你永远付利息的复杂度。" href="/zh/docs/principles/design/yagni" />
+  <Card title="最小惊讶 · Least Astonishment" description="做读者期望的事——贴合惯例，让显而易见的读法就是正确的读法。" href="/zh/docs/principles/design/least-astonishment" />
+  <Card title="切斯特顿的栅栏 · Chesterton's Fence" description="弄清栅栏为什么立在那之前，绝不拆它——在代码里，理由很少活在注释里。" href="/zh/docs/principles/design/chesterton-fence" />
+  <Card title="古德哈特定律 · Goodhart's Law" description="当一个度量成为目标，它就不再是好度量——代理指标会被你指过去的确切那批优化者玩坏。" href="/zh/docs/principles/design/goodharts-law" />
+</Cards>

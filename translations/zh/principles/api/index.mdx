@@ -1,0 +1,15 @@
+---
+title: "API"
+description: 边界上的契约——显式、版本化，并对用户真正会依赖什么保持诚实。
+---
+
+API 是对陌生人许下的承诺。这个类别的原则关于让承诺保持诚实：精确说出你的意思，只通过版本来变更语义，并接受一旦足够多的人依赖你，连你的意外都会变成契约。
+
+<Cards>
+  <Card title="显式契约 · Explicit Contracts" description="一切跨边界的东西都携带显式、经过校验的契约——隐式假设会静默腐烂，直到凌晨三点爆开。" href="/zh/docs/principles/api/explicit-contracts" />
+  <Card title="版本化契约 · Versioned Contracts" description="公共契约只能通过带弃用窗口的版本来变更——绝不就地篡改现有契约的语义。" href="/zh/docs/principles/api/versioned-contracts" />
+  <Card title="海勒姆定律 · Hyrum's Law" description="用户足够多时，你系统的每一个可观察行为都会被某个人依赖——包括那些你从未承诺过的。" href="/zh/docs/principles/api/hyrum-law" />
+  <Card title="健壮性原则 · Postel's Robustness" description="发送时保守，接收时宽容——但要把「多宽容」写清楚，否则宽容会变成无法证明的行为。" href="/zh/docs/principles/api/postel-robustness" />
+</Cards>
+
+[public-api profile](/docs/profiles/public-api) 是向外部消费者暴露 endpoint 的团队的策展加载。

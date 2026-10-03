@@ -183,6 +183,75 @@
   isolation: isolate;
 }
 
+/*
+ * ---- Hero entrance (CSS-only, hydration-independent) ----
+ * LCP safety: above-the-fold content must never wait for JS. These keyframes
+ * run on first paint. Users who prefer reduced motion get everything instantly.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes hero-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .hero-up {
+    opacity: 0;
+    animation: hero-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--d, 0s);
+  }
+
+  /* Page transition (template.tsx) — opacity only, zero layout impact. */
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .page-enter {
+    animation: page-in 0.22s ease-out;
+  }
+}
+
+/* Hero spotlight — CSS-only drift so it never waits for hydration. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes spotlight-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .hero-spotlight {
+    opacity: 0;
+    animation: spotlight-in 1.2s ease-out 0.5s forwards;
+  }
+  @keyframes spotlight-drift {
+    0% {
+      transform: translate(0, 0);
+    }
+    33% {
+      transform: translate(120px, -40px);
+    }
+    66% {
+      transform: translate(-60px, 60px);
+    }
+    100% {
+      transform: translate(0, 0);
+    }
+  }
+  .hero-spotlight-drift {
+    animation: spotlight-drift 26s ease-in-out infinite;
+  }
+}
+
 /* Fumadocs: keep prose headings on-brand. */
 .prose :is(h1, h2, h3, h4) {
   font-family: var(--font-montserrat), var(--font-geist-sans), sans-serif;

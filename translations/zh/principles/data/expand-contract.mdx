@@ -1,0 +1,120 @@
+---
+title: "扩展-收缩 · Expand-Contract"
+id: expand-contract
+name: Expand-Contract
+summary: 以互相兼容的阶段变更 schema——先添加新的，迁移数据，确认没有代码再读旧的之后才移除它。
+category: data
+type: practice
+severity: important
+applies_to:
+  - "database"
+  - "api"
+  - "migration"
+tags:
+  - "migration"
+  - "schema"
+  - "compatibility"
+aliases:
+  - "Expand-Contract Migrations"
+  - "Parallel Change"
+sources:
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+  - 'Google SRE Workbook, https://sre.google/workbook/'
+status: draft
+verification: perlu
+source_hash: "8a1be40ed581c6c7"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/data/expand-contract.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+永远不要把 schema 或接口变更一步做成破坏性的。把新结构加在旧结构旁边，逐步迁移数据和读取方，只有当 usage telemetry 证明没有任何东西在读旧路径之后才把它移除——每个中间状态都必须在新旧版本混跑时仍然存活。如果一个 migration 要 drop、rename 或改作他用的某个东西可能仍被其他代码读取，先停下来，核验它的消费方。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+扩展-收缩（parallel change）把一个破坏性变更拆成三个互相兼容的阶段：扩展（expand，添加新结构而不移除旧的）、迁移（migrate，backfill、双写、把读取方切过来）和收缩（contract，只在 usage telemetry 显示读取方归零之后才移除旧的）。每一个中间部署都必须能安全地多跑几个小时，因为 rollout 是渐进的，而 rollback 回到的是旧代码，不是向前。
+
+## 何时使用
+
+- 有线上流量的表上的 schema 变更：加列、backfill、切换、然后 drop。
+- 重命名或改作他用的 API 字段——新旧字段在各个 contract 版本之间并行提供。
+- 有在途 producer 和 consumer 的存储与消息格式迁移。
+- 任何部署并非原子、多个应用版本同时运行的系统——而这才是常态。
+
+## 何时不该使用
+
+- 上线前的系统，没有 consumer 也没有数据——一步迁移，让历史保持简单。
+- 小到可以在一个已排定停机的维护窗口事务里原子重建的表。
+- 当旧路径本身就是安全负债（泄漏 secret、暴露隐私数据）——计划一次快速的、显式的移除并配好补偿措施，而不是慢慢迁移。
+
+## 反模式
+
+- 一个 migration、一次部署：在应用开始使用新列的同一个 release 里 DROP 旧列、ADD 新列。
+- 在同一个部署里既给热表加一个带默认值的 NOT NULL 列、又开始写它。
+- 双写却没有对账 job——两条路径静默漂移，没有谁察觉。
+- 「没有谁在读旧字段」这句话，是靠问声音最大的那个团队验证的，不是靠查流量。
+
+## 代码示例
+
+错误示范——一步到位，最坏意义上的原子：
+
+```sql
+-- 旧代码（rollout 期间仍在运行）到处 SELECT legacy_total
+ALTER TABLE orders DROP COLUMN legacy_total, ADD COLUMN total_cents BIGINT;
+```
+
+正确示范——三个互相兼容的阶段：
+
+```sql
+-- 阶段 1（expand）：只做加法、nullable，没有排他锁风波
+ALTER TABLE orders ADD COLUMN total_cents BIGINT;
+
+-- 阶段 2（migrate）：分批 backfill；应用双写两条路径并对账
+UPDATE orders SET total_cents = legacy_total * 100
+ WHERE total_cents IS NULL AND id % 64 = 0;
+
+-- 阶段 3（contract）：仅在 usage 日志显示 legacy_total 零读取之后
+ALTER TABLE orders DROP COLUMN legacy_total;
+```
+
+## 技术执法
+
+<Enforcement>
+这些阶段由拒绝让人类把它们压扁的工具来执法：
+
+- **CI 里的 migration linter**：破坏性 DDL（DROP COLUMN、RENAME、类型收窄）不能和加法变更出现在同一个 release；拆分是强制的。
+- **锁守卫**：migration 在锁与语句超时的约束下运行；一个会在热表上长时间持有排他锁的 migration 会被直接拒绝。
+- **收缩前先看 usage telemetry**：每个字段、每个 consumer 的读取计数放上 dashboard；只有完整一个 rollout 周期都是零之后，才允许 drop。
+- **对账 job**：双写期间，一个定时的 diff 对新旧路径之间的漂移告警——漂移是 bug，不是调参旋钮。
+- **解耦的部署顺序**：migration 和应用 release 是独立的流水线，各有各的 rollback 计划。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一个团队在周五下午上线了一次重命名 migration 的「清理」那一半。一些应用服务器还会再跑一个小时的上一个 release；每一台在第一次 SELECT 那个被 drop 的列时，把它碰到的每个请求全部打挂，而 rollback 需要重新加回列、重跑 backfill。事后报告的第一行写着：「我们以为部署已经完成了。」（verification: perlu——公开的事后报告里确实存在 drop-column 类事故；belum digali——引用任何具体来源前请先核实。）
+</RealCase>
+
+## 张力与权衡
+
+- **扩展-收缩 vs. 速度**：三个阶段花费的是计划与协调；只有当每个读取方都在你掌控之内、且表是冷的，一步迁移才可接受。
+- **扩展-收缩 vs. 清晰**：双路径让 schema 和代码面积翻倍；contract 阶段是一个承诺，不是一个选项——给它排期，否则扩张就变成永久债务。
+- **与「你不会需要它」/「保持简单」权衡**：对天然向后兼容的变更（纯加法、nullable、别处无人使用），直接迁移是更简单的正确选择。
+
+## 相关原则
+
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——总有人在某个地方读着旧字段；先这么假设，再用 telemetry 验证。
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——同一套阶段纪律在 API 侧的形式。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——没有对账的双写，会朝着损坏的方向静默漂移。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——一个糟糕的 migration 阶段，代价应该是一批数据，而不是整张表。
+
+## 参考文献
+
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — schema 演化与编码兼容性（verification: perlu——引用页码前请先核对具体章节）。
+- Google SRE Workbook — https://sre.google/workbook/（安全地进行生产变更；请核对章节指引）。

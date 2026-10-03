@@ -22,9 +22,9 @@ source_hash: "05498d2ad598f503"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/architecture/dependency-inversion.mdx -->
-<!-- source_hash EN: 05498d2ad598f503 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/architecture/dependency-inversion.mdx */}
+{/* source_hash EN: 05498d2ad598f503 */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Make business logic depend on interfaces it owns, and push concrete SDKs, drivers, and clients to the outer layers. Never import a vendor package directly from domain code — define the port first, then adapt the vendor to it. When tests need live vendor credentials to exercise core logic, treat that as the signal to invert the dependency.

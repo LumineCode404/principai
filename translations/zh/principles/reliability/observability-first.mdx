@@ -1,0 +1,122 @@
+---
+title: "可观测性优先 · Observability First"
+id: observability-first
+name: Observability First
+summary: 你看不见的东西就运维不了——log、metric、trace 要在事故之前就存在，而不是之后。
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - "services"
+  - "distributed"
+  - "database"
+  - "ml"
+tags:
+  - "logging"
+  - "metrics"
+  - "tracing"
+  - "alerts"
+aliases:
+  - "Observability Before Optimization"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: ok
+source_hash: "5876fc2ebf49be48"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/observability-first.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+永远不要部署或运维一个你答不上基本问题的系统——它在正常工作吗？为谁工作？多快？为什么不？——而且答案必须来自已经存在的 telemetry。发布之前先给失败模式埋点，第一次生产部署之前先接好 dashboard 与 alert。如果事故中需要的可观测性当时不存在，记下这个缺口，在下一场之前补上——并且永远不要让你用来恢复的工具，依赖于那个正在被恢复的系统。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+可观测性是不发布新代码，就能从系统的外部输出追问其内部状态新问题的能力。这些输出——结构化 log、metric、trace——必须在事故之前就存在，因为事故恰恰是没有时间添加它们的时候。检验标准：在凌晨三点 page 你自己，然后问一句——你能不能在几分钟内从 dashboard 定位出故障组件，还是只能开始瞎猜。
+
+## 何时使用
+
+- 每个 service 在第一次生产部署之前——「之前」就是全部要点。
+- 迁移与 schema 变更：新旧路径必须可以并排对比（见「扩展-收缩」）。
+- 数据库与 queue：replication lag、queue 深度、最老消息的年龄、backup 新鲜度。
+- ML：training/serving skew、feature 质量 metric、按模型分列的错误信号。
+
+## 何时不该使用
+
+- 不要把 secrets 或 PII 写进 log——telemetry 是数据泄露面（见「机密卫生」）；在采集端脱敏，不要留到下游。
+- 不要给荒谬分辨率埋点，采集成本会扭曲系统——对 trace 采样，而不是什么都 trace。
+- 不要为假设性问题定制 dashboard——先给真实失败模式与 golden signal 埋点（与「你不会需要它」权衡）。
+
+## 反模式
+
+- 「好慢，加一行 log 吧」——在生产环境里，事故已经开始之后。
+- 一个不带维度的成功/失败计数器：没有 endpoint、tenant、region 或 version 可以切片。
+- 无法过滤、无法计数、无法 join 的非结构化散文式 log 行。
+- 不带 runbook 的 alert，什么都 page，结果谁都不读。
+- 部署在被观测基础设施内部的观测工具。
+
+## 代码示例
+
+错误示范——看不见的失败：
+
+```python
+try:
+    charge(order)
+except PaymentError:
+    pass                       # 或者 print("error")——没有 metric、没有上下文、没有 trace
+```
+
+正确示范——失败可见，而且依然大声：
+
+```python
+try:
+    charge(order)
+except PaymentError as e:
+    log.error("charge_failed", order_id=order.id, code=e.code)   # 结构化、可搜索
+    metrics.increment("payments.failed", tags={"code": e.code})   # 可计数、可切片
+    trace.set_error(e)                                           # 全请求关联
+    raise                                                        # 既可观测又失败
+```
+
+## 技术执法
+
+<Enforcement>
+可观测性靠 pipeline 和流程执法，不靠好心：
+
+- **脚手架期默认**：每个新 service 从项目模板起步，自带 golden-signal dashboard（错误率、延迟分位数、饱和度）与错误 alert。
+- **CI 检查**：一个不产出标准错误 metric 与结构化错误 log 的路由或 handler 过不了 review——「不允许未被观测的 endpoint」。
+- **带 schema 的结构化 log**：共享库加 lint 规则，拒绝生产代码里的 ad-hoc print 式 log。
+- **trace 传播中间件**：trace ID 跨 service 边界强制携带，一个慢请求可以被从头追到尾。
+- **带外部署**：status page、incident 工具与监控运行在独立的基础设施和凭证上，与被观测的一切分开。
+- **runbook 要求**：不带 runbook 链接的 alert，在被允许 page 任何人之前就会被删掉。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2021 年 10 月 4 日，Facebook 的路由撤回让平台在全世界不可达——而同一个故障域里还装着工程师用来观测和运维这套网络的工具。内部系统、DNS、带外管理本身就不可达；诊断与远程恢复都被堵死，恢复需要工程师亲赴数据中心。Postmortem：https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ —— 无法观测时，连恢复都无从谈起。更一般的教训早于也长于这场事故：恢复路径必须能在它们要修复的故障中幸存。（verification: perlu for link details——引用细节前请先阅读 postmortem 原文。）
+</RealCase>
+
+## 张力与权衡
+
+- **可观测性 vs. 成本**：全分辨率 telemetry 很贵；对 trace 采样、对 log 聚合，但永远不要把承载 alert 的信号采样掉。
+- **可观测性 vs. 隐私**：telemetry 是数据泄露面——PII 与 secrets 在采集端脱敏，不要留到下游。
+- **与「你不会需要它」权衡**：给你实际拥有的失败模式和 golden signal 埋点；抵制为假设性问题发明 metric。
+
+## 相关原则
+
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——错误先被抛出，才谈得上被观测。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——把观测工具放在它们必须幸存的爆炸半径之外。
+- [优雅降级 · Graceful Degradation](/zh/docs/principles/reliability/graceful-degradation)——降级必须是看得见的状态，而不是看不见的。
+- [机密卫生 · Secrets Hygiene](/zh/docs/principles/security/secrets-hygiene)——telemetry 永远不能变成泄露源。
+
+## 参考文献
+
+- Google SRE Book — https://sre.google/sre-book/（监控分布式系统；四个 golden signal；postmortem 文化）。
+- Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/

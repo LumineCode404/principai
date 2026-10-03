@@ -1,6 +1,6 @@
-# PRINCIPAI
+# Principai
 
-A private library of software engineering principles, written to be **read by AI agents** — one principle per markdown file, a fixed section order, a curation layer (profiles), a small CLI to copy subsets into projects, and evals to check whether the library actually changes agent behavior.
+A public library of software engineering principles, written to be **read by AI agents** — one principle per markdown file, a fixed section order, a curation layer (profiles), a small CLI to copy subsets into projects, and evals to check whether the library actually changes agent behavior.
 
 This repository contains the library **and** the documentation website (Next.js + Fumadocs).
 
@@ -22,6 +22,7 @@ content/docs/           documentation + principle library (EN, source of truth)
   taxonomy.mdx          living taxonomy: sudah digali / belum digali / tidak yakin
   glossary.mdx          shared vocabulary, untranslated technical terms
 translations/id/        derived Indonesian tree (stubs + reviewed translations)
+translations/zh/        derived Chinese tree (complete: all principles translated, voice summaries)
 cli/principai.ts        the principai CLI (Bun, zero heavy deps)
 src/                    the website (Next.js 16 + Fumadocs)
 ```
@@ -61,7 +62,7 @@ Only three status words are used, in both languages, and no completeness claims 
 
 ## Two-repo model (EN / ID)
 
-English is the source of truth. The Indonesian translation is derived via `principai sync` with `source_hash` drift detection: structure stays 1:1, meaning flows one way, and a hash mismatch marks a file stale automatically. See [Two-Repo Sync](content/docs/concepts/two-repo-sync.mdx) for the full decision record.
+English is the source of truth. The Indonesian and Chinese translations are derived trees with `source_hash` drift detection: structure stays 1:1, meaning flows one way, and a hash mismatch marks a file stale automatically. See [Source-of-Truth Sync](content/docs/concepts/two-repo-sync.mdx) for the full decision record. The website serves all three languages; the repo itself (README, AGENTS, CLI) is English-only.
 
 ## Website
 

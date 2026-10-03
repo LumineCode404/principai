@@ -22,9 +22,9 @@ source_hash: "ef920c1e1985f4bc"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/data/soft-delete.mdx -->
-<!-- source_hash EN: ef920c1e1985f4bc -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/data/soft-delete.mdx */}
+{/* source_hash EN: ef920c1e1985f4bc */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Never issue a physical delete for business data in one step. Mark rows deleted with an audit trail (who, when, why), filter them out of queries by default, and purge for real only after a defined recovery window — with purge jobs that are themselves observable. When asked to delete something, confirm which of the two phases is actually wanted, and route irreversible purges through a human.

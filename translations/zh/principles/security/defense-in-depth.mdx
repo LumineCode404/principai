@@ -1,0 +1,122 @@
+---
+title: "纵深防御 · Defense in Depth"
+id: defense-in-depth
+name: Defense in Depth
+summary: 没有哪个控制是完美的——把相互独立的控制分层叠放，让单点失败永远成不了 breach。
+category: security
+type: principle
+severity: important
+applies_to:
+  - "infrastructure"
+  - "services"
+  - "api"
+  - "security-critical"
+tags:
+  - "layering"
+  - "resilience"
+  - "security"
+aliases:
+  - "Layered Defence"
+  - "Defense in Depth"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
+status: draft
+verification: ok
+source_hash: "6ff65191d6b35457"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/defense-in-depth.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+绝不依赖单一控制去阻止安全失败。设计一道边界时，假设它前面的那层控制终会失效——bug、配置漂移、过期证书——并在它后面再放一层相互独立的控制。如果去掉某一层之后系统就毫无防护，停下来，重新设计这道边界。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+每个控制最终都会失败：代码有 bug，配置会漂移，证书会过期，人会疲惫。纵深防御把多个相互独立的控制叠放起来，让单点失败被下一层兜住，而不是直接变成事故。关键词是「独立」——同一个检查的三份副本共享同一个失败模式，那是一件控制穿了三件戏服。
+
+## 何时使用
+
+- 安全关键路径：认证、授权、支付、密钥处理。
+- 面对不可信输入的边界：公开 API、文件上传、网络边缘。
+- 配置错误是现实失败模式的基础设施——通常都是。
+- 任何一次安全失败同时就是业务终结事件的系统。
+
+## 何时不该使用
+
+- 没有真实数据的 prototype：一层诚实的控制加上快速迭代，胜过三层没人维护的愿景。
+- 由复制品组成的「纵深」：同一个检查复制到不同位置，共享同一个失败模式——先合并，再造一个真正不同的控制。
+- 保护低价值资产、对延迟敏感的路径：每一跳的成本超过了它所保护的东西。
+
+## 反模式
+
+- 「WAF 会挡住它，所以应用不用校验输入。」
+- 把内网当成唯一边界：任何进到里面的东西拥有一切。
+- 只靠文件权限保护的 secret，背后既没有 vault 也没有轮换。
+- 本该告诉你 breach 发生了监控，却跑在被 breach 摧毁的同一套基础设施上。
+- 多年前通过过一次渗透测试，从此宣布永远安全。
+
+## 代码示例
+
+错误示范——一层防护，它一失败就全盘暴露：
+
+```javascript
+// 互联网与账号删除之间唯一的防线，只有这条网络规则
+app.post("/admin/delete-user", (req, res) => {
+  // 之所以信任，是因为 load balancer 只把内部流量转发到这里
+  deleteUser(req.body.userId);   // 一条配错的路由规则，prod 就门户大开
+});
+```
+
+正确示范——边界后面还有独立的层：
+
+```javascript
+// 第 1 层：网络规则。第 2 层：每个请求上的应用级 role 检查。
+app.post("/admin/delete-user", requireRole("admin"), (req, res) => {
+  // 第 3 层：谁删了什么的 audit trail。第 4 层：可恢复的软删除。
+  softDeleteUser(req.body.userId, { by: res.locals.user.id, reason: "admin-console" });
+});
+```
+
+## 技术执法
+
+<Enforcement>
+纵深必须长在平台里，而不是长在个人的记忆里：
+
+- **微分段加每 service 授权**：即使一个 pod 被完全攻破，它面对的仍是 service 级别的认证检查和 mutual TLS 策略——而不只是网络边界。
+- **第二条授权路径**：独立于应用代码求值的 policy engine 或 IAM condition，让一个应用 bug 无法独自决定访问。
+- **脱离宿主、仅追加的 audit log**：能在它所记录的那次 compromise 中幸存的证据。
+- **可恢复的销毁**：软删除加经过测试的 backup，让被打穿的应用层不是故事的结局。
+- **预防 vs. 检测**：分段与每 service 授权阻止 breach 之后的横向移动；日志与告警检测已经发生的事。两者都需要——检测是告诉你「其他层都失败了」的那一层。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2014 年 2 月，人们发现 Apple 的 iOS 与 OS X 版本里，证书校验函数中多出了一行重复的「goto fail」。这个多余的无条件跳转绕过了校验服务器证书链的检查，而函数仍然返回成功——TLS 连接接受了任何证书。负责校验的那一层静默失败，而它后面没有第二层：没有独立的 pinning 检查，没有提出异议的校验器，没有触发失败路径的测试。纵深防御不可能让这个笔误不发生——但它本可以降低暴露面：一个独立的校验或 pinning 层，本可以抓住这个坏函数放行的那些连接。详情：https://www.imperialviolet.org/2014/02/22/applebug.html
+</RealCase>
+
+## 张力与权衡
+
+- **纵深 vs. 保持简单**：每一层都增加配置面、失败模式和调试痛苦；把纵深放在关键路径上，而不是均匀地铺满一切。
+- **纵深 vs. 可观测性优先**：静默失败的层会把调试变成考古——每层的日志是这一层的一部分，不是可选配件。
+- **纵深 vs. YAGNI**：为假想攻击准备的投机层要永远支付真实的维护成本；让纵深的规模匹配 breach 的真实代价。
+
+## 相关原则
+
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——每一层都应朝着拒绝失败，而不是朝着敞开。
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——限定任何单个被攻破的层所能触达的范围。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——分层存在的意义，就是缩小可触达的伤害集合。
+- [软删除 · Soft Delete](/zh/docs/principles/data/soft-delete)——作为最后一层防线的可恢复销毁。
+- [仅追加日志 · Append-Only Logs](/zh/docs/principles/data/append-only-logs)——为在事故中幸存而设计的证据。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — 特权分离（separation of privilege）：授予访问前要求多个条件同时满足。
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — 分层的、按请求的防御：https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

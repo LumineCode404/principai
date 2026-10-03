@@ -1,0 +1,126 @@
+---
+title: "DRY 的张力 · DRY, With Judgment"
+id: dry-tension
+name: DRY, With Judgment
+summary: 重复比错误的抽象便宜——只统一因同一理由而变化的知识。
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "architecture"
+  - "libraries"
+  - "services"
+  - "ui"
+tags:
+  - "duplication"
+  - "abstraction"
+  - "coupling"
+aliases:
+  - "Don't Repeat Yourself"
+sources:
+  - 'Hunt & Thomas, "The Pragmatic Programmer", Addison-Wesley'
+status: draft
+verification: ok
+source_hash: "c55a3ce4a99e6812"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/dry-tension.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+在去重之前，先确认这些副本因同一理由变化、而且将来会一起变化。不要从少于三个真实、独立的消费者里提取共享抽象。把独立部署的团队之间有意的重复，当作一个解耦决策，而不是缺陷。如果一个统一后的抽象已经变成战场，就按「变化理由」的边界把它拆回去。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+DRY 说，每一条知识都应当只有一个权威表示——但知识的单位是「变化理由」，不是屏幕上的文本。事实（FACT）的重复是有害的：同一条业务规则写两遍，迟早有一处被单独改动，然后把 bug 送上生产。巧合（COINCIDENCE）的重复则无妨：两个看起来相似、却因不同理由变化的代码块应当保持分离，因为合并它们等于把必须分开演化的东西耦合在了一起。
+
+## 何时使用
+
+- 常量、公式或业务规则出现在多个必须保持一致的地方：税率、retry 上限、状态含义。
+- 一个 bug 在一份副本里修掉，又在另一份里再次出现。
+- 至少有两个——最好三个——独立消费者存在、且有一位指名 owner 接手维护时，才提取共享代码。
+- 在一个由单一团队端到端拥有的边界内合并模块。
+
+## 何时不该使用
+
+- 两个团队为了保持独立可部署而重复一个小 client——这份副本是解耦的代价（见「康威定律」）。
+- 仅仅看起来相似、却因不同理由变化的代码块——那是巧合，不是事实。
+- 出现少于三次——第三次才提取，不是第一次。
+- 会跨越所有权边界、又没有 owner 愿意维护产物的共享。
+
+## 反模式
+
+- 一个给每个消费者的差异都配一个 flag 的「统一」helper——现在比所有副本加起来还复杂。
+- 没有 owner、靠希望来 versioning 的共享库。
+- 只靠文本相似度工具去重，对每份副本为什么存在不做任何判断。
+- 因为删掉它就等于承认当初提取得太早，于是留着那个错误的抽象。
+
+## 代码示例
+
+错误示范——两个只是长得像的 API，共用一个 helper：
+
+```ts
+// 「统一」的 request helper：每个 option 都只为其中一个团队存在
+export function request(path: string, opts: ReqOpts) {
+  if (opts.oauth) { /* 仅 payments 使用：token 刷新 */ }
+  if (opts.retryBudget) { /* 仅 search 使用：backoff 策略 */ }
+  if (opts.noRedirect) { /* 仅 payments 使用：auditor 要求 */ }
+  return fetch(base(opts.env) + path, opts);
+}
+```
+
+正确示范——两个 client、两套策略；这份重复是有意的：
+
+```ts
+// Payments：每次调用取 token，禁止 redirect，客户端不 retry（幂等性在上游）
+export async function payRequest(path: string, init: RequestInit) {
+  const token = await paymentsToken();
+  return fetch(PAY_BASE + path, { ...init, redirect: "error",
+    headers: { ...init.headers, Authorization: token } });
+}
+
+// Search：无状态、便宜，带预算的 retry 是安全的
+export function search(q: string) {
+  return withRetry(() => fetch(SEARCH_BASE + "?q=" + encodeURIComponent(q)), 3);
+}
+```
+
+## 技术执法
+
+<Enforcement>
+判断靠人，但工具链能让判断保持诚实：
+
+- **把 copy-paste 检测当信号，不当闸门**：在 CI 里跑 jscpd / PMD CPD 并跟踪数字趋势；每一处命中是事实还是巧合，由人来判断。
+- **PR 模板里的三次法则**：提取共享代码，除作者自己的之外，还必须点名两个已存在的独立消费者，外加一位指名 owner。
+- **共享库要有 ADR**：一份简短的决策记录，写明这个抽象统一了什么、谁拥有它、如何 versioning（见「显式契约」）。
+- **耦合度量**：跟踪共享模块上的入向依赖；一个被发布节奏不同的多个团队消费的模块，需要显式的 versioning 策略，或者拆分。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+两个团队——payments 和 search——各自维护着一个很小的 HTTP client。一位好心的工程师把它们统一成一个 request helper，用 option 覆盖两边的需求。接下来一年，两个上游 API 越走越远：auth 模型不同、retry 语义不同、error 载荷不同。对这个 helper 的每次改动都会弄坏其中一个团队；每次修复又加一个 flag；文件里堆满了没人能完整测试的 option，在它上面提 PR 变成了跨团队谈判。两个团队都开始用本地 wrapper 绕开它。最终这个 helper 被拆回两个各司其职的 client，每一个都比共享版更小，交付速度也随之恢复——重复从来不是问题；过早的统一才是。（ilustratif——常见失败模式的合成案例，不是具名事故；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **DRY vs 解耦**：两个团队为了保持独立可部署而重复一个两百行的 client，可能是对的——共享版本会让他们的发布列车永远绑在一起。凡是康威定律划出真实组织边界的地方，代码重复往往就是那个边界的正确映射。
+- **DRY vs 过早抽象**：从单一样例中提取的抽象，编码的是今天对明天变化的猜测；一旦现实分岔，每个调用方都要跟它搏斗，而拆掉一个错误抽象的代价高于它当初替代掉的那点重复。三次法则的存在，就是为了强制在任何统一之前先拿到至少两个真实数据点。
+- **事实 vs 巧合——可操作的检验**：事实型重复（必须同步变化的一条规则：一个费率、一个状态码、一个公式）迟早会漏改其中一份、把 bug 送上生产——统一它。巧合型重复（看着相似，变化理由不同）买到的是独立演化——留着它，并留一句注释说明这是有意的。
+
+## 相关原则
+
+- [单一职责 · Single Responsibility](/zh/docs/principles/architecture/single-responsibility)——只沿着唯一的「变化理由」去统一。
+- [康威定律 · Conway's Law](/zh/docs/principles/architecture/conways-law)——组织边界决定共享代码是桥梁还是战场。
+- [你不会需要它 · YAGNI](/zh/docs/principles/design/yagni)——三次法则就是 YAGNI 在抽象上的应用。
+- [显式契约 · Explicit Contracts](/zh/docs/principles/api/explicit-contracts)——共享代码需要显式的、版本化的 contract。
+- [最小惊讶 · Least Astonishment](/zh/docs/principles/design/least-astonishment)——共享抽象不能让任何一方的消费者感到惊讶。
+
+## 参考文献
+
+- Hunt & Thomas, *The Pragmatic Programmer*（Addison-Wesley）— DRY 的出处；书中把它表述为一条关于知识、而不是关于文本的原则。（verification: ok——广泛可得；逐字引用前请先对照你手上的版本核实措辞。）

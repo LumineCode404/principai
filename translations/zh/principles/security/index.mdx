@@ -1,0 +1,19 @@
+---
+title: "安全 · Security"
+description: 限定授权范围、校验输入、默认关闭——让小 bug 无法升级成被删除的数据库。
+---
+
+这里的安全不是合规清单——它是关于范围与默认值的纪律。这个类别守护的失败链非常具体：宽泛凭证、缺失的 dry-run、未校验的输入、假设可信的默认值。下面的每条原则都指明了它的[技术执法](/docs/concepts/enforcement)——原则只建议，控制才执法。
+
+<Cards>
+  <Card title="最小权限 · Least Authority" description="只授予任务真正需要的权限——拥有全量写权限的清理脚本会把小 bug 变成被删除的数据库。" href="/zh/docs/principles/security/least-authority" />
+  <Card title="故障安全默认 · Fail-Safe Defaults" description="默认拒绝，显式授权——权限必须按动作挣得，而不是在被撤销前一直被假设拥有。" href="/zh/docs/principles/security/fail-safe-defaults" />
+  <Card title="输入校验 · Input Validation" description="在信任边界上校验每一个输入，再让它触碰状态——尽早、完整、毫不含糊地拒绝。" href="/zh/docs/principles/security/input-validation" />
+  <Card title="机密卫生 · Secrets Hygiene" description="机密绝不进代码、日志、工单、历史——git 什么都不忘，一次泄漏就是永久。" href="/zh/docs/principles/security/secrets-hygiene" />
+  <Card title="纵深防御 · Defense in Depth" description="没有任何单一控制是完美的——分层独立的控制，让一次失败永远变不成一次攻破。" href="/zh/docs/principles/security/defense-in-depth" />
+  <Card title="默认即安全 · Secure by Default" description="把安全配置作为默认值发布——安全应当是你自动得到的，而不是你记得开启的。" href="/zh/docs/principles/security/secure-by-default" />
+  <Card title="供应链审查 · Supply Chain Vetting" description="每个依赖都是一个对你的生产环境拥有 commit 权限的陌生人——先 pin、审计、审查，再采用。" href="/zh/docs/principles/security/supply-chain-vetting" />
+  <Card title="完全仲裁 · Complete Mediation" description="每条路径上的每次访问都过授权——缓存的权限和被遗忘的侧门仍然是门。" href="/zh/docs/principles/security/complete-mediation" />
+</Cards>
+
+[destructive-ops profile](/docs/profiles/destructive-ops) 为清理脚本、migration 和批量操作加载本类别的 must-follow 子集。

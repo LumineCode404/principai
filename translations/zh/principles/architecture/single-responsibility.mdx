@@ -1,0 +1,123 @@
+---
+title: "单一职责 · Single Responsibility"
+id: single-responsibility
+name: Single Responsibility
+summary: 一个模块应当只有一个变更理由——职责散开后，每次变更都变成横切风险。
+category: architecture
+type: principle
+severity: important
+applies_to:
+  - "architecture"
+  - "services"
+  - "libraries"
+  - "ui"
+tags:
+  - "cohesion"
+  - "modules"
+  - "change"
+aliases:
+  - "SRP"
+sources:
+  - 'Robert C. Martin, SOLID writings (Single Responsibility Principle)'
+status: draft
+verification: perlu
+source_hash: "e95cd8e40103fe93"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/architecture/single-responsibility.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让每个 module、service 和 component 只保有一个变更理由。当你准备往一个共享的工具类里塞数据库、邮件或 PDF 逻辑时，停下来，改为创建一个职责聚焦的 module。Review 时问一句：哪单一角色会要求这次变更——如果不相干的多个角色都会，先拆代码再合并。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+当恰好只有一种力量——一个团队、一条业务规则、一类变更——会要求修改某个 module 时，它就只有一个职责。职责关乎变更理由，而不是代码行数。一旦互不相关的变更流过同一个文件，每一次发布都会把毫无关系的团队、测试和失败模式耦合在一起。
+
+## 何时使用
+
+- 设计 service 与 module 边界，尤其是被其他团队消费的共享 library。
+- 决定新代码放哪里——「这放这儿合适吗」就是一个单一职责问题。
+- 察觉同样的文件在不同 sprint 里因为不相干的原因反复被改。
+- 拆分 monolith：沿职责接缝下刀，而不是沿技术层。
+
+## 何时不该使用
+
+- 一次性脚本和小工具——拆解只增加间接层，不增加安全。
+- 职责尚在探索中的早期原型——等它们稳定下来再拆。
+- 天职就是协调多个步骤的 orchestration 层。
+- 经过实测、性能关键的内部循环——多一层间接有真实、已被证明的代价。
+
+## 反模式
+
+- 一个收集了所有团队边角料的 Utils、Common 或 Manager 类。
+- 一个既渲染 PDF、又写数据库、还发邮件的 service 函数。
+- 在共享 component 上「再加一个小 helper」，直到每个团队的变更都在打架。
+- 一个既抓数据、又做变换、还负责渲染的 UI 组件——一个文件里三个变更理由。
+
+## 代码示例
+
+错误示范——一个 module，三个变更理由（版式、持久化、投递）：
+
+```ts
+// utils.ts——设计师、DBA 和运维都会把这个文件改坏
+export class Utils {
+  static async invoice(order: Order) {
+    const pdf = renderInvoice(order);          // 设计师改这里
+    await db.orders.insert(order.audit);       // DBA 改这里
+    await smtp.send(invoiceMail(order, pdf));  // 运维改这里
+  }
+}
+```
+
+正确示范——每个 module 一个变更理由，由调用方接线：
+
+```ts
+// billing/invoice-pdf.ts——只有版式变化时才改
+export const renderInvoice = (o: Order) => pdf.build(layoutFor(o));
+// billing/order-store.ts——只有持久化变化时才改
+export const saveOrder = (o: Order) => db.orders.insert(o.audit);
+// notify/mailer.ts——只有投递变化时才改
+export const sendInvoiceMail = (o: Order, p: Pdf) => smtp.send(invoiceMail(o, p));
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠边界执法，而不是靠意图：
+
+- **CI 中的 import 边界规则**（dependency-cruiser、eslint-plugin-boundaries）：声明每个目录可以 import 什么；共享工具不得 import 基础设施。
+- **CODEOWNERS**：每个 module 一个归属团队——一个 PR 碰到两个所有者的 module，就是需要拆分的自动信号。
+- **规模与内聚闸门**：对文件长度和导出符号数量的 lint 限制，用作坏味道探测器，而非硬性法律。
+- **Review 问题**：「谁会要求这次变更？」——多过一个答案，就多过一个职责。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个开票团队为了「省得为结构扯皮」，保留了一个共享的 Utils 类。两年间，它长出了 PDF 渲染、税务舍入、数据库访问和一个 SMTP client。每趟发布列车都排在它后面：市场部改版式、财务改舍入、运维改邮件 relay——全在同一个文件里，全在互相冲突。有一次舍入热修复上线时，带进了一个谁也没想要的 PDF 变更，因为两者住在同一个函数里。更早拆分并不能让每一次事故都不发生，但本可以把每一次都缩小成一次单团队、单文件的回滚。（ilustratif——常见失败模式的合成案例；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **单一职责 vs. 保持简单**：每次拆分都付出文件与间接层的成本。等第二个变更理由真正到来时再拆，不要为想象中的未来提前拆。
+- **单一职责 vs. DRY 的张力**：去重把相似的代码拉到一起，这条原则把不同的变更理由推开。只有当两份副本会因同一个理由变更时，才抽取共享代码。
+- **拆分 vs. 连贯**：切过了共享上下文的临界点，一个想法就散落进许多文件。一个 module 应当与它的职责一样小——且不再更小。
+
+## 相关原则
+
+- [依赖倒置 · Dependency Inversion](/zh/docs/principles/architecture/dependency-inversion)——把策略与基础设施分开，职责才守得干净。
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——职责是在运行的代码中发现的，不是事前设计出来的。
+- [保持简单 · Keep It Simple](/zh/docs/principles/design/kiss)——每次拆分都要与它增加的间接层过秤。
+- [DRY 的张力 · DRY, With Judgment](/zh/docs/principles/design/dry-tension)——跨变更理由的重复，好过虚假的统一。
+- [最小惊讶 · Least Astonishment](/zh/docs/principles/design/least-astonishment)——每个行为一个可预测的归宿。
+
+## 参考文献
+
+- Robert C. Martin, SOLID writings——单一职责原则作为 SOLID 的「S」（verification: perlu——精确引用前先定位具体文章）。
+- Martin, *Agile Software Development: Principles, Patterns, and Practices*——关于内聚与变更的专著篇幅论述（verification: perlu）。

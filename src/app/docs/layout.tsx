@@ -2,6 +2,7 @@ import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import type { ReactNode } from "react";
 import { Github } from "lucide-react";
 import { source } from "@/lib/source";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
@@ -10,7 +11,6 @@ export default function Layout({ children }: { children: ReactNode }) {
       nav={{
         title: (
           <span className="font-display flex items-center gap-2 font-extrabold text-white">
-            { }
             <img
               src="/images/logo-icon-48.png"
               alt=""
@@ -18,11 +18,12 @@ export default function Layout({ children }: { children: ReactNode }) {
               height={24}
               className="rounded-md"
             />
-            PRINCIPAI
+            Principai
           </span>
         ),
         url: "/",
         transparentMode: "top",
+        children: <LanguageSwitcher current="en" />,
       }}
       links={[
         {

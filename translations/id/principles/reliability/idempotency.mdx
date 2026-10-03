@@ -28,9 +28,9 @@ source_hash: "79feaa36bede30d9"
 translation_status: draft
 ---
 
-<!-- Terjemahan bahasa Indonesia dari content/docs/principles/reliability/idempotency.mdx -->
-<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
-<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/reliability/idempotency.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
 Buat setiap operasi mutating aman untuk dijalankan lebih dari sekali. Pasang idempotency key yang stabil pada setiap write yang memindahkan uang, mengirim side effect, atau mengubah state, dan periksa key itu sebelum eksekusi. Jika sebuah operasi tidak bisa dibuat idempotent, berhenti dan minta persetujuan manusia sebelum menghubungkannya ke retry path, queue consumer, atau skrip yang mungkin berjalan dua kali.

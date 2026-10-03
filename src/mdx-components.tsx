@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 import { SeverityBadge } from '@/components/principle-meta';
 
 /**
- * Custom PRINCIPAI components.
+ * Custom Principai components.
  * Severity badges and section blocks used inside principle files.
  */
 function Severity({ level }: { level: 'critical' | 'important' | 'advisory' }) {

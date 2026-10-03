@@ -11,7 +11,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-3">
             <img
               src="/images/logo-icon-96.png"
-              alt="PRINCIPAI owl logo"
+              alt="Principai owl logo"
               width={44}
               height={44}
               className="rounded-lg"
@@ -19,7 +19,7 @@ export function SiteFooter() {
             />
             <div>
               <p className="font-display text-lg font-extrabold leading-tight text-white">
-                PRINCIPAI
+                Principai
               </p>
               <p className="text-sm text-[#8B89A0]">
                 Principles are advisors. Controls are the enforcement.
@@ -33,6 +33,12 @@ export function SiteFooter() {
               className="text-[#8B89A0] transition-colors hover:text-white"
             >
               Documentation
+            </Link>
+            <Link
+              href="/registry"
+              className="text-[#8B89A0] transition-colors hover:text-white"
+            >
+              Registry
             </Link>
             <Link
               href="/docs/principles"
@@ -53,10 +59,16 @@ export function SiteFooter() {
               Evals
             </Link>
             <Link
-              href="/docs/cli"
+              href="/zh"
               className="text-[#8B89A0] transition-colors hover:text-white"
             >
-              CLI
+              中文
+            </Link>
+            <Link
+              href="/id"
+              className="text-[#8B89A0] transition-colors hover:text-white"
+            >
+              Bahasa Indonesia
             </Link>
             <a
               href="/llms.txt"
@@ -69,7 +81,7 @@ export function SiteFooter() {
 
         <div className="mt-8 flex flex-col items-start justify-between gap-3 border-t border-[rgba(77,75,91,0.35)] pt-6 text-sm sm:flex-row sm:items-center">
           <p className="text-[#8B89A0]">
-            © {new Date().getFullYear()} PRINCIPAI. This library is an additional layer — it does
+            © {new Date().getFullYear()} Principai. This library is an additional layer — it does
             not replace technical controls.
           </p>
           <a

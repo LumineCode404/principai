@@ -1,0 +1,124 @@
+---
+title: "显性失败 · Fail Visible"
+id: fail-visible
+name: Fail Visible
+summary: 大声地、立刻地失败——静默失败把一个小 bug 变成几周后才发现的损坏状态。
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - "services"
+  - "libraries"
+  - "ci"
+  - "distributed"
+tags:
+  - "errors"
+  - "fail-fast"
+  - "silence"
+aliases:
+  - "Fail Loudly"
+  - "No Silent Failure"
+sources:
+  - 'Waldo et al., "A Note on Distributed Computing", 1994'
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: perlu
+source_hash: "ffdb846b9ce43614"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/fail-visible.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让每一次失败都大声、立刻、可归因：抛出错误，以非零值退出，让 build 变红。绝不吞掉 exception，绝不在操作失败后返回默认值，绝不在前置条件已失败时继续往下走。一个静默的部分结果比一次 crash 更糟——如果你无法把一个失败归类为无害，就把它端到人面前。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+显性失败意味着错误在失败发生的那一点就自我宣告——一个 exception、一个非零退出、一个红色的 build——而不是把错误的数据传向下游。它的反面，静默失败，把一个五分钟就能修好的问题变成几周的被污染状态：系统一边「正常工作」，一边悄悄撒谎。fail-fast 是这条规则在运维上的另一半：缺陷越早停止执行，停止的位置就离导致它的缺陷越近。
+
+## 何时使用
+
+- 数据 pipeline：一条坏记录必须响亮地分流，而不是把一个字段清零后继续。
+- CI/CD 与脚本：非零退出与红色 build；一个什么都没做却变绿的检查是在撒谎。
+- 库设计：非法输入或不可能状态直接 raise，绝不猜意图。
+- 分布式调用：timeout 与错误返回给调用方，绝不吸收进默认值。
+
+## 何时不该使用
+
+- 尽力而为的界面点缀（头像加载失败显示占位图）——那是优雅降级，差别在意图：一个经过设计、可见的 fallback，不是一次意外的吞没。
+- 受监督 retry 循环内部的暂时性错误——前提是预算花光后 supervisor 会报警（见「重试预算」）。
+- 安全关键的校验路径——在这里「失败」还必须意味着「fail closed」：可见但放行是一次入侵（见「故障安全默认」）。
+
+## 反模式
+
+- 一个吞掉一切并返回 None 的 except 子句——调用方分不清「没有数据」和「没法查」。
+- 一个在自己的工具缺失时也退出为零的 CI 检查，「好让 build 保持绿色」。
+- API 返回成功，错误却写进没人读的 log。
+- 配置解析失败时退回默认配置——service 带着未知的设置继续运行。
+- 一个内部步骤没跑、却返回成功的校验函数。
+
+## 代码示例
+
+错误示范——校验被静默绕过：
+
+```python
+def find_user_or_none(payload):
+    try:
+        return store.find_user(payload["user_id"])
+    except Exception:
+        return None            # 调用方看到的是「没有这个用户」；store 挂了这件事看不见
+```
+
+正确示范——响亮、立刻、可归因：
+
+```python
+def find_user(payload):
+    try:
+        return store.find_user(payload["user_id"])
+    except KeyError as e:
+        raise InvalidPayload(f"missing field {e}")          # 输入错误，具名
+    except StoreUnavailable as e:
+        raise LookupFailed("user store unreachable") from e  # 基础设施错误，链式、可见
+```
+
+## 技术执法
+
+<Enforcement>
+静默是 lint 和设计问题——用机械手段执法：
+
+- **lint 规则**：空 catch 块与一刀切吞 exception，在多数 linter 的默认规则集中都会让 CI 失败；把它们打开。
+- **脚本纪律**：项目的 bash 模板自带严格错误模式（出错即退、未定义变量即失败、pipe 失败即失败）；每个脚本继承它。
+- **Dead-man switch**：必须持续运行的进程发布心跳；心跳消失就是警报——一个静默的僵尸进程无处可藏。
+- **Review 清单**：每一个新的 except/catch 分支都必须说明它对错误做了什么。
+- **聚合可见性**：单个响亮失败的总和，以 dashboard 上的错误率保持可见（见「可观测性优先」）。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2014 年 2 月，Apple 修复了一个在其 SSL/TLS 代码里交付了一段时间的 TLS 校验 bug：一行重复的「goto fail;」，因为周围的 if 语句没有使用花括号而被无条件执行，带着一个为零（成功）的错误值跳到了错误处理标签。剩余的签名检查被跳过，受影响的系统无论服务器签名如何都可能接受连接。没有报错、没有 log——这个失败模式就是「成功」，这个 bug 只能靠读代码发现，靠盯生产是盯不出来的。分析文章：https://www.imperialviolet.org/2014/02/22/applebug.html ——那个分支上的一次显性失败，本可以把一次静默的安全绕过化成一份普通的 bug 报告。
+</RealCase>
+
+## 张力与权衡
+
+- **显性失败 vs. 韧性**：吞掉并继续能让 demo 活下去，却在毒化数据；按「错误数据以后还能不能恢复」来权衡——通常不能。
+- **显性失败 vs. 优雅降级**：在拥有决策权的层大声失败，在拥有用户体验的层可见地降级；同一个错误，在库里是一次 crash，在 UI 上是一条友好的横幅。
+- **与「最小惊讶」权衡**：大声意味着清晰、可归因，而不是吵闹——一面墙一样的相同 stack trace 藏起那唯一真实信号的效果，与静默一样好。
+
+## 相关原则
+
+- [可观测性优先 · Observability First](/zh/docs/principles/reliability/observability-first)——被抛出的错误需要有 metric 和 trace 在那里等着它。
+- [优雅降级 · Graceful Degradation](/zh/docs/principles/reliability/graceful-degradation)——UX 层经过设计、可见的 fallback。
+- [故障安全默认 · Fail-Safe Defaults](/zh/docs/principles/security/fail-safe-defaults)——在校验路径上，可见地失败还必须意味着 fail closed。
+- [重试预算 · Retry Budget](/zh/docs/principles/reliability/retry-budget)——只有暂时的、可见的错误才配进 retry 循环。
+
+## 参考文献
+
+- Adam Langley, *Apple's SSL/TLS bug*, 2014 — https://www.imperialviolet.org/2014/02/22/applebug.html
+- Waldo et al., *A Note on Distributed Computing*, 1994 — 分布式系统里的 partial failure 天生是静默的；可见性必须被构建出来（verification: perlu）。
+- Google SRE Book — https://sre.google/sre-book/（postmortem 文化：被看见的失败才会被修复）。

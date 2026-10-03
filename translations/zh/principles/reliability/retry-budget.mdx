@@ -1,0 +1,125 @@
+---
+title: "重试预算 · Retry Budget"
+id: retry-budget
+name: Retry Budget
+summary: 重试会放大事故——指数退避加 jitter，再加上对总重试量的硬预算。
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - "distributed"
+  - "services"
+  - "api"
+tags:
+  - "retries"
+  - "backoff"
+  - "load"
+aliases:
+  - "Retry with Backoff and Budget"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+  - 'Google SRE Workbook, https://sre.google/workbook/'
+status: draft
+verification: perlu
+source_hash: "b846311683a2d472"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/retry-budget.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把每一次 retry 都当作一笔赌注：只有当失败是暂时的、且被调用方还有余量时，这笔赌注才会赢。使用带 full jitter 的指数 backoff，给每个请求的尝试次数设上限，并对总重试量执行全局预算——预算花光就快速失败、把错误亮出来。绝不要上线一个三样限制缺一的 retry 循环。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+retry 预算是对「重试最多可以额外增加多少负载」设下的一个硬性、可测量的上限——例如重试最多只能占全部请求的一个固定小份额——并配合指数 backoff 与 jitter，让尝试在时间上散开。重试是把希望换算成负载；当被调用方已经在失败时，这些负载恰好落在最弱的组件上，把一次抖动变成一场中断。预算就是让希望付得起代价的东西。
+
+## 何时使用
+
+- 任何带可超时调用的远端依赖（HTTP、RPC、数据库、broker）的客户端。
+- 会把失败消息重新入队或重新投递的事件驱动 consumer。
+- 会重跑失败条目的批处理 pipeline。
+- 会被别人嵌入的 SDK 与库——它们的 retry 默认值会变成别人的架构（见「海勒姆定律」）。
+
+## 何时不该使用
+
+- 不带 key 的非幂等操作——给没有幂等性的支付做重试是正确性 bug，不是韧性。
+- 调用方已经离开的延迟敏感请求——用户早已放弃页面之后再重试，是没有任何受益者的纯负载。
+- 客户端错误与业务拒绝——重试一个校验错误，是一个多了几步的循环。
+- 严格有序的工作——迟到的一次重试会让状态乱序生效。
+
+## 反模式
+
+- 立即重试、固定次数、没有 jitter——每个客户端都在同一时刻齐步开火，恰好挑目标最虚弱的时候。
+- 每一层都嵌套重试：client、gateway、service、数据库各重试三次；乘数层层叠加。
+- 恰好在依赖过载时重试得更狠——放大了本该触发甩负载的那个信号。
+- retry 策略由每个开发者在每个调用点各自决定，没有全局视角。
+
+## 代码示例
+
+错误示范——同步、无界的重试：
+
+```python
+for attempt in range(3):
+    try:
+        return search_client.query(q)      # 立即重试，到处齐步走
+    except Timeout:
+        continue                           # 没有 jitter、没有预算、没有 deadline
+raise SearchUnavailable(q)                 # 在把一个垂死的 service 锤完之后
+```
+
+正确示范——backoff、jitter、deadline 与全局上限：
+
+```python
+def search(q, deadline):
+    for attempt in range(3):
+        if monotonic() >= deadline:
+            raise SearchUnavailable(q)                       # 调用方已离开：停止重试
+        sleep(random.uniform(0, 0.1 * 2 ** attempt))         # 指数 + full jitter
+        try:
+            return search_client.query(q, timeout=0.2)       # 每次尝试都有硬 timeout
+        except (Timeout, Unavailable):
+            continue
+    raise SearchUnavailable(q)
+```
+
+## 技术执法
+
+<Enforcement>
+重试是系统属性，不是每个开发者的个人偏好——集中执法：
+
+- **client 库默认值**：backoff、jitter、尝试上限与可重试状态码列表随标准 client 一起发布；裸的 retry helper 在 code review 里直接拒绝。
+- **调用方的 retry 预算**：token bucket 或 circuit breaker 限制每 N 个请求最多 1 次重试；预算见底时，请求带着响亮的错误快速失败。
+- **服务端保护**：被调用方区分并拒绝过量的 retry 流量（带 retry-after 指引的 busy 响应），让调用方学会收手，而不是继续锤。
+- **deadline 传播**：每个请求携带自己的剩余耐心；嵌套重试无法超出调用方的 deadline 成倍放大。
+- **测试**：在 staging 里杀死一个依赖，必须产生有界、可测的额外负载——表现为一次凸起，而不是一场风暴。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一次部署期间，一个下游依赖抖了六十秒。每个客户端都立即重试——三次尝试、没有 jitter——依赖刚一恢复，retry 流量就超过了正常流量。恢复中的 service 接下来四十分钟都在处理一队齐刷刷的 retry，而不是用户请求；监控图上，依赖早已恢复健康之后很久，调用方仍在失败。带 jitter 的 backoff 加上硬预算，本可以把一场自找的部分中断，化成错误率上一次短暂的凸起。（verification: perlu——公开 postmortem 里有对 retry storm 事故的描述；belum digali——引用任何具体案例前请先核实原始来源。）
+</RealCase>
+
+## 张力与权衡
+
+- **重试预算 vs. 延迟 SLO**：激进重试在好时候买到几毫秒的可用性，在坏时候付出几分钟的中断；按坏时候做预算。
+- **重试预算 vs. 幂等性**：只有幂等性已经成立的地方，重试才是安全的；先让操作安全，再让重试自动化。
+- **与「显性失败」权衡**：预算耗尽的失败必须以响亮的错误现身——一个静默吞掉它们的框架，把不可用变成了数据丢失。
+
+## 相关原则
+
+- [幂等性 · Idempotency](/zh/docs/principles/reliability/idempotency)——任何自动重试的前提条件。
+- [优雅降级 · Graceful Degradation](/zh/docs/principles/reliability/graceful-degradation)——对失败的依赖甩负载，而不是继续喂。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——预算花光必须报警，而不是消失。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——你的 retry 默认值会变成别人的生产行为。
+
+## 参考文献
+
+- Google SRE Book — https://sre.google/sre-book/（处理过载与甩掉过量请求）。
+- Google SRE Workbook — https://sre.google/workbook/（「Cascading Failures」一章讲重试放大）。

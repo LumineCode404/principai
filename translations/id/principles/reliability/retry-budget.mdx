@@ -22,9 +22,9 @@ source_hash: "b846311683a2d472"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/reliability/retry-budget.mdx -->
-<!-- source_hash EN: b846311683a2d472 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/reliability/retry-budget.mdx */}
+{/* source_hash EN: b846311683a2d472 */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Treat every retry as a bet that pays off only when the failure is transient and the callee has spare capacity. Use exponential backoff with full jitter, cap attempts per request, and enforce a global budget on total retry volume — when the budget is spent, fail fast and surface the error. Never ship a retry loop that lacks all three limits.

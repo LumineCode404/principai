@@ -1,0 +1,123 @@
+---
+title: "幂等性 · Idempotency"
+id: idempotency
+name: Idempotency
+summary: 同一操作执行两次必须产生与一次相同的结果——意外的重跑变得无聊，而不是致命。
+category: reliability
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "scripts"
+  - "distributed"
+  - "queues"
+  - "database"
+  - "ml"
+tags:
+  - "retries"
+  - "safety"
+  - "state"
+aliases:
+  - "Idempotent Operations"
+sources:
+  - 'Waldo et al., "A Note on Distributed Computing", 1994'
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+status: draft
+verification: perlu
+source_hash: "79feaa36bede30d9"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/idempotency.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+让每一个变更型操作都安全到可以重复执行。为每一笔动钱、发出副作用或改变状态的写入附加一个稳定的 idempotency key，并在执行之前先检查它。如果某个操作无法被做成幂等的，先停下来征得人类同意，再把它接进 retry 路径、queue consumer，或一个可能被运行两次的脚本。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+一个操作是幂等的，当执行 N 次之后系统的状态与执行一次时相同。在分布式系统里这不是锦上添花：timeout 是模糊的（请求可能已经提交），投递保证是 at-least-once，而人类总会重跑脚本。幂等性把「我的请求到底落没落地？」从一场数据完整性危机，变成一次无聊的重发。
+
+## 何时使用
+
+- 客户端可能重试的一切：支付、订单创建、资源开通、消息发送。
+- Queue consumer——at-least-once 投递是大多数 broker 的诚实默认值。
+- 部分失败之后会被人类重跑的 cron job、backfill 与清理脚本。
+- ML pipeline：feature backfill、可重跑的训练步骤、数据集物化。
+
+## 何时不该使用
+
+- 纯读取——本来就安全；围着它们造去重机制是白挣的复杂度。
+- 真正的一次性状态（一张正在被核销的 voucher）——把它建模成显式的状态迁移，而不是「可以安全重试」。
+- 便宜、可重算的写入（cache 刷新）——重复按构造就无害。
+
+## 反模式
+
+- 一个不带 idempotency key 的扣款调用，外面还套着一层 retry 循环。
+- 支付调用与「标记已处理」的更新之间发生 crash——重新投递就再扣一次款。
+- 以 DELETE 开头、并且指望着操作员恰好只跑一次的 backfill 脚本。
+- 把 timeout 当成「肯定失败了」，然后重复一次非幂等的调用。
+
+## 代码示例
+
+错误示范——重试本身就是 bug：
+
+```python
+def handle_event(event):
+    # 没有 idempotency key：一次 timeout 加一次客户端重试，就扣两次款
+    charge = gateway.charge(event.amount, event.token)
+    db.run("UPDATE orders SET status = 'paid' WHERE id = ?", event.order_id)
+```
+
+正确示范——事件自身的标识就是 key：
+
+```python
+def handle_event(event):
+    key = f"order:{event.order_id}:charge"
+    if db.one("SELECT 1 FROM processed_events WHERE key = ?", key):
+        return                                # 重新投递是正常现象，不是错误
+    # provider 在模糊的 timeout 窗口内按 key 去重
+    gateway.charge(event.amount, event.token, idempotency_key=key)
+    # key 上的唯一索引才是对付并发重复的真正防线
+    db.run("INSERT INTO processed_events (key) VALUES (?)", key)
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则在存储层和协议层执法，不是靠代码写得小心：
+
+- **API 边缘的 idempotency key**：gateway 拒绝不带 Idempotency-Key 头的非安全方法调用，并对重复请求重放已存储的首次响应。
+- **唯一约束作为最后一道防线**：自然 key（event ID、order ID）配唯一索引；用带冲突处理的 INSERT，而不是 check-then-write 的竞态。
+- **消费端去重**：在任何副作用运行之前先按消息标识去重，不依赖 broker 给的保证。
+- **脚本的运行标记**：每个变更型 job 记录一个完成标记；重跑一个已完成的 job 是一次被记录的 no-op。
+- **CI 中的重放测试**：把 fixture 集合里的每条消息重投一遍，再 diff 最终状态——diff 必须为空。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+（ilustratif）一个结账服务调用支付 provider 时不带 idempotency key。在高负载下，provider 调用超时六十秒；客户端的 retry 策略对每个请求触发三次；provider 一恢复，每一次重试都落了地。客户被扣两次、三次款，工单与人工对账随之而来，财务损失了好几天。每个订单一个稳定 key，本可以把整场事故化成一次缓存的首响应。（verification: perlu——公开 postmortem 里确实存在重复扣款事故；belum digali——引用任何具体案例前请先阅读原始来源。）
+</RealCase>
+
+## 张力与权衡
+
+- **安全 vs. 延迟**：key 查表和去重表给每次写入加几毫秒；它们消灭的是一整类 incident。这几毫秒值得付。
+- **幂等性 vs. 重试预算**：只有幂等的操作才配得上自动 retry；两条原则有先后——先把操作变安全，再给 retry 做预算。
+- **幂等性 vs. 意图**：key 的范围划得太宽（按客户而不是按订单）会静默拦截合法的重复购买。把 key 划在操作的自然标识上，而不是操作者上。
+
+## 相关原则
+
+- [重试预算 · Retry Budget](/zh/docs/principles/reliability/retry-budget)——重试会放大负载；只有幂等性成立的地方才付得起。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——限制一次坏动作；幂等性限制一次重复动作。
+- [仅追加日志 · Append-Only Logs](/zh/docs/principles/data/append-only-logs)——稳定的事件 ID 让重放与去重变得自然。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——去重漏掉的一次必须大声暴露，而不是静默损坏。
+
+## 参考文献
+
+- Waldo et al., *A Note on Distributed Computing*, 1994 — partial failure 意味着你无法知道被调用方是否已执行；幂等性让这种模糊变得可以幸存（verification: perlu——引用前请先确认原文表述）。
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — 幂等性是 effectively-once 处理的基础（verification: perlu）。

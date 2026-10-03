@@ -22,9 +22,9 @@ source_hash: "8a1be40ed581c6c7"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/data/expand-contract.mdx -->
-<!-- source_hash EN: 8a1be40ed581c6c7 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/data/expand-contract.mdx */}
+{/* source_hash EN: 8a1be40ed581c6c7 */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Never deliver a schema or interface change in one breaking step. Add the new structure alongside the old, migrate data and readers gradually, and remove the old path only when usage telemetry proves nothing reads it — every intermediate state must survive with mixed versions running. If a migration would drop, rename, or repurpose something that other code may still read, stop and verify the consumers first.

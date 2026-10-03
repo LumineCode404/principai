@@ -1,0 +1,122 @@
+---
+title: "你不会需要它 · YAGNI"
+id: yagni
+name: You Aren't Gonna Need It
+summary: 为已证明的需求构建，不为想象中的未来——投机性的通用性是你永远在付利息的复杂度。
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "architecture"
+  - "libraries"
+  - "services"
+  - "product"
+tags:
+  - "speculation"
+  - "scope"
+  - "complexity"
+aliases:
+  - "YAGNI"
+sources:
+  - 'Kent Beck, "Extreme Programming Explained", Addison-Wesley'
+status: draft
+verification: ok
+source_hash: "d73e1a2a3b088147"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/design/yagni.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+只实现当前、具体的需求所要求的东西。把每个抽象、option 和集成项回溯到一个真实的 user story 或 incident；找不到出处的，先标记出来，动工之前问过人类。当第二个真实需求到来时，手里握着两个样例再 refactor，而不是凭一个猜测。把「我们说不定哪天会需要」当作一项成本，而不是一个理由。
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## 定义
+
+你对未来的预测会出错，所以为想象中的需求构建，意味着为那些多半永远不会到来的能力支付复杂度利息——而当真实需求真的到来时，它很少长得像当初想象的那个。YAGNI 是剪掉投机性通用性的剪刀：支持五种数据库的配置系统、只有一个 plugin 的 plugin 框架、没人拨动过的 flag。等第二个真实用例出现时再 refactor，几乎总是比当初的投机更便宜。
+
+## 何时使用
+
+- 新增任何抽象、接口或配置 option 时。
+- 产品与架构规划：范围是由你拒绝构建的东西定义的。
+- 库设计：每一个 public export 都是你必须永远维护的表面（见「海勒姆定律」）。
+- 还没有已证明的消费者的基础设施与 migration 决策。
+
+## 何时不该使用
+
+- 公开 contract：为那些你无法协调的消费者规划增量式、版本化的变更（见「版本化契约」）。
+- 不可逆决策：安全基本项和数据布局选择，事后改造成本极高，要特意提前买下。
+- 合规、法律与合同要求——哪怕那些没有 user story 的。
+- 为已知的、经过测量的增长曲线预留的容量余量。
+
+## 反模式
+
+- 公司六年来一直只跑一种数据库，却做一个支持五种数据库的存储抽象。
+- 第二个 plugin 还不存在，就先搭好 plugin 系统。
+- 生产环境用户为零的 option、strategy 和 feature flag。
+- 「现在就泛化，免得以后再弄」——以后真的来的时候，需求早就变了。
+- 仍然必须测试、必须写文档的死参数组合。
+
+## 代码示例
+
+错误示范——投机性通用：
+
+```ts
+// 为五种后端而建的存储层；我们跑的是 Postgres，而且只有 Postgres
+interface ArtifactStore {
+  get(id: string): Promise<Buffer>;
+  put(id: string, blob: Buffer): Promise<void>;
+  list(prefix: string): Promise<string[]>;
+}
+class S3Store implements ArtifactStore { /* 90 行，生产环境从未用过 */ }
+class GcsStore implements ArtifactStore { /* 90 行，压根从未用过 */ }
+```
+
+正确示范——一个函数服务一个已证明的需求：
+
+```ts
+// 直接、无聊、可测试；以后换后端，是拿着真实规格干一天的活
+export async function getArtifact(id: string): Promise<Buffer> {
+  const row = await db.query("SELECT blob FROM artifacts WHERE id = $1", [id]);
+  return row.blob;
+}
+```
+
+## 技术执法
+
+<Enforcement>
+让投机性的表面先可见，然后在 review 时拒绝它：
+
+- **死代码与未使用 export 检测**：在 CI 里跑 knip / ts-prune（Python 用 vulture）；投机性通用性会以无人引用的 export 和空分支的形式现形。
+- **option 覆盖规则**：任何一个 option flag，只要没有测试覆盖它的两种状态，就过不了 review——没人测它，就没人用它。
+- **PR 模板字段**：「每个新的扩展点对应哪个 user story 或 incident？」——答不上来，就不合入。
+- **抽象的三次法则**：第三个真实、独立的消费者才是提取的触发点；第一个从来不是。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+一个平台团队做了一套配置系统，纸面上可以对接五种数据库，通过一个 driver registry 加上按 driver 拆分的 dialect 模块来选择。而这家公司在生产环境里只跑一种数据库，已经跑了六年。五个 driver 里有四个从未被任何真实负载碰过：它们没有像样的测试、阻塞依赖升级，还把每次 schema 变更都变成跨 dialect 谈判。当第二个数据存储真的到来时，它的查询模式反正也不符合那个抽象，工程师们干脆为它写了一个小而直接的 client——到这一步，这个 registry 支持的恰好是实际在用的两个系统中的一个。那些没人用的 driver 多年后才被删掉，一次一个阻塞升级的 release。（ilustratif——合成案例，不是具名事故；verification: perlu）
+</RealCase>
+
+## 张力与权衡
+
+- **YAGNI vs 版本化契约**：内部代码不做投机；公开 contract 是另一回事——为无法协调的消费者规划增量式、版本化的变更，是契约层面的审慎，不是幻想。投机性复杂度在私有代码里照样禁用；对变化的刻意预留，则是在公开 contract 里预算好的。
+- **YAGNI vs 不可逆性**：有些决策事后改造成本极高——静态加密、数据分区、租户隔离。当将来做错的后果是灾难性时，提前买下是风险管理，不是投机（见「爆炸半径」）。
+- **YAGNI vs option 压力**：利益相关方总想要「就加一个 option」，因为 option 看起来免费。它不免费：每一个都是要测试、要写文档、要永远维护的排列组合——谈判时把范围往下谈，而不是把 option 往上堆。
+
+## 相关原则
+
+- [保持简单 · Keep It Simple](/zh/docs/principles/design/kiss)——投机性功能是偶然复杂度的主要来源。
+- [DRY 的张力 · DRY, With Judgment](/zh/docs/principles/design/dry-tension)——提取共享代码之前先过三次法则。
+- [海勒姆定律 · Hyrum's Law](/zh/docs/principles/api/hyrum-law)——你发布的任何东西都会被人依赖，所以别发布投机性的表面。
+- [盖尔定律 · Gall's Law](/zh/docs/principles/architecture/gall-law)——让系统从能用的东西里长出来，而不是从未来的蓝图。
+- [版本化契约 · Versioned Contracts](/zh/docs/principles/api/versioned-contracts)——在那类工作里，为变化做规划本来就是职责本身。
+
+## 参考文献
+
+- Kent Beck, *Extreme Programming Explained*（Addison-Wesley）— YAGNI 作为一项 XP 纪律：实现你现在需要的，其余一切等被要求时再做。（verification: ok——广泛可得。）

@@ -1,0 +1,122 @@
+---
+title: "供应链审查 · Supply Chain Vetting"
+id: supply-chain-vetting
+name: Supply Chain Vetting
+summary: 每个依赖都是一个握有你生产环境 commit 权限的陌生人——先 pin、审计、review，再采用。
+category: security
+type: principle
+severity: important
+applies_to:
+  - "infrastructure"
+  - "libraries"
+  - "ci"
+  - "services"
+tags:
+  - "dependencies"
+  - "supply-chain"
+  - "pinning"
+  - "audit"
+aliases:
+  - "Vet Your Dependencies"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'semver.org, "Semantic Versioning"'
+status: draft
+verification: ok
+source_hash: "6d5305599ad722b6"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/security/supply-chain-vetting.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+把每个依赖当作「会带着你的权限在生产环境里运行」的代码。绝不安装没有检查过的 package：维护者历史、发布活跃度、install 脚本、传递依赖足迹。始终 pin 到精确版本并 commit lock 文件；绝不自动解析版本区间。如果某个依赖突然换了维护者或变了行为，先停下来调查，再升级。
+</AIInstruction>
+
+<Severity level="important" />
+
+## 定义
+
+第三方代码从你安装它的那一刻起，就以你的权限、在你的信任边界之内执行。供应链审查意味着每个依赖都是被慎重选择的——有人维护、被理解、足够精简——然后用 lock 文件和 digest 固定住，让你审计过的就是你在运行的。问题从来不是「这个 package 有没有用」，而是「这个 package、它的维护者状况、以及它拖进来的一切，是否值得用我的凭证去执行」。
+
+## 何时使用
+
+- 向生产代码库添加任何新依赖，直接的或传递的。
+- CI 与构建镜像——陌生人的代码在有你的 secret 在场的地方运行。
+- 装进 pipeline 的基础镜像、action、插件和 CLI。
+- 例行维护：重新审视你已有的依赖清单。
+
+## 何时不该使用
+
+- 从不触碰生产状态或凭证、有时间盒的 prototype——在转正之前删掉，或补一次审查。
+- 当 vendoring 一个微小、冻结的工具（读它、审它、拷贝它、pin 它）比维持一段长期信任关系更划算的时候。
+- 第一方内部 package——审查被所有权取代：被信任的维护者就是你自己的团队。
+
+## 反模式
+
+- 装上第一个名字对得上报错信息的 package。
+- manifest 里写版本区间，下一次干净构建悄悄解析出与上次不同的代码。
+- 把项目 README 里的 install 脚本直接 pipe 进 CI。
+- 一个装着几百个没人选过、也没人叫得出名字的 package 的 lock 文件。
+- 拿下载量和 star 数当作维护健康度与维护者延续性的代理指标。
+
+## 代码示例
+
+错误示范——浮动区间，盲装：
+
+```bash
+npm install some-utils@^1.0.0       # 是区间，不是 pin
+# 之后的构建解析到的是 1.x「当下」是什么：未经审查，可能出自某个
+# 新人之手。CI 现在是过山车，不是 pipeline。
+```
+
+正确示范——pin、lock、审计：
+
+```bash
+# pin 到精确版本；lock 文件才是真正的依赖 contract
+npm install --save-exact some-utils@1.3.0
+npm ci                      # 只安装 lock 文件记录的东西
+
+# 直接依赖集里存在已知漏洞就让构建失败
+npm audit --omit=dev        # 这是 CI 门禁，不是建议
+```
+
+## 技术执法
+
+<Enforcement>
+审查必须是 pipeline 的一个阶段，不是 code review 里的个人英雄时刻：
+
+- **lock 文件即 contract**：CI 以冻结的 lock 文件安装——现场重新解析就是构建失败，不是习惯。
+- **review 中的 lock 文件 diff**：每次依赖变更都作为一条显式的、人类可读的记录出现在 PR 里：改了什么、为什么。
+- **漏洞门禁**：直接依赖集里出现已知 CVE 就让 pipeline 失败的审计步骤。
+- **registry 策略**：构建使用 allowlist 或内部代理；生产镜像内绝不从公共 registry 现场安装。
+- **镜像与 action 的 digest pin**：引用 digest 而不是 tag——tag 可变，digest 不可变。
+- **预防 vs. 检测**：lock 文件与 digest 阻止构建之间代码悄悄变化；审计与 diff 检测你已经接受的风险——两半都要，永远。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+两起 npm 事件展示了风险的两半。2016 年 3 月，package left-pad——十一行代码——从 npm 被取消发布，几个小时内整个生态的构建纷纷断裂：成千上万的项目依赖着一份从没人向它们承诺过的可用性与命名。https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ 2018 年 11 月，event-stream 展示了另一半：长期维护者把 package 交给了一个陌生人，新维护者加入了一条定向的恶意依赖，窃取某个特定产品用户的钱包凭证，而这个看起来合法的版本在数千次安装中悄无声息地通过了。https://github.com/dominictarr/event-stream/issues/116 Pin 挡不住这两起事件本身，但它本可以降低损害：unpublish 变成一次「你自己选择冻结」的构建错误，恶意版本需要一次审慎的、经过 review 的升级才能进来，而不是搭下一次干净构建的顺风车。
+</RealCase>
+
+## 张力与权衡
+
+- **审查 vs. 保持简单**：每道门禁都拖慢了让 package manager 美好的那个「装了就跑」循环——按依赖的 blast radius 定门槛，而不是一刀切的仪式。
+- **pin vs. 及时打补丁**：被冻结的依赖不会自己收到修复；把 pin 与定期的、经过 review 的升级节奏配对，并让被跳过的安全升级在 CI 里大声失败，而不是在生产里静默发生。
+- **最小化依赖 vs. DRY 的张力**：DRY 推动抽取与共享代码，但每个共享 package 都是一段你继承下来的维护关系——共享有供应链成本。
+
+## 相关原则
+
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——把 CI 凭证收窄，让被攻破的依赖无法替你签发 release。
+- [机密卫生 · Secrets Hygiene](/zh/docs/principles/security/secrets-hygiene)——被攻破的 package 真正想要的那枚 token。
+- [爆炸半径 · Blast Radius](/zh/docs/principles/reliability/blast-radius)——一个爆炸的依赖实际能触达什么。
+- [显性失败 · Fail Visible](/zh/docs/principles/reliability/fail-visible)——lock 文件漂移与审计发现必须响亮。
+- [DRY 的张力 · DRY, With Judgment](/zh/docs/principles/design/dry-tension)——当代码共享不再是免费的。
+
+## 参考文献
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — 最小公共机制：共享的组件就是共享的风险。
+- semver.org — 版本号承诺了什么，没承诺什么：https://semver.org

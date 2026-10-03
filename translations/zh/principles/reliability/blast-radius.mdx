@@ -1,0 +1,116 @@
+---
+title: "爆炸半径 · Blast Radius"
+id: blast-radius
+name: Blast Radius
+summary: 限制任何单一动作能造成的最大伤害——批量上限、按步确认与分阶段 rollout，把灾难变成事故。
+category: reliability
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "infrastructure"
+  - "distributed"
+  - "database"
+  - "ml"
+tags:
+  - "scope"
+  - "containment"
+  - "batching"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: ok
+source_hash: "1629ca13a85e94cd"
+translation_status: draft
+---
+
+{/* 中文翻译来自 content/docs/principles/reliability/blast-radius.mdx */}
+{/* 技术术语保留英文，遵循术语表（见 /docs/glossary）。 */}
+{/* translation_status 仅在人工审核后才变为 reviewed。 */}
+
+<AIInstruction>
+在执行任何改变状态或基础设施的命令之前，先问一句：这一个动作最坏能造成什么——然后给这个最坏情况设上限。把破坏性的工作拆成小批量，每一步都有 dry-run 和一次重新确认；宁要分阶段 rollout，不要全集群一刀切。如果你说不出一条命令会触碰的确切资源集合，停下来，去问人。
+</AIInstruction>
+
+<Severity level="critical" />
+
+## 定义
+
+一个动作的爆炸半径，是它一次执行所能损坏的状态、流量或基础设施的总量。要设计的是最大值，不是平均值：打错字的概率是固定的，但一个打错的字是干掉一个 shard 还是整个集群，是设计选择。批量上限、按步确认与分阶段 rollout，就是给最坏情况加天花板的手段。
+
+## 何时使用
+
+- 成批删除、drop、重启、移除的命令——文件系统、数据库、云。
+- 部署与基础设施变更：canary、百分比、一次一个环境。
+- 在生产活跃表上做的数据迁移与 backfill。
+- ML：批量数据集删除、模型晋级、全集群再训练任务。
+- 恢复工具：把它放在它所恢复对象的故障域之外。
+
+## 何时不该使用
+
+- 真正小的原子操作——单行 insert 不需要分块。
+- 明确一次性的 sandbox，最坏情况无非「十分钟重建一个」。
+- 必须全局立即生效的紧急 kill switch——它的意义就在于快；要限定的是信任，而不是速度（见「最小权限」）。
+
+## 反模式
+
+- 「DELETE FROM users」，WHERE 子句是脑子里加的，不是键盘上敲的。
+- 凌晨三点敲下的一条 debug 命令，作用域是「一切匹配项」。
+- 一条 deploy pipeline 把同一份 plan 同时应用到所有环境。
+- 恢复与监控工具住在它们本应幸存的爆炸半径之内。
+
+## 代码示例
+
+错误示范——一条命令，无界作用域：
+
+```bash
+# "清理旧备份"——没有上限、没有 dry-run、没有确认
+find /var/backups -type f -name '*.gz' | xargs rm -f
+```
+
+正确示范——有界批量、打印计划、重新确认：
+
+```bash
+./bin/purge --older-than 30d --limit 500 --dry-run   # 第 1 步：打印确切的目标集合
+./bin/purge --older-than 30d --limit 500 --confirm   # 第 2 步：只删除刚才打印出来的
+./bin/purge --older-than 30d --limit 500 --confirm   # 第 3 步：下一批，批间验证
+```
+
+## 技术执法
+
+<Enforcement>
+这条原则靠工具与权限执法，不靠操作员的自律：
+
+- **IAM 范围**：没有任何常设 role 能跨环境销毁资源；破坏性动词按环境划分，并要求重新提权。
+- **工具默认值**：dry-run 是默认模式；破坏性动词必须带行/资源上限；多批运行在批次之间重新征得人的确认。
+- **迁移守卫**：迁移工具拒绝执行影响超过 N 行的 DELETE 或 UPDATE，除非带上一个特殊的、经 review 的标志。
+- **分阶段 rollout 作为配置**：带错误率或延迟回退自动刹车的百分比部署，是唯一被批准的发布路径。
+- **带外恢复**：console、DNS 与监控运行在与被保护系统分开的凭证和网络上。
+</Enforcement>
+
+## 真实案例
+
+<RealCase>
+2017 年 2 月 28 日，一位经授权的 S3 团队成员在调试一个缓慢的 S3 计费子系统时，执行了一条本想移除该子系统少量服务器的命令。其中一个输入被敲错，命令删除的服务器比预想的多——额外的 S3 子系统随之一起倒下，需要完全重启。在共享基础设施之内执行的一条敲错的命令，其爆炸半径变成了该区域里依赖 S3 的众多站点与服务数小时的不可用。Postmortem：https://aws.amazon.com/message/41926/ ——一个更小、经确认的范围，本可以把一场区域级中断化为一次维护任务。
+
+2021 年 10 月 4 日，Facebook 执行了一条旨在评估其全球骨干网可用性的维护命令；它却断开了骨干网与数据中心之间的连接，Facebook 的路由从互联网上撤下，平台在全世界不可达。对本原则最关键的是：DNS、内部工具与带外管理只能经由同一个受影响的网络访问——恢复工具就在爆炸半径之内。工程师需要物理接触到机器才能恢复服务。Postmortem：https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ ——带外工具本可以把这次中断从一趟现场之行化为一次远程修复。
+</RealCase>
+
+## 张力与权衡
+
+- **速度 vs. 控制**：有上限的批量与分阶段 rollout，用几分钟换取「错误必然是小的」这个保证。按被触碰对象的价值权衡，而不是按操作员的耐心。
+- **成本 vs. 隔离**：让恢复与监控保持带外，闲置的每一天都在花钱——而在被需要的那一次，它连本带利还回来。
+- **与「最小权限」权衡**：限定谁可以动手，与限定任何一击可以砸到什么，是互补的两件事；谁也替代不了谁。
+
+## 相关原则
+
+- [最小权限 · Least Authority](/zh/docs/principles/security/least-authority)——谁能动手；爆炸半径是任何一击能砸到什么。
+- [幂等性 · Idempotency](/zh/docs/principles/reliability/idempotency)——重复执行的动作和第一次一样小。
+- [经过测试的备份 · Tested Backups](/zh/docs/principles/data/tested-backups)——当控制不够时的最后防线。
+- [优雅降级 · Graceful Degradation](/zh/docs/principles/reliability/graceful-degradation)——不仅在部署时，更要在运行时控制伤害。
+
+## 参考文献
+
+- AWS, *Summary of the Amazon S3 Service Disruption*, 2017 — https://aws.amazon.com/message/41926/
+- Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/
+- Google SRE Book — https://sre.google/sre-book/（变更管理与发布工程实践）。

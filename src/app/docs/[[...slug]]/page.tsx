@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { source } from "@/lib/source";
 import { getMDXComponents } from "@/mdx-components";
 import { PrincipleMeta } from "@/components/principle-meta";
+import { PageLanguages } from "@/components/page-languages";
 import type { Metadata } from "next";
 
 export function generateStaticParams() {
@@ -39,7 +40,7 @@ export default async function Page({
       footer={{
         children: (
           <p className="text-sm text-fd-muted-foreground">
-            PRINCIPAI — an additional layer, not a replacement for technical controls.
+            Principai — an additional layer, not a replacement for technical controls.
             Status words used in this library: <em>sudah digali</em> (dug),{" "}
             <em>belum digali</em> (not yet dug), <em>tidak yakin</em> (unsure). No completeness
             claims.
@@ -47,6 +48,7 @@ export default async function Page({
         ),
       }}
     >
+      <PageLanguages current="en" slug={page.slugs} />
       <h1 className="mb-4 text-3xl font-bold tracking-tight text-fd-foreground sm:text-4xl">
         {page.data.title}
       </h1>

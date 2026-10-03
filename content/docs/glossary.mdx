@@ -3,7 +3,7 @@ title: Glossary
 description: The shared vocabulary of both repos — mandatory status words, untranslated technical terms, and library terms used with exactly one meaning.
 ---
 
-Both repos — the EN source and the ID translation — must use the same words for the same things. This glossary is that contract: mandatory in both, consumed by the translator and by `principai check`. How it is enforced is described in [Two-Repo Sync](/docs/concepts/two-repo-sync).
+The EN source and its derived translations — ID and ZH — must use the same words for the same things. This glossary is that contract: mandatory everywhere, consumed by the translator and by `principai check`. How it is enforced is described in [Source-of-Truth Sync](/docs/concepts/two-repo-sync).
 
 The glossary earns its keep twice. For humans, it keeps the ID translation readable without a decoder ring — the same English term never appears as two different Indonesian words. For agents and tools, it keeps lookups exact: severity is severity in both repos, in frontmatter, in the CLI, and in every check. Vague vocabulary is how drift starts.
 
@@ -55,4 +55,4 @@ Terms change the way everything else does: EN repo first, `glossary.md` updated 
 
 ## Reading order
 
-New to the library: [Quickstart](/docs/getting-started/quickstart), then [the principle format](/docs/concepts/principle-format). Translating: this page first, then [Two-Repo Sync](/docs/concepts/two-repo-sync). Adding categories: [Taxonomy](/docs/taxonomy).
+New to the library: [Quickstart](/docs/getting-started/quickstart), then [the principle format](/docs/concepts/principle-format). Translating: this page first, then [Source-of-Truth Sync](/docs/concepts/two-repo-sync). Adding categories: [Taxonomy](/docs/taxonomy).

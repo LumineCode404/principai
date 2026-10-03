@@ -22,9 +22,9 @@ source_hash: "aca446228531fc88"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/reliability/graceful-degradation.mdx -->
-<!-- source_hash EN: aca446228531fc88 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+{/* Draf terjemahan dari EN: content/docs/principles/reliability/graceful-degradation.mdx */}
+{/* source_hash EN: aca446228531fc88 */}
+{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
 
 <AIInstruction>
 Classify every dependency as essential or optional before an outage classifies it for you. Give each outbound call a timeout, wrap it in a circuit breaker, and design a concrete fallback for every optional feature. Under overload, shed optional work first — never let a slow dependency occupy your worker threads.

@@ -332,3 +332,34 @@ Stage Summary:
 - 4 files written: translations/id/principles/security/{fail-safe-defaults,input-validation,complete-mediation,defense-in-depth}.mdx (all translation_status: draft — human review required before reviewed).
 - source_hash values unchanged from stubs: 731b3b8df9acb094 / 4de461ecb1b707e6 / e76a30c10164db56 / 6ff65191d6b35457 — all verified to match current EN sources (not stale).
 - Notes for other agents (consistent with 5-b's finding): stub frontmatter did NOT mirror EN — stubs had aliases: [] and sources: [] and verification: perlu for all 4, while EN has filled aliases/sources and verification: ok for 3 of 4 (complete-mediation EN is perlu). I matched EN per translation rules, so ID frontmatter now mirrors EN exactly. Also: HTML header comments are the completed-translation convention (see least-authority exemplar) and do not affect the site build; raw @mdx-js/mdx rejects them by design, so future MDX compile checks on ID files should strip the comment block first.
+
+---
+Task ID: 6
+Agent: Main orchestrator (Z.ai Code)
+Task: Round-4 features — llms.txt, sitemap, AI-crawler robots, 9 category index pages, principle meta bar, 8 ID translations; Lighthouse 100 loop
+
+Work Log:
+- Fixed broken internal links: /docs/principles, all 6 category roots, /docs/concepts, /docs/getting-started were 404 (folders had meta.json but no index.mdx while cards/sidebar/taxonomy linked to them). Wrote 9 index.mdx pages (intro + Cards per principle with frontmatter summaries + closing profile pointer) and added "index" to all meta.json pages lists.
+- NEW /llms.txt (src/app/llms.txt/route.ts, force-static): agent-facing markdown index following llmstxt.org — site description, advise-vs-enforce framing, staged-loading protocol, honesty rules, 8 key-doc links + all 32 principles grouped by category, severity-tagged, with one-line summaries. 40 entries total.
+- NEW sitemap.ts (61 URLs: home + 60 doc pages). robots.txt rewritten: explicitly welcomes GPTBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot-Extended, Amazonbot, meta-externalagent, CCBot, Bytespider, cohere-ai, OAI-SearchBot, ChatGPT-User + classic crawlers; links sitemap.
+- NEW principle meta bar (src/components/principle-meta.tsx): under every principle H1 — linked category chip, type chip, severity badge, mono "status · verification" line, #tags row. SeverityBadge extracted and shared with the MDX Severity component (dedupe).
+- Home page: new "The archive" section — 6 category cards + honest taxonomy link (sudah digali wording, no counts); footer: llms.txt link added, stray { } removed.
+- agent-integration.mdx: documents /llms.txt as the agent entry point (raw anchor to avoid client-side routing a non-page).
+- 8 ID translations written by parallel subagents (Task 5-a security: fail-safe-defaults, input-validation, complete-mediation, defense-in-depth; Task 5-b reliability/data: idempotency, tested-backups, blast-radius, fail-visible). Both agents verified: source_hash unchanged and matching EN, MDX-safe prose, 1:1 section order, glossary terms kept English, counterfactuals "akan mengurangi" only. Note: stubs had stale frontmatter (empty aliases/sources, verification: perlu); translators mirrored EN values — correct per two-repo model.
+- CLI fixes: (1) walk() now excludes index.mdx — category nav pages are not principles (check/sync/copy/list/status); (2) check --against accepts an in-repo translations path (translations/id/principles) and computes other-side slugs relative to that root (was: relative to OUR principles dir → garbage slugs).
+- .gitignore: added tool-results/ (QA artifacts); removed 7 auto-generated ID stubs for index pages (sync no longer creates them).
+- Lighthouse loop on production:
+  - best-practices 96→100: ERR_INSUFFICIENT_RESOURCES from RSC prefetch flood → prefetch={false} on ALL homepage Links (landing page, static nav is fast anyway)
+  - a11y on docs 96→100: sidebar active link sat at marginal ~4.6:1 under axe's oklab compositing → globals.css aside a[data-active="true"] { color: #5cb3f2 }
+  - my new meta-bar #tags initially used /80 opacity → contrast fail → full text-fd-muted-foreground
+  - taxonomy link in archive note: hover-only underline → persistent underline (axe link-in-text-block)
+  - MEASUREMENT LESSON: crashed/erratic Lighthouse runs traced to ~14 STALE chrome processes from earlier crashed runs eating RAM; pkill -9 chrome + --disable-dev-shm-usage gives stable runs. Perf dips (90-96) with TBT 0ms / CLS 0 / TTFB 10ms are sandbox→edge RTT noise, not page weight.
+- FINAL PRODUCTION NUMBERS: homepage perf/a11y/bp/seo = 100/100/100/100; principle page = 100/100/100/100. Production crawl 59/59 routes 200 + /llms.txt + /sitemap.xml + /robots.txt all 200.
+- Verification loop closed: bun run lint clean; principai check = 32 principles, 0 problems, 0 warnings; principai check --against translations/id/principles = parity 32/32; principai sync idempotent (0 stubs, 0 stale); axe (wcag2a/2aa/2.1a/2.1aa) 0 violations on home, principle, category pages.
+- 4 commits pushed (bebd241 → 0de7330); deployed 4× to Vercel; production = https://principai.vercel.app
+
+Stage Summary:
+- Preview panel: dev daemon healthy via .zscripts/dev-daemon.py (gateway :81 = 200)
+- New agent surface: /llms.txt + AI-crawler robots + sitemap; new human surface: 9 browseable index pages; richer principle pages (meta bar)
+- ID archive: 9 of 32 translated (least-authority + this round's 8); 23 stubs remain
+- Recommended next phase: (1) translate remaining ID stubs (design + architecture + api + rest of security/reliability/data); (2) record a real eval run on evals/cleanup-script.mdx with both conditions; (3) og-image refinement (current og.png is functional but plain); (4) consider llms-full.txt variant if agents request full bodies; (5) keep Lighthouse loop using pkill -9 chrome + --disable-dev-shm-usage for stable numbers

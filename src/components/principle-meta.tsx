@@ -74,7 +74,7 @@ export function TranslationChip({ state }: { state: "draft" | "reviewed" | "stal
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-medium ${translationStyles[state]}`}
     >
       {state === "stale" ? "⟳" : state === "reviewed" ? "✓" : "…"}
-      <span aria-hidden className="opacity-60">translation:</span> {state}
+      translation: {state}
       <span className="sr-only">. {note}.</span>
     </span>
   );

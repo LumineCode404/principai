@@ -97,7 +97,7 @@ export function VoiceSummary({ slug, summary }: { slug: string; summary?: string
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label="收听本原则的中文语音摘要"
+        aria-label="听本原则 voice · zh — 收听本原则的中文语音摘要"
         className="inline-flex h-8 items-center gap-2 rounded-lg border border-[rgba(2,130,216,0.4)] bg-[rgba(2,130,216,0.08)] px-3 text-[13px] font-medium text-[#5CB3F2] transition-colors hover:bg-[rgba(2,130,216,0.15)] focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <Volume2 className="h-3.5 w-3.5" aria-hidden />

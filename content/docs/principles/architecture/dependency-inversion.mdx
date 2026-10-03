@@ -1,0 +1,120 @@
+---
+title: Dependency Inversion
+id: dependency-inversion
+name: Dependency Inversion
+summary: High-level policy depends on abstractions, not on concrete details — so infrastructure can change without rewriting the core.
+category: architecture
+type: principle
+severity: advisory
+applies_to:
+  - architecture
+  - libraries
+  - services
+tags:
+  - abstraction
+  - coupling
+  - interfaces
+aliases:
+  - DIP
+  - Depend on Abstractions
+sources:
+  - 'Robert C. Martin, SOLID writings (Dependency Inversion Principle)'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Make business logic depend on interfaces it owns, and push concrete SDKs, drivers, and clients to the outer layers. Never import a vendor package directly from domain code — define the port first, then adapt the vendor to it. When tests need live vendor credentials to exercise core logic, treat that as the signal to invert the dependency.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+High-level policy — billing rules, booking logic, whatever the business pays for — must not depend on low-level details such as a payment SDK, a database driver, or an HTTP client. Both sides depend on an abstraction, and crucially the abstraction belongs to the high-level side: it speaks the domain's language, not the vendor's. Details then plug into the core, so swapping or faking infrastructure stops being a rewrite.
+
+## When to use
+
+- Core domain logic that must be testable without network, disk, or vendor accounts.
+- Infrastructure with a realistic chance of replacement: payment providers, storage backends, mail relays, message brokers.
+- Library design: consumers code against your surface, not your internals.
+- Multiple deployment targets — cloud versus on-prem, different regional providers.
+
+## When NOT to use
+
+- Wrappers built "just in case" around a single SDK with no second implementation in sight — speculative abstraction.
+- Thin infrastructure code whose entire job is talking to one vendor — an adapter that only renames the vendor's API adds friction, not freedom.
+- Short-lived scripts and prototypes where the rewrite cost is near zero.
+- Wrapping a technology whose full power is the point, such as a search engine's query language — the abstraction will leak.
+
+## Anti-pattern
+
+- `BillingService` importing the payment SDK directly: policy welded to a vendor.
+- An "abstraction" that is a 1:1 mirror of the vendor SDK, including its error model.
+- Interfaces defined inside the vendor wrapper package — the domain now depends on the detail it was escaping.
+- Test suites that require live third-party credentials because there is no seam to fake.
+
+## Code example
+
+Wrong — the domain imports the vendor; every provider change is core surgery:
+
+```ts
+// billing/billing-service.ts
+import Stripe from 'stripe';
+export class BillingService {
+  async charge(cart: Cart) {
+    const s = new Stripe(process.env.STRIPE_KEY!);
+    const charge = await s.charges.create({ amount: cart.totalCents });
+    return charge.id; // the domain now knows Stripe's response shape
+  }
+}
+```
+
+Right — the domain owns the port; the vendor is a replaceable detail:
+
+```ts
+// billing/payment-gateway.ts — the domain's language, the domain's file
+export interface PaymentGateway { charge(cart: Cart): Promise<Receipt>; }
+// infra/stripe-gateway.ts — the only file that knows Stripe exists
+export const stripeGateway = (key: string): PaymentGateway => ({
+  async charge(cart) {
+    const s = new Stripe(key);
+    return toReceipt(await s.charges.create({ amount: cart.totalCents }));
+  },
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by the build, not by intentions:
+
+- **Import boundary rules in CI** (dependency-cruiser, eslint-plugin-boundaries): domain folders may not import infrastructure or vendor packages — the violation fails the build.
+- **Architecture tests**: ts-arch or ArchUnit-style rules asserting that ports live in the domain layer and implementations outside it.
+- **Test seam proof**: core logic unit tests run against an in-memory fake gateway, with no network and no vendor credentials — if they cannot, the dependency is not inverted.
+- **Review checklist**: does any file under domain or core import an SDK? If yes, stop and define the port first.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+A subscription product hard-wired its billing core to one payment provider's SDK — charges, refunds, retries, and even error handling were written in the vendor's terms. When contract renegotiation made switching providers necessary, the "integration" turned into a multi-month rewrite: the vendor's concepts had become load-bearing inside core business rules. A domain-owned gateway port with per-provider adapters would have reduced the switch from a rewrite to an adapter project plus a careful data migration. (ilustratif — composite of a common failure mode; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Dependency Inversion vs. YAGNI**: every port and adapter is indirection someone must read. Introduce the seam when a second implementation is plausible or testing demands isolation — not for every import by default.
+- **Dependency Inversion vs. KISS**: a pass-through wrapper around one SDK adds a layer with no new capability; weigh the cost of swapping later against the cost of understanding now.
+- **Ports everywhere vs. Least Astonishment**: too many single-implementation interfaces turn the codebase into a maze. Keep ports few, small, and named in domain language.
+
+## Related principles
+
+- [Single Responsibility](/docs/principles/architecture/single-responsibility) — inversion works best when the port itself has one reason to change.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — a port is a contract: declare it and validate what crosses it.
+- [Gall's Law](/docs/principles/architecture/gall-law) — extract the abstraction when the second need appears, not before.
+- [YAGNI](/docs/principles/design/yagni) — the counterweight against speculative ports.
+- [KISS](/docs/principles/design/kiss) — indirection is a cost; pay it only where it buys decoupling.
+
+## References
+
+- Robert C. Martin, SOLID writings — the Dependency Inversion Principle as the "D" (verification: perlu — locate the specific essay before citing precisely).

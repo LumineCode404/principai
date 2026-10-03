@@ -1,0 +1,121 @@
+---
+title: Single Responsibility
+id: single-responsibility
+name: Single Responsibility
+summary: TERJEMAHAN DRAF — A module should have one reason to change — scatter responsibilities and every change becomes a cross-cutting risk.
+category: architecture
+type: principle
+severity: important
+applies_to:
+  - "architecture"
+  - "services"
+  - "libraries"
+  - "ui"
+tags:
+  - "cohesion"
+  - "modules"
+  - "change"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "e95cd8e40103fe93"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/architecture/single-responsibility.mdx -->
+<!-- source_hash EN: e95cd8e40103fe93 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Keep every module, service, and component to one reason to change. When you are about to add database, email, or PDF logic to a shared utility class, stop and create a focused module instead. During review, ask which single role would request this change — if several unrelated roles would, split the code before merging.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+A module has one responsibility when exactly one force — one team, one business rule, one kind of change — would ever require modifying it. Responsibility is about reasons to change, not lines of code. Once unrelated changes flow through the same file, every release couples teams, tests, and failure modes that have nothing to do with each other.
+
+## When to use
+
+- Designing service and module boundaries, especially shared libraries that other teams consume.
+- Deciding where new code belongs — "does this fit here?" is a Single Responsibility question.
+- Noticing that the same files keep changing for unrelated reasons across sprints.
+- Splitting a monolith: cut along responsibility seams, not technical layers.
+
+## When NOT to use
+
+- One-off scripts and small tools where decomposition adds indirection but no safety.
+- Early prototypes where responsibilities are still being discovered — split once they stabilize.
+- Orchestration layers whose genuine single responsibility is coordinating several steps.
+- Measured, performance-critical inner loops where an extra indirection has a real, proven cost.
+
+## Anti-pattern
+
+- A `Utils`, `Common`, or `Manager` class that accumulates every team's leftovers.
+- A service function that renders a PDF, writes the database, and sends the email.
+- "Just one more helper" on a shared component until every team's changes conflict.
+- UI components that fetch data, transform it, and render it — three reasons to change in one file.
+
+## Code example
+
+Wrong — one module, three reasons to change (layout, persistence, delivery):
+
+```ts
+// utils.ts — designers, the DBA, and ops all break this file
+export class Utils {
+  static async invoice(order: Order) {
+    const pdf = renderInvoice(order);          // designers change this
+    await db.orders.insert(order.audit);       // the DBA changes this
+    await smtp.send(invoiceMail(order, pdf));  // ops changes this
+  }
+}
+```
+
+Right — one reason to change per module, wired by the caller:
+
+```ts
+// billing/invoice-pdf.ts — changes only when the layout changes
+export const renderInvoice = (o: Order) => pdf.build(layoutFor(o));
+// billing/order-store.ts — changes only when persistence changes
+export const saveOrder = (o: Order) => db.orders.insert(o.audit);
+// notify/mailer.ts — changes only when delivery changes
+export const sendInvoiceMail = (o: Order, p: Pdf) => smtp.send(invoiceMail(o, p));
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by boundaries, not by intentions:
+
+- **Import boundary rules in CI** (dependency-cruiser, eslint-plugin-boundaries): declare what each folder may import; shared utilities may not import infrastructure.
+- **CODEOWNERS**: one owning team per module — a PR touching two owners' modules is an automatic signal to split.
+- **Size and cohesion gates**: lint limits on file length and exported symbols act as smell detectors, not hard laws.
+- **Review question**: "who would ask for this change?" — more than one answer means more than one responsibility.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+An invoicing team kept a shared `Utils` class "to avoid bikeshedding structure". Over two years it grew PDF rendering, tax rounding, database access, and an SMTP client. Every release train waited on it: marketing changed the layout, finance changed rounding, ops changed the mail relay — all in one file, all conflicting. A rounding hotfix once shipped with an unintended PDF change because both lived in the same function. Splitting earlier would not have prevented every incident, but it would have reduced each one to a single-team, single-file revert. (ilustratif — composite of a common failure mode; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Single Responsibility vs. KISS**: every split costs files and indirection. Split when the second reason to change actually arrives, not preemptively for imagined futures.
+- **Single Responsibility vs. DRY Tension**: deduplication pulls similar code together; this principle pushes different reasons apart. Extract shared code only when both copies would change for the same reason.
+- **Splitting vs. coherence**: cutting past the point of shared context scatters one idea across many files. A module should be as small as its responsibility — and no smaller.
+
+## Related principles
+
+- [Dependency Inversion](/docs/principles/architecture/dependency-inversion) — separate policy from infrastructure so responsibilities stay clean.
+- [Gall's Law](/docs/principles/architecture/gall-law) — responsibilities are discovered in running code, not designed up front.
+- [KISS](/docs/principles/design/kiss) — weigh every split against the indirection it adds.
+- [DRY Tension](/docs/principles/design/dry-tension) — duplication across reasons beats false unification.
+- [Least Astonishment](/docs/principles/design/least-astonishment) — one predictable home per behavior.
+
+## References
+
+- Robert C. Martin, SOLID writings — the Single Responsibility Principle as the "S" (verification: perlu — locate the specific essay before citing precisely).
+- Martin, *Agile Software Development: Principles, Patterns, and Practices* — book-length treatment of cohesion and change (verification: perlu).

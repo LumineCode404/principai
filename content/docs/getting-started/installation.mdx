@@ -1,0 +1,65 @@
+---
+title: Installation
+description: Get the principai CLI and the principles library onto your machine — Bun-based, no heavy dependencies.
+---
+
+The `principai` CLI is a single TypeScript file — `cli/principai.ts` — run through Bun. No native builds, no database, no daemon: the CLI reads, checks, and copies markdown, and that is all it does.
+
+## Requirements
+
+- **Bun 1.x** (recommended) — check with `bun --version`.
+- Or Node 18+, if Bun is not an option; everything the CLI does is plain file handling.
+
+## Install
+
+<Steps>
+
+### Clone the repository
+
+```bash
+git clone <your-principai-checkout-url> principai
+cd principai
+```
+
+Adjust the URL to your fork or mirror — the library travels with the repository.
+
+### Install dependencies
+
+```bash
+bun install
+```
+
+The dependencies belong to the website, not the CLI: fumadocs and friends for the docs site. The CLI itself needs nothing beyond the runtime.
+
+### Verify the CLI
+
+```bash
+bun run principai --help
+```
+
+Expected output — the command set:
+
+```text
+principai — a library of software engineering principles for AI agents
+
+Commands:
+  list      List principles in the archive
+  show      Show one principle in full
+  search    Search the archive
+  copy      Copy a profile subset into a project
+  profile   Inspect profiles
+  check     Run integrity and parity checks
+  sync      Generate derived translation stubs
+  status    Report archive status
+```
+
+</Steps>
+
+## Using it inside another project
+
+Two patterns beyond the [Quickstart](/docs/getting-started/quickstart) copy step:
+
+- **Git submodule.** Add the repo as a submodule and run `principai copy` from it — one canonical copy on your machine, updated with `git submodule update --remote`. Best when you want updates and accept the extra step.
+- **Vendoring.** Copy `content/docs/principles/` into your repository directly. Best when you want the principles frozen and auditable in your own history, at the cost of manual updates.
+
+Both work; neither is required. `principai copy` writing `.principles/` into a project remains the default path — see [Quickstart](/docs/getting-started/quickstart).

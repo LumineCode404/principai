@@ -1,0 +1,116 @@
+---
+title: Supply Chain Vetting
+id: supply-chain-vetting
+name: Supply Chain Vetting
+summary: Every dependency is a stranger with commit access to your production — pin, audit, and review before adopting.
+category: security
+type: principle
+severity: important
+applies_to:
+  - infrastructure
+  - libraries
+  - ci
+  - services
+tags:
+  - dependencies
+  - supply-chain
+  - pinning
+  - audit
+aliases:
+  - Vet Your Dependencies
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'semver.org, "Semantic Versioning"'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Treat every dependency as code that will run with your permissions in production. Never install a package you have not checked: maintainer history, release activity, install scripts, transitive footprint. Always pin exact versions and commit lock files; never resolve version ranges automatically. If a dependency suddenly changes maintainers or behavior, stop and investigate before upgrading.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Third-party code executes with your authority, inside your trust boundary, from the moment you install it. Supply chain vetting means each dependency is chosen deliberately — maintained, understood, minimal — and then held fixed by lock files and digests so what you audited is what you run. The question is never "is this package useful" but "is this package, its maintainer situation, and everything it pulls in, worth executing with my credentials".
+
+## When to use
+
+- Adding any new dependency, direct or transitive, to a production codebase.
+- CI and build images — where strangers' code runs with your secrets present.
+- Base images, actions, plugins, and CLIs installed into pipelines.
+- Scheduled maintenance: reviewing the dependency list you already have.
+
+## When NOT to use
+
+- Time-boxed prototypes that never touch production state or credentials — deleted or vetted before promotion.
+- When vendoring a tiny, frozen utility (read it, audit it, copy it, pin it) is cheaper than the ongoing trust relationship of depending on it.
+- First-party internal packages where vetting is replaced by ownership — your own team is the maintainer being trusted.
+
+## Anti-pattern
+
+- Installing the first package whose name matches the error message.
+- Version ranges in a manifest, so the next clean build silently resolves different code than the last one.
+- Piping install scripts from a project README straight into CI.
+- A lock file with hundreds of packages nobody chose and nobody can name.
+- Using download counts and stars as a proxy for maintenance health and maintainer continuity.
+
+## Code example
+
+Wrong — floating range, blind install:
+
+```bash
+npm install some-utils@^1.0.0       # a range, not a pin
+# Later builds resolve whatever 1.x currently is: unreviewed, possibly
+# published by someone new. CI is now an amusement ride, not a pipeline.
+```
+
+Right — pin, lock, audit:
+
+```bash
+# Pin the exact version; the lock file is the real dependency contract
+npm install --save-exact some-utils@1.3.0
+npm ci                      # installs ONLY what the lock file records
+
+# Fail the build on known vulnerabilities in the direct dependency set
+npm audit --omit=dev        # a CI gate, not a suggestion
+```
+
+## Technical enforcement
+
+<Enforcement>
+Vetting must be a pipeline stage, not a code-review hero moment:
+
+- **Lock files as the contract**: CI installs with frozen lock files — fresh resolution is a build failure, not a habit.
+- **Lock file diffs in review**: every dependency change appears in the pull request as an explicit, human-readable record of what changed and why.
+- **Vulnerability gates**: audit steps that fail the pipeline on known CVEs in the direct dependency set.
+- **Registry policies**: allowlists or internal proxies for builds; no live installs from public registries inside production images.
+- **Digest pinning for images and actions**: reference digests, not tags — tags are mutable, digests are not.
+- **What prevents vs. detects**: lock files and digests prevent silent code changes between builds; audits and diffs detect risk you already accepted — both halves, always.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Two npm incidents show both halves of the risk. In March 2016, the package left-pad — eleven lines of code — was unpublished from npm, and builds across the ecosystem broke within hours: thousands of projects depended on availability and naming that nobody had promised them. https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ In November 2018, event-stream showed the other half: a long-time maintainer handed the package to a stranger, the new maintainer added a targeted malicious dependency that stole wallet credentials from a specific product's users, and the legitimate-looking version passed unremarked through thousands of installs. https://github.com/dominictarr/event-stream/issues/116 Pinning would not have prevented either event, but it would have reduced the damage: the unpublish becomes a build error you chose to freeze, and the malicious version requires a deliberate, reviewed upgrade instead of arriving on the next clean build.
+</RealCase>
+
+## Tension and trade-off
+
+- **Vetting vs. KISS**: every gate slows down the "just install it" loop that makes package managers glorious — set the bar by the dependency's blast radius, not by uniform ceremony.
+- **Pinning vs. staying patched**: a frozen dependency receives no fixes by itself; pair pinning with a scheduled, reviewed upgrade cadence, and make a skipped security upgrade fail loudly in CI rather than silently in production.
+- **Minimizing dependencies vs. DRY tension**: DRY pushes toward extracting and sharing code, but every shared package is a maintainer relationship you inherit — sharing has a supply-chain cost.
+
+## Related principles
+
+- [Least Authority](/docs/principles/security/least-authority) — CI credentials scoped so a compromised dependency cannot sign your releases.
+- [Secrets Hygiene](/docs/principles/security/secrets-hygiene) — the token a compromised package is really after.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — what an exploded dependency can actually reach.
+- [Fail Visible](/docs/principles/reliability/fail-visible) — lock file drift and audit findings must be loud.
+- [DRY Tension](/docs/principles/design/dry-tension) — when sharing code stops being free.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — least common mechanism: shared components are shared risk.
+- semver.org — what version numbers promise, and what they do not: https://semver.org

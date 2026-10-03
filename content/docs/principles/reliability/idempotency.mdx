@@ -1,0 +1,117 @@
+---
+title: Idempotency
+id: idempotency
+name: Idempotency
+summary: Running the same operation twice must produce the same result as once — accidental re-runs become boring instead of fatal.
+category: reliability
+type: principle
+severity: critical
+applies_to:
+  - destructive-ops
+  - scripts
+  - distributed
+  - queues
+  - database
+  - ml
+tags:
+  - retries
+  - safety
+  - state
+aliases:
+  - Idempotent Operations
+sources:
+  - 'Waldo et al., "A Note on Distributed Computing", 1994'
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Make every mutating operation safe to execute more than once. Attach a stable idempotency key to each write that moves money, sends side effects, or changes state, and check it before executing. If an operation cannot be made idempotent, stop and ask a human before wiring it into a retry path, a queue consumer, or a script that may run twice.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definition
+
+An operation is idempotent when executing it N times leaves the system in the same state as executing it once. In distributed systems this is not a nicety: timeouts are ambiguous (the request may have committed), delivery guarantees are at-least-once, and humans re-run scripts. Idempotency converts "did my request land?" from a data-integrity crisis into a boring re-send.
+
+## When to use
+
+- Anything a client may retry: payments, order creation, provisioning, message sending.
+- Queue consumers — at-least-once delivery is the honest default of most brokers.
+- Cron jobs, backfills, and cleanup scripts that humans re-run after partial failures.
+- ML pipelines: feature backfills, restartable training steps, dataset materialization.
+
+## When NOT to use
+
+- Pure reads — already safe; dedupe machinery around them is unearned complexity.
+- Genuinely single-use state (a voucher being consumed) — model it as an explicit state transition, not a "safe retry".
+- Cheap, re-derivable writes (cache refresh) where a duplicate is harmless by construction.
+
+## Anti-pattern
+
+- A charge call with no idempotency key, wrapped in a retry loop.
+- A crash between the payment call and the "mark processed" update — re-delivery re-charges.
+- A backfill script that starts with DELETE and trusts the operator to run it exactly once.
+- Treating a timeout as "definitely failed" and repeating a non-idempotent call.
+
+## Code example
+
+Wrong — the retry itself is the bug:
+
+```python
+def handle_event(event):
+    # No idempotency key: a timeout plus one client retry charges twice
+    charge = gateway.charge(event.amount, event.token)
+    db.run("UPDATE orders SET status = 'paid' WHERE id = ?", event.order_id)
+```
+
+Right — the event's identity is the key:
+
+```python
+def handle_event(event):
+    key = f"order:{event.order_id}:charge"
+    if db.one("SELECT 1 FROM processed_events WHERE key = ?", key):
+        return                                # re-delivery is normal, not an error
+    # Provider dedupes on the key across the ambiguous timeout window
+    gateway.charge(event.amount, event.token, idempotency_key=key)
+    # Unique index on key is the real guard against concurrent duplicates
+    db.run("INSERT INTO processed_events (key) VALUES (?)", key)
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced at the storage and protocol layers, not by careful code:
+
+- **Idempotency keys at the API edge**: the gateway rejects unsafe-method calls without an Idempotency-Key header and replays the stored first response for duplicates.
+- **Unique constraints as the last line of defense**: a natural key (event ID, order ID) with a unique index; INSERT with conflict handling instead of check-then-write races.
+- **Consumer-side dedupe**: dedupe on message identity before any side effect runs, regardless of broker guarantees.
+- **Run markers for scripts**: every mutating job records a completed marker; re-running a completed job is a logged no-op.
+- **Replay tests in CI**: re-deliver every message in a fixture set a second time and diff the final state — the diff must be empty.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+(ilustratif) A checkout service calls its payment provider with no idempotency key. Under load, the provider call times out for sixty seconds; the client retry policy fires three times per request; every retry lands once the provider recovers. Customers are double- and triple-charged, support tickets and manual reconciliation follow, and finance loses days. One stable key per order would have reduced the whole event to a cached first response. (verification: perlu — real double-charge incidents exist in public postmortems; belum digali — read the specific sources before citing any of them.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Safety vs. latency**: key lookups and dedupe tables add milliseconds to every write; they remove entire classes of incident. Pay the milliseconds.
+- **Idempotency vs. Retry Budget**: retries are only legitimate on idempotent operations; sequence the two principles — make the operation safe, then budget the retries.
+- **Idempotency vs. intent**: keys scoped too broadly (per customer instead of per order) silently block legitimate repeat purchases. Scope keys to the operation's natural identity, not to the actor.
+
+## Related principles
+
+- [Retry Budget](/docs/principles/reliability/retry-budget) — retries amplify load; only affordable where idempotency holds.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — bounds one bad action; idempotency bounds one repeated action.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — stable event IDs make replay and dedupe natural.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — a dedupe miss must surface loudly, not corrupt silently.
+
+## References
+
+- Waldo et al., *A Note on Distributed Computing*, 1994 — partial failure means you cannot know whether the callee executed; idempotency makes that ambiguity survivable (verification: perlu — confirm framing before quoting).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — idempotence as the foundation of effectively-once processing (verification: perlu).

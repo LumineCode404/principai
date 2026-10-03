@@ -1,0 +1,62 @@
+---
+title: Principles Are Not Enforcement
+description: What prompts can and cannot do — and the real technical controls every principle must name as its pairing.
+---
+
+This is the most important honest page in the library.
+
+<Callout type="warn" title="The honest claim">
+  Principles in context help an agent choose a safer design. They do not enforce anything — they do not stop a bug, a compromised credential, or a tired human from destroying state. Prevention lives in technical controls, and every principle in this library names the control that actually enforces it.
+</Callout>
+
+A prompt is text; text does not stop a buggy script, a compromised credential, or a tired human at 2am. True prevention lives in technical controls: read-only credentials, dry-run defaults, tested backups, environment separation, human confirmation. The principles tell an agent what to demand; the controls are what actually hold.
+
+## The canonical example: GitLab, 2017
+
+In January 2017, an experienced operator at GitLab, exhausted after hours of replication failures, deleted a directory on the primary database server — believing it held a secondary's data. It held the primary's live data. Hundreds of gigabytes went with it, and six hours of writes were permanently lost after the restore. The [full postmortem](https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/) is public.
+
+That operator knew everything this library could ever teach. Least authority, fail-safe defaults, blast radius — none of it stopped the command, because knowledge in a head is not a control. Narrower authority at that shell, and a confirmation step before an irreversible delete, would have contained the mistake regardless of fatigue. Principles without controls did not stop a tired human. Controls would have.
+
+## What prompts can do
+
+- **Bias design choices before code exists.** An agent that has read [Least Authority](/docs/principles/security/least-authority) reaches for a scoped role first, and writes the dry-run flag because [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) says deny by default.
+- **Surface risks the task touches.** Progressive loading via applies_to means the relevant warnings arrive when — not after — the task enters that territory.
+- **Trigger stop-and-ask.** The hard-stop rule — critical violations, destructive actions, uncertainty — is a behavioral contract an agent can actually honor.
+- **Carry institutional memory cheaply** into every session, every project, every agent, without a single meeting.
+
+## What prompts cannot do
+
+- **Prevent a bug.** A wrong path in a correct-looking script sails past any instruction ever written.
+- **Prevent a compromised credential from acting.** An attacker holding the keys does not read AGENTS.md.
+- **Prevent human error under fatigue.** GitLab 2017 — a human with full knowledge and no control.
+- **Guarantee their own reading.** Context limits, truncated files, skipped instructions: a prompt is a probability, not a gate.
+
+## The control pairing
+
+Every principle in this library names the control that actually enforces it:
+
+| Principle | The real control that enforces it |
+| --- | --- |
+| [Least Authority](/docs/principles/security/least-authority) | Scoped IAM roles and per-job database users — the admin secret lives in a vault, not in the job environment |
+| [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) | Dry-run flags required in deploy scripts; scripts without a dry-run mode fail review |
+| [Tested Backups](/docs/principles/data/tested-backups) | Scheduled restore drills in CI — an untested backup is a hope, not a control |
+| [Blast Radius](/docs/principles/reliability/blast-radius) | Batch size limits — caps compiled into the tooling, not remembered by the operator |
+| [Idempotency](/docs/principles/reliability/idempotency) | Idempotency keys and unique constraints in the storage layer — a retried request cannot double its damage |
+
+The Technical enforcement section in every principle file exists for exactly this: to keep the pairing explicit, so a reader never mistakes reading a principle for having a control.
+
+## Reading the enforcement sections
+
+Two rules for reading them:
+
+- The pairing must name a control that exists independently of the principle — something that holds even when nobody has read anything. If the control only works when someone remembers the principle, it is not a control.
+- A principle with no credible pairing is a gap, not a bonus. It still guides design, but it is advice waiting for infrastructure — and it should be treated that way in review.
+
+## Why both
+
+The principle makes the agent ask for the control; the control survives the agent's worst day — and everyone else's. Design them as one system:
+
+- When writing a principle, name its enforcement pairing in the same breath.
+- When an incident happens, ask which layer failed: the principle nobody read, or the control nobody built.
+
+The [evals](/docs/evals/cleanup-script) exist to check the first half — whether the library changes agent behavior at all. What neither prompts nor evals replace is the controls. Build them anyway.

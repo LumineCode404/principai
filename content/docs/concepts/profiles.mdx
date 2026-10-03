@@ -1,0 +1,58 @@
+---
+title: Profiles
+description: The curation layer — small, named principle sets per kind of work, so what loads into an agent is relevant and sharp instead of exhaustive.
+---
+
+The archive and the load are two different concerns, and the library separates them explicitly:
+
+- **The archive may be exhaustive.** It is a library on disk. Storage is cheap, coverage is welcome, and nothing is ever removed to make the load smaller.
+- **The load must be curated.** Context is the scarcest resource an agent has. Every token spent on an irrelevant principle is stolen from the task.
+
+Profiles are the layer that connects the two.
+
+## Anatomy of a profile
+
+A profile is a named selection of principles for a kind of work, written as its own file with three parts:
+
+- **Context** — a short description of the work the profile is for: what the agent will be doing, what state it can touch.
+- **Principles, each with a role** — `must-follow` (load in full, obey) or `consider` (available; opened when the task touches them).
+- **Priority order** — when two principles in the set give conflicting instructions, the one earlier in the profile wins. Ties that survive priority are resolved by the hard-stop rule and a human.
+
+The roles are deliberately binary. A gradient of confidence would need judgment to interpret; must-follow and consider do not.
+
+## How loading works
+
+Loading is progressive and identical for every profile:
+
+1. The agent reads `.principles/INDEX.md` first — always. The INDEX carries name, summary, and severity for every principle in the copied set.
+2. must-follow principles, plus any critical principles relevant to the task, are read in full before work starts.
+3. Everything else stays INDEX-only until the task touches its applies_to contexts — then the file is opened, read, and applied.
+
+The mechanism from the agent's side is [Agent Integration](/docs/getting-started/agent-integration); the copy step that starts it all is [Quickstart](/docs/getting-started/quickstart).
+
+## The first profile: destructive-ops
+
+The first profile written is [destructive-ops](/docs/profiles/destructive-ops) — for scripts, migrations, and cleanup: any work that deletes, drops, or rewrites state. It exists because of the chain that started this library: broad credentials, no dry-run, no confirmation, a non-idempotent delete. Least Authority, Fail-Safe Defaults, Idempotency, Tested Backups — the principles that answer exactly that chain — are must-follow there.
+
+Other profiles exist as the work demands them; the archive promises no number, and profiles never delete from it. A principle missing from every profile is still in the library — still searchable, still correct — it simply is not auto-loaded.
+
+## A worked example
+
+An agent is asked to write a script that purges old records from a production table, under destructive-ops:
+
+1. It reads INDEX.md — and sees Least Authority (critical, must-follow), Fail-Safe Defaults (critical, must-follow), Idempotency (critical), Blast Radius (critical), and the consider entries with their summaries.
+2. It loads the must-follow set in full before writing a line.
+3. The task is SQL against production data — so it opens Tested Backups on demand, because the task now touches that principle's territory.
+4. It writes the script with a scoped database user, a dry-run flag, and batch caps — and asks before the first real run.
+
+That is the intended shape of a session: heavy reading where the risk is, none where it is not.
+
+## Choosing a profile
+
+Choose by the work, not by the codebase. A project typically carries one copied set; when a task spans territories, the destructive side wins — the profile whose failure mode is worst sets the tone for the session. What profiles exist is what has been written and reviewed, no more; the list is visible in the [profiles section](/docs/profiles).
+
+## What profiles are not
+
+- **Not enforcement.** A profile changes what an agent reads and obeys; it cannot stop a compromised credential or a buggy command. See [Principles Are Not Enforcement](/docs/concepts/enforcement).
+- **Not a rank.** Exclusion from a profile says nothing about a principle's quality — only about its relevance to that kind of work.
+- **Not permanent.** Profiles are revised when the work teaches us something, and the revisions are reviewed like any other change.

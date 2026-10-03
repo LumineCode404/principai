@@ -1,0 +1,120 @@
+---
+title: You Aren't Gonna Need It
+id: yagni
+name: You Aren't Gonna Need It
+summary: TERJEMAHAN DRAF — Build for proven needs, not imagined futures — speculative generality is complexity you pay interest on forever.
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "architecture"
+  - "libraries"
+  - "services"
+  - "product"
+tags:
+  - "speculation"
+  - "scope"
+  - "complexity"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "d73e1a2a3b088147"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/design/yagni.mdx -->
+<!-- source_hash EN: d73e1a2a3b088147 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Implement only what a current, concrete requirement demands. Trace every abstraction, option, and integration to a real user story or incident; if it has none, flag it and ask a human before building. When a second real need arrives, refactor with two examples in hand rather than one guess. Treat "we might need it someday" as a cost, not a justification.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+You will be wrong about the future, so building for imagined needs means paying complexity interest on capabilities that usually never arrive — and when a real need does arrive, it rarely looks like the imagined one. YAGNI is scissors for speculative generality: the five-database config system, the plugin framework with one plugin, the flag nobody toggles. Refactoring when the second real case appears is almost always cheaper than the speculation would have been.
+
+## When to use
+
+- Adding any abstraction, interface, or configuration option.
+- Product and architecture planning: scope is defined by what you refuse to build.
+- Library design: every public export is surface you must maintain forever (see Hyrum's Law).
+- Infrastructure and migration decisions with no proven consumer yet.
+
+## When NOT to use
+
+- Public contracts: plan additive, versioned changes for consumers you cannot coordinate with (see Versioned Contracts).
+- Irreversible decisions: security fundamentals and data-layout choices that are prohibitive to retrofit are bought early, on purpose.
+- Compliance, legal, and contractual requirements — even the ones with no user story.
+- Capacity headroom for known, measured growth curves.
+
+## Anti-pattern
+
+- A storage abstraction supporting five databases when the company has run one for six years.
+- A plugin system built before the second plugin exists.
+- Options, strategies, and feature flags with zero production users.
+- "Generalize now so we don't have to later" — later arrives with different requirements anyway.
+- Dead parameter permutations that must still be tested and documented.
+
+## Code example
+
+Wrong — speculative generality:
+
+```ts
+// Storage layer built for five backends; we run Postgres, and only Postgres
+interface ArtifactStore {
+  get(id: string): Promise<Buffer>;
+  put(id: string, blob: Buffer): Promise<void>;
+  list(prefix: string): Promise<string[]>;
+}
+class S3Store implements ArtifactStore { /* 90 lines, never used in prod */ }
+class GcsStore implements ArtifactStore { /* 90 lines, never used at all */ }
+```
+
+Right — one function for one proven need:
+
+```ts
+// Direct, boring, testable; a backend swap later is a day of work with a real spec
+export async function getArtifact(id: string): Promise<Buffer> {
+  const row = await db.query("SELECT blob FROM artifacts WHERE id = $1", [id]);
+  return row.blob;
+}
+```
+
+## Technical enforcement
+
+<Enforcement>
+Make speculative surface visible, then refuse it at review:
+
+- **Dead-code and unused-export detection**: run knip / ts-prune (vulture for Python) in CI; speculative generality shows up as unreferenced exports and empty branches.
+- **Option coverage rule**: any option flag with no test exercising both states fails review — if nobody tests it, nobody uses it.
+- **PR template field**: "which user story or incident requires each new extension point?" — no answer, no merge.
+- **Rule of three for abstractions**: the third real, independent consumer is the trigger to extract; the first is never.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+A platform team built a configuration system that could, on paper, target five databases, selected through a driver registry with per-driver dialect modules. The company had run a single database in production for six years. Four of the five drivers were never exercised by any real workload: they had no meaningful tests, blocked dependency upgrades, and turned every schema change into a cross-dialect negotiation. When an actual second datastore finally arrived, its query patterns did not fit the abstraction anyway, and engineers wrote a small direct client for it instead — at which point the registry supported exactly one of the two systems in use. The unused drivers were deleted years later, one upgrade-blocking release at a time. (ilustratif — composite, not a named incident; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **YAGNI vs Versioned Contracts**: internals get no speculation; public contracts are different — planning additive, versioned change for consumers you cannot coordinate with is contractual prudence, not fantasy. Speculative complexity stays banned in private code; deliberate room for change is budgeted in public contracts.
+- **YAGNI vs irreversibility**: some decisions are prohibitive to retrofit — encryption at rest, data partitioning, tenant isolation. When getting it wrong later is catastrophic, buying early is risk management, not speculation (see Blast Radius).
+- **YAGNI vs option pressure**: stakeholders ask for "just an option" because options look free. They are not: each one is a permutation to test, document, and maintain forever — negotiate scope down instead of options up.
+
+## Related principles
+
+- [Keep It Simple](/docs/principles/design/kiss) — speculative features are the main source of accidental complexity.
+- [DRY, With Judgment](/docs/principles/design/dry-tension) — the rule of three before extracting shared code.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — whatever you ship becomes depended on, so do not ship speculative surface.
+- [Gall's Law](/docs/principles/architecture/gall-law) — grow the system from what works, not from a blueprint of the future.
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — where planning for change is the job.
+
+## References
+
+- Kent Beck, *Extreme Programming Explained* (Addison-Wesley) — YAGNI as an XP discipline: implement what you need now, defer everything else until asked for. (verification: ok — widely available).

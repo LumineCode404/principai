@@ -1,0 +1,118 @@
+---
+title: Fail Visible
+id: fail-visible
+name: Fail Visible
+summary: Fail loudly and immediately — silent failure converts a small bug into corrupted state discovered weeks later.
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - services
+  - libraries
+  - ci
+  - distributed
+tags:
+  - errors
+  - fail-fast
+  - silence
+aliases:
+  - Fail Loudly
+  - No Silent Failure
+sources:
+  - 'Waldo et al., "A Note on Distributed Computing", 1994'
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Make every failure loud, immediate, and attributable: raise the error, exit nonzero, fail the build. Never swallow exceptions, never return a default value after a failed operation, never continue past a failed precondition. A silent partial result is worse than a crash — if you cannot classify a failure as harmless, surface it to a human.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Fail-visible means errors announce themselves at the point of failure — an exception, a nonzero exit, a red build — instead of propagating wrong data downstream. The alternative, silent failure, converts a five-minute fix into weeks of corrupted state: the system keeps "working" while quietly lying. Fail-fast is the operational half of the rule: the sooner a defect stops execution, the closer the stop is to the defect that caused it.
+
+## When to use
+
+- Data pipelines: a bad record must divert loudly, not zero out a field and continue.
+- CI/CD and scripts: nonzero exits and red builds; a check that turns green while doing nothing is lying.
+- Library design: invalid input or impossible state raises, never guesses intent.
+- Distributed calls: timeouts and errors returned to the caller, never absorbed into defaults.
+
+## When NOT to use
+
+- Best-effort UI niceties (a failed avatar shows a placeholder) — that is graceful degradation, and the difference is intent: a designed, visible fallback, not an accidental swallow.
+- Transient errors inside a supervised retry loop — provided the supervisor alarms once the budget is spent (see Retry Budget).
+- Security-critical verification paths, where "fail" must additionally mean "fail closed" — visible but open is a breach (see Fail-Safe Defaults).
+
+## Anti-pattern
+
+- An except clause that swallows everything and returns None — callers cannot distinguish "no data" from "could not check".
+- A CI check that exits zero when its own tooling is missing, "so the build stays green".
+- Errors written to a log nobody reads while the API returns success.
+- Falling back to default config when config parsing fails — the service runs with unknown settings.
+- A verification function that returns success when an internal step did not run.
+
+## Code example
+
+Wrong — validation silently bypassed:
+
+```python
+def find_user_or_none(payload):
+    try:
+        return store.find_user(payload["user_id"])
+    except Exception:
+        return None            # caller sees "no such user"; the store being down is invisible
+```
+
+Right — loud, immediate, attributable:
+
+```python
+def find_user(payload):
+    try:
+        return store.find_user(payload["user_id"])
+    except KeyError as e:
+        raise InvalidPayload(f"missing field {e}")          # input error, named
+    except StoreUnavailable as e:
+        raise LookupFailed("user store unreachable") from e  # infra error, chained, visible
+```
+
+## Technical enforcement
+
+<Enforcement>
+Silence is a lint and design problem — enforce it mechanically:
+
+- **Lint rules**: empty catch blocks and blanket exception swallowing fail CI in most linters' default rule sets; enable them.
+- **Script discipline**: the project's bash template ships with strict error mode (exit on error, fail on unset variables, fail on pipe failure); every script inherits it.
+- **Dead-man switches**: processes that must keep running publish heartbeats; absence of the heartbeat is the alarm — a silent zombie cannot hide.
+- **Review checklist**: every new except/catch branch must name what it does with the error.
+- **Aggregate visibility**: the sum of individual loud failures stays visible as an error ratio on a dashboard (see Observability First).
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In February 2014, Apple fixed a TLS verification bug that had been shipping in its SSL/TLS code for some time: a duplicated "goto fail;" line, executed unconditionally because the surrounding if statements used no braces, jumped to the error-handling label with a zero (success) error value. The remaining signature checks were skipped, and affected systems could accept connections regardless of the server's signature. Nothing errored, nothing logged — the failure mode was "success", and the bug could only be found by reading the code, not by watching production. Writeup: https://www.imperialviolet.org/2014/02/22/applebug.html — a single visible failure at that branch would have reduced a silent security bypass to an ordinary bug report.
+</RealCase>
+
+## Tension and trade-off
+
+- **Fail-Visible vs. resilience**: swallowing-and-continuing keeps demos alive but poisons data; weigh by whether wrong data is recoverable later — it usually is not.
+- **Fail-Visible vs. Graceful Degradation**: fail loudly at the layer that owns the decision, degrade visibly at the layer that owns the user experience; the same error is a crash in a library and a friendly banner in the UI.
+- **Weigh against Least Astonishment**: loud means clear and attributable, not noisy — a wall of identical stack traces hides the one real signal as effectively as silence does.
+
+## Related principles
+
+- [Observability First](/docs/principles/reliability/observability-first) — the raised error needs a metric and a trace waiting for it.
+- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — deliberate, visible fallbacks at the UX layer.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — in verification paths, failing visibly must also mean failing closed.
+- [Retry Budget](/docs/principles/reliability/retry-budget) — only transient, visible errors belong in a retry loop.
+
+## References
+
+- Adam Langley, *Apple's SSL/TLS bug*, 2014 — https://www.imperialviolet.org/2014/02/22/applebug.html
+- Waldo et al., *A Note on Distributed Computing*, 1994 — partial failure in distributed systems is silent by nature; visibility must be built (verification: perlu).
+- Google SRE Book — https://sre.google/sre-book/ (postmortem culture: visible failures get fixed).

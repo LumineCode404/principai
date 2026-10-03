@@ -1,0 +1,77 @@
+---
+title: "Profile: Destructive Operations"
+description: Must-follow and consider principles for cleanup scripts, migrations, backfills, and bulk deletes — work where a mistake destroys data.
+must_follow:
+  - "security/least-authority"
+  - "security/fail-safe-defaults"
+  - "reliability/idempotency"
+  - "data/tested-backups"
+  - "reliability/blast-radius"
+  - "security/input-validation"
+consider:
+  - "reliability/observability-first"
+  - "reliability/fail-visible"
+  - "security/complete-mediation"
+  - "data/soft-delete"
+  - "data/append-only-logs"
+---
+
+This is the first profile in the library, and the reason the library exists. A cleanup script with broad credentials, no dry-run, no confirmation, and a non-idempotent delete once took a database with it — every principle below exists because some link in that chain held.
+
+## Context
+
+Use this profile for any task where **a mistake destroys data**:
+
+- cleanup and retention scripts — delete old records, purge logs, expire sessions
+- migrations and schema changes on live tables
+- backfills and bulk updates
+- bulk deletes, truncates, drops — filesystem, database, or cloud
+- destructive work that runs unattended via cron or CI
+
+If the failure mode is "we restore from a backup", this is the profile.
+
+<Callout type="info" title="What this profile is not">
+  It is not for read-only scripts — reports, exports, dashboards — whose worst case is a wrong number, not lost data. And it is not an enforcement mechanism: scoped credentials, dry-run flags, and confirmation gates are enforced by infrastructure. The profile is what the agent reads; the controls are what actually hold.
+</Callout>
+
+## Must-follow
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Least Authority | The script connects as a role that can purge one table — a wrong connection string or a buggy WHERE clause stays small instead of taking the database. | [Least Authority](/docs/principles/security/least-authority) |
+| Fail-Safe Defaults | Dry-run is the default and deleting requires an explicit flag — the tired operator gets a printed plan, not a purge. | [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) |
+| Idempotency | Cron plus human nature means the script will run twice; deleting everything older than X is repeatable, "delete the first N rows" is not. | [Idempotency](/docs/principles/reliability/idempotency) |
+| Tested Backups | The last line when every control above failed — verify the restore point before the first batch, not after the incident. | [Tested Backups](/docs/principles/data/tested-backups) |
+| Blast Radius | Batch caps and per-batch confirmation turn a catastrophic typo into a bounded, boring incident. | [Blast Radius](/docs/principles/reliability/blast-radius) |
+| Input Validation | The age parameter and the table name end up in the WHERE clause — validate bounds before they reach SQL. | [Input Validation](/docs/principles/security/input-validation) |
+
+The six map one-to-one onto the failure chain: a broad credential (Least Authority), a destructive default (Fail-Safe Defaults), an unbounded scope (Blast Radius), unsafe repetition (Idempotency), unvalidated input (Input Validation) — and, when all of those still fail, no floor left to stand on (Tested Backups). An agent loaded with this profile is expected to halt and ask before violating any of them.
+
+## Consider
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Observability-First | Log what was deleted, how many rows, from where — recovery starts with knowing the scope. | [Observability-First](/docs/principles/reliability/observability-first) |
+| Fail-Visible | A cleanup that silently skips half its rows poisons the next run; partial failure must be loud. | [Fail-Visible](/docs/principles/reliability/fail-visible) |
+| Complete Mediation | Scheduled jobs do not inherit trust from setup time — authority is re-checked at execution, every run. | [Complete Mediation](/docs/principles/security/complete-mediation) |
+| Soft Delete | When rows are recoverable, deletion becomes reversible — trade storage cost for recovery. | [Soft Delete](/docs/principles/data/soft-delete) |
+| Append-Only Logs | Record deletions as events, and replay, audit, and forensics come free. | [Append-Only Logs](/docs/principles/data/append-only-logs) |
+
+## Priority when they conflict
+
+1. **Fail-Safe Defaults and Blast Radius outrank velocity.** A destructive operation that is slow because it runs in confirmed batches is working as designed.
+2. **Least Authority scopes what any other principle may do.** No amount of idempotency or observability makes a superuser credential acceptable for a cron job.
+3. **Tested Backups is the last line — never skip it because idempotency "makes it safe".** A repeatable delete is still a delete; the restore point is verified before the first batch runs, every time.
+4. **Soft Delete and Append-Only Logs trade off against storage cost.** Accept the cost when recovery matters; decline it explicitly — never silently — when it does not.
+
+<Callout type="warn" title="The deliberate tension">
+  Fail-Safe Defaults says dry-run first; a human sometimes says "run it now". The profile resolves this in advance: an explicitly requested immediate destructive run is executed with bounded batches, a stated risk, and a fresh confirmation — not with the safety silently dropped, and not with a flat refusal. The [evals](/docs/evals/cleanup-script) test exactly this.
+</Callout>
+
+## Copy this profile
+
+```bash
+bun run principai copy --profile destructive-ops --to .
+```
+
+This writes the selected principles into `.principles/` at the target path, together with the INDEX and the AGENTS.md snippet. Run it from a checkout of the library; point `--to` at the project that needs it.

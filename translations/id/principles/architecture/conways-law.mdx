@@ -1,0 +1,115 @@
+---
+title: Conway's Law
+id: conways-law
+name: Conway's Law
+summary: TERJEMAHAN DRAF — Your architecture will mirror your team's communication structure — design the org, or it designs the system for you.
+category: architecture
+type: law
+severity: advisory
+applies_to:
+  - "architecture"
+  - "teams"
+  - "services"
+tags:
+  - "organization"
+  - "communication"
+  - "boundaries"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "73a77aa98b3630f9"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/architecture/conways-law.mdx -->
+<!-- source_hash EN: 73a77aa98b3630f9 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Treat team structure and communication paths as first-class inputs to every architecture decision. When proposing service boundaries, first map who owns what and who actually talks to whom — the design will converge to that map whether you plan it or not. If the target architecture requires collaboration patterns the org does not have, either change the org or change the target.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+Organizations design systems that mirror their communication structures: the interfaces between modules will look like the lines between the people who built them. Conway stated it in 1967 as an observation about design committees — a design organization's outputs reflect its internal communication patterns. The engineering consequence is that org design is architecture design; if you cannot change the software, look at the communication paths that produced it.
+
+## When to use
+
+- Decomposing a monolith or defining service boundaries.
+- Planning team topologies and ownership before, or together with, the architecture.
+- Explaining why "the same broken shared thing" keeps reappearing after every rewrite.
+- Mergers and reorgs: expect the architecture to drift toward the new org chart.
+
+## When NOT to use
+
+- Small teams where communication is already cheap — do not split one team into microservices to imitate a target org.
+- Domains where the correct boundary genuinely cuts across existing team lines — pick the domain, then negotiate the org move (the "inverse Conway maneuver"), knowing it is slow.
+- Compliance-mandated separation of duties: that org shape is a requirement, not a design smell to engineer around.
+
+## Anti-pattern
+
+- One "shared" service that four teams bolt their modules into, each breaking the others' assumptions.
+- Architecture designed by a central committee with no delivery power — the shipped system follows the delivery teams' lines instead.
+- Services split by technical layer (a frontend team, a database team) rather than by domain change.
+- A "platform team" that owns everything other teams touch, becoming a serialization point for every feature.
+
+## Code example
+
+Wrong — one shared service mirrors a broken communication pattern:
+
+```text
+services/shared-core/
+  billing.ts    # edited by the Payments team
+  search.ts     # edited by the Search team
+  reports.ts    # edited by whoever needed a chart that week
+# one deployable, four review queues: every release waits on everyone
+```
+
+Right — ownership boundaries make the org chart explicit and cheap:
+
+```yaml
+# CODEOWNERS — the org chart becomes the boundary
+/billing/**   @org/payments
+/search/**    @org/search
+/reports/**   @org/analytics
+# each team ships its own service; cross-team talk goes through contracts
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by ownership mechanics, not by org charts on slides:
+
+- **CODEOWNERS**: required reviews per path — a PR touching two teams' modules is an automatic signal to extract a boundary.
+- **Import boundary rules in CI** (dependency-cruiser, eslint-plugin-boundaries) that match the ownership map, not just folder aesthetics.
+- **Service catalog metadata**: every service records its owning team; orphaned services fail audits.
+- **Contract review process**: cross-team interfaces (APIs, events, shared schemas) require both owners' sign-off before merge.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Four teams — payments, search, reports, and mobile — shared one "shared-core" service "to avoid duplication". Each bolted its own module in: payment batch jobs next to search indexing next to report queries, with no owner of the whole. Deploys became four-way negotiation, and each team's changes broke the others' assumptions because the modules had no contracts between them, only proximity. Splitting the service along the four existing team lines reduced the coordination tax; it did not eliminate cross-team dependencies — those moved into explicit, versioned contracts. (ilustratif — composite of a common failure mode; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Domain purity vs. org reality**: the technically right boundary that cuts across teams will erode back toward the team lines anyway. Either move the people or accept the seam; pretending the org does not exist does not survive a deadline.
+- **Reuse vs. autonomy**: one shared service saves code but couples every team's release calendar; duplicated small code with clear owners often ships faster.
+- **Conway vs. stability**: constantly reorganizing teams means constantly drifting architecture — pair each reorg with migration budget, or the system pays a tax the org never sees.
+
+## Related principles
+
+- [Gall's Law](/docs/principles/architecture/gall-law) — the org and the system must co-evolve; neither is designed once.
+- [Single Responsibility](/docs/principles/architecture/single-responsibility) — one owner, one reason to change.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — cross-team seams need declared schemas, not proximity.
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how teams change a shared interface without breaking each other.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — ownership boundaries also limit how far a failure spreads.
+
+## References
+
+- Melvin Conway, "How Do Committees Invent?", 1967: http://www.melconway.com/Home/Committees_Paper.html (verified URL).
+- The "inverse Conway maneuver" — deliberately reshaping teams toward a target architecture — is discussed in Skelton and Pais, *Team Topologies* (verification: perlu).

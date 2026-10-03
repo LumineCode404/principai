@@ -1,0 +1,71 @@
+---
+title: "Profile: Public API"
+description: Must-follow and consider principles for HTTP and service APIs consumed by others — where every observable behavior becomes someone's dependency.
+must_follow:
+  - "api/versioned-contracts"
+  - "api/explicit-contracts"
+  - "security/input-validation"
+  - "reliability/fail-visible"
+consider:
+  - "api/hyrum-law"
+  - "api/postel-robustness"
+  - "security/secure-by-default"
+  - "security/complete-mediation"
+  - "reliability/graceful-degradation"
+  - "reliability/retry-budget"
+---
+
+A public API is defined by one asymmetry: you cannot coordinate every consumer's deploy with your own. Every principle in this profile is a consequence of publishing behavior to callers you do not control.
+
+## Context
+
+Use this profile for interfaces other people's code depends on:
+
+- HTTP APIs — internal or public
+- service-to-service contracts, queues, webhooks
+- SDKs and client libraries backed by your endpoints
+- anything versioned in the URL, headers, or payload
+
+If a consumer can be broken by a change you ship, this is the profile.
+
+<Callout type="info" title="What this profile is not">
+  It is not for internal one-off scripts or admin CLIs with a single operator who deploys with you — those are covered by whichever profile matches their work. "Public" here means any interface you cannot change and redeploy all consumers of in one motion.
+</Callout>
+
+## Must-follow
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Versioned Contracts | Once consumed, the URL shape is a published interface; changes go through versions, not edits to the meaning. | [Versioned Contracts](/docs/principles/api/versioned-contracts) |
+| Explicit Contracts | Request and response schemas stated and validated on both ends — no shape-by-example, no folklore formats. | [Explicit Contracts](/docs/principles/api/explicit-contracts) |
+| Input Validation | The API is the boundary; validate everything crossing it and reject early with an error a client can act on. | [Input Validation](/docs/principles/security/input-validation) |
+| Fail-Visible | Return real errors with meaning; a client that cannot tell failure from success builds retry loops around corruption. | [Fail-Visible](/docs/principles/reliability/fail-visible) |
+
+## Consider
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Hyrum's Law | Every observable behavior will become a dependency for someone — design as if it already is. | [Hyrum's Law](/docs/principles/api/hyrum-law) |
+| Postel's Robustness | Be conservative in what you send, liberal in what you accept — with the modern critique: lenient parsing hides producer bugs and breeds de facto contracts you must support forever. Weigh against Hyrum's Law before being liberal. | [Postel's Robustness](/docs/principles/api/postel-robustness) |
+| Secure by Default | TLS, authentication, authorization on by default; anonymous access is an explicit, documented grant. | [Secure by Default](/docs/principles/security/secure-by-default) |
+| Complete Mediation | Every request authorized — not just the ones that happen to pass through the gateway. | [Complete Mediation](/docs/principles/security/complete-mediation) |
+| Graceful Degradation | A dependency failing should not take your availability with it; serve stale, shed load, keep error budgets. | [Graceful Degradation](/docs/principles/reliability/graceful-degradation) |
+| Retry Budget | Document your retry guidance for clients; they will retry regardless — make the retry safe. | [Retry Budget](/docs/principles/reliability/retry-budget) |
+
+## Priority when they conflict
+
+1. **Explicit contracts beat clever defaults.** An inferred contract is a bug with users attached.
+2. **Never mutate a published contract's meaning.** Add a version, add a field, add a default — never redefine what an existing field means.
+3. **Deprecation windows before removal.** Announce, document, wait out the window, then remove; breaking a consumer without a window is an outage you caused.
+
+<Callout type="warn" title="Postel's Robustness is loaded last for a reason">
+  Lenient parsing is how undocumented behavior becomes load-bearing: a client ships against what you happened to accept, and now that acceptance is the contract. Within this profile, Explicit Contracts wins the tie — be liberal only with inputs you are prepared to support forever.
+</Callout>
+
+## Copy this profile
+
+```bash
+bun run principai copy --profile public-api --to .
+```
+
+This writes the selected principles into `.principles/` at the target path, together with the INDEX and the AGENTS.md snippet. Run it from a checkout of the library; point `--to` at the API's repository.

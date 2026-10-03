@@ -1,0 +1,68 @@
+---
+title: Severity Levels
+description: What critical, important, and advisory actually mean — and how severity decides what an agent loads and when it must stop and ask.
+---
+
+Severity is the binding strength of a principle: what violating it risks, and what an agent must do before deviating. It is not importance-to-us and not elegance — it is the worst case of getting it wrong.
+
+## The three levels
+
+| Level | What violating it risks | Deviation rule |
+| --- | --- | --- |
+| critical | Unrecoverable loss: data gone, secrets leaked, people harmed | Never without explicit human approval |
+| important | Real but recoverable damage or debt | Allowed, with a written reason |
+| advisory | A worse design, not a broken system | Free — tiebreaker between equal designs |
+
+### critical
+
+Violating a critical principle can cause loss that no amount of follow-up recovers: deleted data with no restore, leaked secrets, harm to people. The semantics are exact — an agent must not violate a critical principle without explicit human approval. No phrasing of the task, no deadline pressure, and no clever reframing changes this. If the task seems to require a violation, either the task is wrong or the approach is; either way, the agent stops and asks.
+
+In this archive: [Least Authority](/docs/principles/security/least-authority), [Tested Backups](/docs/principles/data/tested-backups), [Idempotency](/docs/principles/reliability/idempotency), [Blast Radius](/docs/principles/reliability/blast-radius).
+
+### important
+
+A strong default. Deviation is allowed when the agent can state a reason — and the reason is written down, in the commit, the pull request, or the plan, where a human can audit it later. The written reason is the whole point: silent drift is how important principles quietly die.
+
+In this archive: [Expand-Contract](/docs/principles/data/expand-contract), [Versioned Contracts](/docs/principles/api/versioned-contracts), [Observability First](/docs/principles/reliability/observability-first).
+
+### advisory
+
+A consideration, not a rule. Advisory principles break ties: when two designs are otherwise equal, the advisory principle picks the winner. It never vetoes a working design.
+
+In this archive: [KISS](/docs/principles/design/kiss), [Least Astonishment](/docs/principles/design/least-astonishment), [Soft Delete](/docs/principles/data/soft-delete).
+
+## Assigning a level
+
+One question sets the level: **if this principle is violated on a bad day, what is the worst that happens?**
+
+- The answer includes data gone, secrets leaked, or people harmed — critical.
+- The answer is real but recoverable damage, or debt that accumulates — important.
+- The answer is a worse design that still works — advisory.
+
+Severity is assigned to the violation's worst case, not to the principle's elegance or to our enthusiasm for it. Levels get revisited: when reality shows a level was set wrong, correcting it is a normal, reviewed edit — not a failure of the original author.
+
+## The hard-stop rule
+
+Before any of these, an agent halts and requests explicit human approval:
+
+- Violating a critical principle — any of them, for any stated benefit.
+- Performing destructive or irreversible actions: deletes, drops, truncates, force-pushes, credential changes.
+- Proceeding when uncertain — when the agent cannot tell whether the action falls under the two rules above.
+
+The halt is a protocol, not a mood. The agent states what it is about to do, what the principle requires instead, and waits. Humans can approve, redirect, or take over — but the decision is theirs. This mirrors the destructiveness chain the library was built around: the cleanup script that deleted a database did not lack instructions; it lacked a stop.
+
+## How severity interacts with profiles
+
+Severity and [profiles](/docs/concepts/profiles) work together to keep context small:
+
+- **INDEX.md is always read first.** It carries each principle's name, summary, and severity — nothing more.
+- **must-follow plus critical means full load.** Principles the profile marks must-follow, and any critical principles relevant to the task, are read in full before work begins.
+- **Everything else stays INDEX-only** until the task touches their applies_to contexts. Then the file is opened.
+
+So severity decides depth — when a rule must be obeyed and fully read — while profiles decide membership: which rules belong to this kind of work at all. The full protocol an agent follows is in [Agent Integration](/docs/getting-started/agent-integration).
+
+## Misuse
+
+- Never use severity to rank how much we like a principle. Severity describes the violation, not the idea.
+- Never mark a principle critical to make agents obey harder. If violating it cannot cause unrecoverable loss, it is not critical — inflate the level and agents learn to ignore the badge.
+- Never downgrade a principle to avoid the hard stop because a task is inconvenient. The inconvenience is the signal.

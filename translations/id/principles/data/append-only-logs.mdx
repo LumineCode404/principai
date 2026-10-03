@@ -1,0 +1,116 @@
+---
+title: Append-Only Logs
+id: append-only-logs
+name: Append-Only Logs
+summary: TERJEMAHAN DRAF — Record facts as appended events, never edited history — an append-only log is evidence and undo in one.
+category: data
+type: principle
+severity: important
+applies_to:
+  - "database"
+  - "distributed"
+  - "audit"
+  - "destructive-ops"
+tags:
+  - "audit-log"
+  - "events"
+  - "immutability"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "61cc39f28820810c"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/data/append-only-logs.mdx -->
+<!-- source_hash EN: 61cc39f28820810c -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Record state changes as appended, immutable events — with timestamp and actor — instead of editing rows in place. Never UPDATE or DELETE history: corrections are new events that supersede old ones, and physical removal happens only through an explicit, governed purge. Protect audit logs at the permission level so that no role, including yours, can quietly rewrite them.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+An append-only log records facts as events that are never edited or removed — the write-ahead log of databases and the event log of event sourcing, applied to business and audit data. Because history cannot be rewritten, the log is simultaneously evidence (who did what, in order) and recovery (state rebuilt by replaying events). Corrections are compensating events, not edits: the log shows the mistake and the fix, which is exactly what an investigation needs.
+
+## When to use
+
+- Audit trails: permission changes, payments, admin actions, access to sensitive data.
+- State that must be reconstructible: event-sourced aggregates, materialized views rebuilt by replay.
+- Integration between systems — the log is the durable interface; consumers read at their own pace and position.
+- Multi-step workflows whose debugging requires the timeline, not just the current state.
+
+## When NOT to use
+
+- High-churn mutable state where event history would dwarf the state — keep the counter, log the anomalies.
+- Simple CRUD where the current row is the whole truth; an event log adds machinery without adding answers.
+- Data whose retention is legally bounded — append-only must pair with a governed purge path, or the log itself becomes the compliance problem.
+- Hot-path reads: consumers query projections built from the log, never the raw log itself.
+
+## Anti-pattern
+
+- An audit table writable by the same application role, with UPDATE and DELETE granted alongside INSERT.
+- "Fixing" history with an UPDATE — a rename that rewrites the actor column now lies about who did what.
+- Events with client-supplied timestamps and no ordering guarantee.
+- Treating the log as storage: querying it on every request instead of maintaining a projection.
+
+## Code example
+
+Wrong — history edited to taste:
+
+```sql
+-- "Fix" a wrong audit entry by editing it — history now lies
+UPDATE audit_log SET action = 'refund:corrected', amount = 4200 WHERE id = 991;
+DELETE FROM audit_log WHERE id = 992;   -- "that one was noise"
+```
+
+Right — corrections are new events; permissions enforce it:
+
+```sql
+-- Nothing before is ever edited or removed; the correction references the mistake
+INSERT INTO audit_log (id, ts, actor, action, amount, supersedes)
+VALUES (next_id(), now(), 'ops@corp', 'refund:corrected', 4200, 991);
+
+-- DBA side, once: the database, not the code, is what actually enforces this
+-- REVOKE UPDATE, DELETE ON audit_log FROM app_role;
+```
+
+## Technical enforcement
+
+<Enforcement>
+Immutability is a property of the store, not a promise of the code:
+
+- **Database permissions**: application roles hold INSERT and SELECT on the log, never UPDATE or DELETE — revoke them and the point is enforced structurally (see Least Authority).
+- **Write-once storage tiers** where available: object-lock buckets and WORM-like storage make rewriting impossible rather than forbidden.
+- **Tamper evidence**: hash chaining or periodic anchoring of log digests makes tampering detectable, not just preventable.
+- **Projections for reads**: consumers query derived views maintained from the log; the raw log is never on a hot path.
+- **Governed purge**: removal from the log is itself a logged, approved event with its own audit trail — deletion must be visible in history.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+(ilustratif) An investigation into a suspicious funds transfer stalls because the audit table allowed UPDATE. A well-meaning cleanup script had "normalized" old entries years earlier; entries added later were corrected in place during a data-quality sprint. By the time investigators arrive, the table cannot distinguish a legitimate correction from tampering, and the reconstruction falls back to interviews and memory instead of data. Revoking UPDATE would have reduced the question "what happened?" from testimony to a query. (verification: perlu — the composite is constructed; real investigations blocked by mutable audit trails exist, belum digali — verify specific sources before citing any of them.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Append-Only vs. privacy and retention**: immutable logs of personal data collide with erasure duties — log the facts you must keep, hash or drop the PII you must not (weigh against Soft Delete).
+- **Append-Only vs. queryability**: the log answers "what happened", a projection answers "what is" — you must maintain both, and reconcile them.
+- **Weigh against KISS**: full event sourcing is an architecture; an append-only audit of critical actions is a table with revoked UPDATE — start there and stop until proven insufficient.
+
+## Related principles
+
+- [Soft Delete](/docs/principles/data/soft-delete) — deletion as an event rather than an edit of history.
+- [Tested Backups](/docs/principles/data/tested-backups) — a replayable log is only real if replay has been rehearsed.
+- [Least Authority](/docs/principles/security/least-authority) — the REVOKE is the principle, applied to history.
+- [Idempotency](/docs/principles/reliability/idempotency) — stable event IDs make replay safe as well as possible.
+
+## References
+
+- Pat Helland, *Immutability Changes Everything*, CIDR 2015 — the case for immutable, append-only records (verification: perlu — confirm the exact paper and venue before quoting).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — write-ahead logs, log-structured storage, and event sourcing (verification: perlu).

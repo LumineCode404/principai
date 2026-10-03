@@ -1,0 +1,114 @@
+---
+title: Explicit Contracts
+id: explicit-contracts
+name: Explicit Contracts
+summary: Everything crossing a boundary carries an explicit, validated contract — implicit assumptions rot silently until they fail at 3 a.m.
+category: api
+type: principle
+severity: important
+applies_to:
+  - api
+  - services
+  - distributed
+  - database
+tags:
+  - schemas
+  - validation
+  - boundaries
+aliases:
+  - Explicit over Implicit Contracts
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+  - 'Kleppmann, Designing Data-Intensive Applications'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Give every boundary crossing — HTTP request, queue message, webhook, database row, environment variable — a declared schema, and validate it at the point of entry. Treat any unwritten assumption (field order, nullability, units, timezone, encoding) as a defect waiting to be scheduled. If you consume a producer's output, insist on the schema in code and tests, not in folklore.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Every piece of data that crosses a process, service, or ownership boundary carries an explicit contract: a schema, owned and validated by the receiving side. Explicit means machine-checkable — a type in a shared package, a JSON Schema, a protobuf definition — not a wiki page. Implicit contracts (assumptions about ordering, formats, defaults) are still contracts; they are just unwitnessed, untested, and discovered in production.
+
+## When to use
+
+- Service-to-service and client-server calls; third-party webhooks and callbacks.
+- Event streams and queues where producers and consumers deploy independently.
+- Reading another team's tables, exports, or files — including the output of your own past migrations.
+- Consuming configuration and environment variables at startup.
+
+## When NOT to use
+
+- Hot in-process calls already checked by the compiler — re-validating there is pure overhead; validate at the boundary, then trust types inside.
+- One-off scripts over files you wrote and read in the same process.
+- While a format is still being actively invented in a prototype — but promote it to a schema before a second consumer appears.
+
+## Anti-pattern
+
+- Positional unpacking of JSON fields — relying on undocumented order.
+- "The producer always sends cents" or "the timestamp is always UTC" — nowhere written, nowhere checked.
+- Copy-pasting a type into the consumer instead of sharing a versioned schema package.
+- Schema drift: the producer evolves the payload, no diff fails, and the consumer's assumption quietly expires.
+
+## Code example
+
+Wrong — the contract lives in an undocumented assumption:
+
+```ts
+// "getJob always returns fields in insertion order" — said nobody, in writing, ever
+const [id, status] = Object.values(await getJob(jobId)) as [string, string];
+if (status === 'done') markComplete(id);
+```
+
+Right — named fields, validated at the boundary:
+
+```ts
+const Job = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'running', 'done', 'failed']),
+});
+const job = Job.parse(await getJob(jobId)); // order-independent, unknown keys rejected
+if (job.status === 'done') markComplete(job.id);
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced where data enters, not where it is discussed:
+
+- **Schema validation at every boundary** (zod, JSON Schema, protobuf/Avro): parse, do not hand-check; reject unknown keys; fail fast at entry.
+- **Consumer-driven contract tests** (Pact): producer CI runs against real consumer expectations, catching drift before deploy.
+- **OpenAPI spec as the source of truth in CI**: the spec exists, matches the implementation via round-trip tests, and every PR's diff is classified.
+- **Schema registry with compatibility checks** for events: producers cannot merge a breaking shape change.
+- **Shared contract packages**, versioned and published — one definition, not N copies.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+A consumer built its mapping on the field order of a producer's JSON response — never documented, just observed. The producer later fixed what it considered a harmless sort bug, changing element order. The consumer's positional logic then mapped IDs to the wrong records, and the mismatch flowed into downstream reports for days before a reconciliation flagged it; nobody connected the "harmless" sort fix to the corrupted mapping. A named-field schema would have reduced a multi-day silent corruption to a failing contract test in CI. (ilustratif — composite of a common failure mode; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Validation cost vs. throughput**: parsing every inbound message costs CPU at high volume; validate at boundaries and pass typed, trusted data inward — not repeated checks in-process.
+- **Strictness vs. tolerance**: the Robustness Principle argues for accepting imperfect input; this principle argues for rejecting the undefined. Resolution: tolerance is a documented, logged exception inside the contract — never folklore.
+- **Schema ceremony vs. velocity**: writing contracts first feels slow; it is still cheaper than the 3 a.m. version, and consumer-driven tests turn it into a safety net rather than paperwork.
+
+## Related principles
+
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how a declared contract evolves safely.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — why the undeclared parts still behave like a contract.
+- [Input Validation](/docs/principles/security/input-validation) — the hostile-boundary, security-grade version.
+- [Robustness Principle](/docs/principles/api/postel-robustness) — bounded tolerance inside a declared contract.
+- [Expand-Contract](/docs/principles/data/expand-contract) — the procedure for changing schemas consumers already read.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — reject loudly at the boundary instead of corrupting quietly inside.
+
+## References
+
+- Google SRE Book — reliability as a boundary and API problem: https://sre.google/sre-book/ (verified URL).
+- Kleppmann, *Designing Data-Intensive Applications* — data models and evolution as contract design (verification: perlu — confirm chapter before citing precisely).

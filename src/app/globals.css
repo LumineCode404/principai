@@ -1,0 +1,207 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "fumadocs-ui/css/black.css";
+@import "fumadocs-ui/css/preset.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-montserrat);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-ink: var(--ink);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * PRINCIPAI brand palette (matched to logo):
+ *   #070707  background (near-black)
+ *   #FFFFFF  foreground
+ *   #4D4B5B  muted slate (borders, decorative — text-safe tint: #8B89A0)
+ *   #0282D8  brand blue (links & accents on dark; interactive shade: #0273C4)
+ * The site is dark-only: the logo was designed for a black canvas.
+ */
+:root,
+.dark {
+  --radius: 0.625rem;
+
+  --background: #070707;
+  --foreground: #ffffff;
+  --card: #0e0e12;
+  --card-foreground: #ffffff;
+  --popover: #0b0b0f;
+  --popover-foreground: #ffffff;
+  --primary: #0282d8;
+  --primary-foreground: #051220;
+  --secondary: #15151b;
+  --secondary-foreground: #ffffff;
+  --muted: #131318;
+  --muted-foreground: #8b89a0;
+  --accent: #15151b;
+  --accent-foreground: #ffffff;
+  --destructive: #e5484d;
+  --border: rgba(77, 75, 91, 0.45);
+  --input: rgba(77, 75, 91, 0.5);
+  --ring: #0282d8;
+  --chart-1: #0282d8;
+  --chart-2: #4d4b5b;
+  --chart-3: #8b89a0;
+  --chart-4: #5cb3f2;
+  --chart-5: #2b2a35;
+  --sidebar: #070707;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #0282d8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #15151b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(77, 75, 91, 0.45);
+  --sidebar-ring: #0282d8;
+
+  --brand: #0282d8;
+  --brand-strong: #0273c4;
+  --ink: #4d4b5b;
+
+  /* Fumadocs theme tokens */
+  --color-fd-background: #070707;
+  --color-fd-foreground: #ffffff;
+  --color-fd-muted: #121218;
+  --color-fd-muted-foreground: #8b89a0;
+  --color-fd-popover: #0b0b0f;
+  --color-fd-popover-foreground: #ffffff;
+  --color-fd-card: #0e0e12;
+  --color-fd-card-foreground: #ffffff;
+  --color-fd-border: rgba(77, 75, 91, 0.45);
+  --color-fd-primary: #0282d8;
+  --color-fd-primary-foreground: #051220;
+  --color-fd-secondary: #15151b;
+  --color-fd-secondary-foreground: #ffffff;
+  --color-fd-accent: rgba(2, 130, 216, 0.12);
+  --color-fd-accent-foreground: #5cb3f2;
+  --color-fd-ring: #0282d8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  ::selection {
+    background: rgba(2, 130, 216, 0.35);
+    color: #ffffff;
+  }
+}
+
+/* ---- Custom scrollbar ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2b2a35 transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2b2a35;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4d4b5b;
+}
+
+/* ---- Brand utilities ---- */
+.font-display {
+  font-family: var(--font-montserrat), var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.text-brand {
+  color: #0282d8;
+}
+
+.bg-grid {
+  background-image: linear-gradient(rgba(77, 75, 91, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(77, 75, 91, 0.14) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.glow-brand {
+  box-shadow: 0 0 0 1px rgba(2, 130, 216, 0.25), 0 8px 40px -8px rgba(2, 130, 216, 0.45);
+}
+
+.hero-fade {
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 55%, transparent 100%);
+}
+
+/* Logo black-canvas blend: black pixels disappear over the page background. */
+.logo-blend {
+  mix-blend-mode: screen;
+  isolation: isolate;
+}
+
+/* Fumadocs: keep prose headings on-brand. */
+.prose :is(h1, h2, h3, h4) {
+  font-family: var(--font-montserrat), var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/*
+ * Code comment tokens: shiki's github-dark comment colors sit near 4:1 on the
+ * code background — below the 4.5:1 AA threshold at 13px. Raise them for this
+ * dark-only site. Attribute selectors match the inline custom property.
+ */
+span[style*="--shiki-dark:#6A737D"],
+span[style*="--shiki-dark:#6A9955"],
+span[style*="--shiki-dark:#6272A2"],
+span[style*="--shiki-dark:#808080"] {
+  color: #9ba3af !important;
+}
+
+/* Fumadocs: remove default theme switch (dark-only brand). */
+[data-theme-switch] {
+  display: none;
+}

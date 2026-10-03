@@ -1,0 +1,96 @@
+---
+title: Principle Format
+description: The anatomy of one principle file — the frontmatter contract, the fixed section order, and the components every principle uses.
+---
+
+Every principle is one MDX file. Not a chapter, not a wiki page — one file an agent can load whole, obey, and drop. The format is strict on purpose: agents do not skim, and they do not forgive a section they were told to expect but did not find.
+
+The reference example throughout is [Least Authority](/docs/principles/security/least-authority).
+
+## Frontmatter
+
+Every field is machine-readable. The CLI, the INDEX generator, and [profiles](/docs/concepts/profiles) all consume it:
+
+<TypeTable
+  type={{
+    title: { type: "string", description: "Human title. The only required field — the site needs it to render." },
+    id: { type: "string", description: "Stable kebab-case identifier, e.g. least-authority. Used by the CLI, the INDEX, and cross-links. Renaming it breaks references; never do it casually." },
+    name: { type: "string", description: "Human name of the principle. Usually matches the title." },
+    summary: { type: "string", description: "One or two sentences. Shown in INDEX.md and used by progressive loading: if the summary is enough, the agent never opens the file." },
+    category: { type: "string", description: "Archive category: security, reliability, data, architecture, api, design. See Taxonomy for what is dug and what is not." },
+    type: { type: "principle | law | heuristic | practice", description: "What kind of claim this is. Laws are empirical observations, heuristics are rules of thumb, practices are checklists. The value doc is reserved for non-principle pages like this one." },
+    severity: { type: "critical | important | advisory", description: "How hard the rule binds an agent. See Severity Levels." },
+    applies_to: { type: "list of contexts", description: "Contexts the principle is relevant to — destructive-ops, scripts, database, api, distributed, ml, infrastructure, services. Drives on-demand loading." },
+    tags: { type: "list of strings", description: "Free-form search keywords for principai search." },
+    aliases: { type: "list of strings", description: "Alternative names that resolve to this file, e.g. Least Privilege. Overlapping ideas live here — never in a second file." },
+    sources: { type: "list of strings", description: "Where the principle comes from: papers, books, postmortems. Checkable — or marked verification perlu." },
+    status: { type: "draft | reviewed", description: "reviewed only after a human has approved the file. Draft is the default and the honest state." },
+    verification: { type: "ok | perlu", description: "ok means citations were checked against primary sources. perlu means the check is still needed." },
+    source_hash: { type: "string", description: "SHA-256 of the English source file. Present only in derived ID translations — see Two-Repo Sync." },
+    translation_status: { type: "draft | reviewed | stale", description: "Present only in derived ID translations. A source_hash mismatch marks the file stale automatically." },
+  }}
+/>
+
+Two fields deserve emphasis. `summary` is the workhorse of progressive loading: INDEX.md carries it so an agent can judge relevance without opening files. `verification` is the honesty valve: it separates what we have checked from what we still cite on trust. Categories and their dig status live in the [Taxonomy](/docs/taxonomy); `source_hash` and `translation_status` appear only in derived ID translations, explained in [Two-Repo Sync](/docs/concepts/two-repo-sync).
+
+## Section order
+
+Every principle file uses the same eleven H2 sections, in this order:
+
+1. Instruction for AI
+2. Definition
+3. When to use
+4. When NOT to use
+5. Anti-pattern
+6. Code example
+7. Technical enforcement
+8. Real-world case
+9. Tension and trade-off
+10. Related principles
+11. References
+
+The skeleton:
+
+```markdown
+---
+title: ...            (frontmatter, see above)
+---
+
+<AIInstruction>...</AIInstruction>
+<Severity level="critical" />
+
+## Definition
+## When to use
+## When NOT to use
+## Anti-pattern
+## Code example
+## Technical enforcement
+## Real-world case
+## Tension and trade-off
+## Related principles
+## References
+```
+
+### Why the order matters
+
+The order is a loading strategy, not a style preference:
+
+- **Instruction first.** The AIInstruction block is self-sufficient: an agent that reads nothing else can still obey it. In a tight context, the instruction plus the severity badge is the minimum viable dose of the principle.
+- **When NOT to use directly after When to use.** An agent that finds a rule without its exceptions applies it blindly — the pairing prevents that.
+- **Anti-pattern before Code example.** The wrong/right contrast lands only if the wrong version is fresh in mind.
+- **Technical enforcement before Real-world case.** The case demonstrates what happens when enforcement is missing; it reads better once the reader knows what enforcement would have looked like.
+- **Tension near the end.** Trade-offs only make sense after the reader understands what is being traded.
+- **References last.** They exist for verification, not for reading.
+
+## Custom components
+
+Four components carry the structure; every principle uses them:
+
+- `AIInstruction` — imperative, second person, the part an agent must obey. If a file can only be skimmed, this is the part that must not be.
+- `Severity` — renders the severity badge; the level is the stop rule described in [Severity Levels](/docs/concepts/severity).
+- `Enforcement` — the real controls the principle pairs with. Principles are not enforcement; this section names what is. See [Principles Are Not Enforcement](/docs/concepts/enforcement).
+- `RealCase` — verified incidents only. Anything unverifiable is explicitly marked ilustratif and the frontmatter carries `verification: perlu`.
+
+## File length
+
+`principai check` carries a lint rule proposing a maximum file length of roughly 160 lines. That threshold is a lint rule, not a corpus target: files are not padded to approach it, the archive does not promise any number of files, and line count is never reported as progress. A file should be exactly as long as its eleven sections need — and no longer.

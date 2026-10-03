@@ -1,0 +1,123 @@
+---
+title: Least Authority
+id: least-authority
+name: Least Authority
+summary: Berikan hanya otoritas yang benar-benar dibutuhkan tugas — skrip cleanup dengan akses tulis penuh mengubah bug kecil menjadi database yang terhapus.
+category: security
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "scripts"
+  - "infrastructure"
+  - "services"
+  - "database"
+  - "ml"
+tags:
+  - "authorization"
+  - "credentials"
+  - "scoping"
+  - "blast-radius"
+aliases:
+  - "Least Privilege"
+  - "Principle of Least Privilege"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+status: draft
+verification: perlu
+source_hash: "c5288a385c7cbb38"
+translation_status: draft
+---
+
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/security/least-authority.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
+
+<AIInstruction>
+Selalu batasi credentials, permission, dan otoritas runtime ke minimum yang dibutuhkan tugas spesifik tersebut. Jangan pernah menjalankan skrip, agent, atau service dengan akses admin/root/write-everything jika ada role yang lebih sempit. Jika sebuah tugas tampak memerlukan otoritas luas, berhenti dan minta persetujuan manusia sebelum lanjut.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definisi
+
+Setiap program, skrip, agent, dan manusia harus beroperasi dengan set permission terkecil yang cukup untuk tugasnya — tidak lebih. Otoritas di sini berarti credentials, IAM role, user database, file permission, API scope, dan kapabilitas runtime. Jika tugasnya hanya perlu membaca, credential-nya harus hanya bisa membaca.
+
+## Kapan pakai
+
+- Skrip operasional (cleanup, backfill, migrasi, ekspor) — konteks default prinsip ini.
+- Pipeline CI/CD dan job deployment.
+- Service berumur panjang dan AI agent yang bertindak pada sistem eksternal.
+- Akun manusia yang sekaligus punya role non-admin untuk pekerjaan harian.
+
+## Kapan TIDAK pakai
+
+- Incident response satu kali, berbatas waktu, di mana operator manusia sengaja menaikkan hak untuk memadamkan kebakaran — dan mencabutnya kembali setelahnya.
+- Sandbox development lokal tanpa akses ke state bersama atau production.
+- Seed lingkungan baru yang masih kosong dan dinyatakan eksplisit sebagai disposable.
+
+## Anti-pattern
+
+- Skrip cleanup terhubung dengan akun admin "karena sudah ada di env file".
+- Agent diberi AWS key yang sama dengan lead developer.
+- Cron job berjalan sebagai root untuk menghapus baris di satu tabel.
+- Tool pelaporan read-only memegang connection string read-write "just in case".
+
+## Contoh kode
+
+Salah — otoritas luas, blast radius destruktif:
+
+```bash
+# Memakai DATABASE_URL milik tool migrasi: hak DDL penuh + delete
+psql "$DATABASE_URL" -c "DELETE FROM audit_events WHERE created_at < now() - interval '30 days';"
+```
+
+Benar — otoritas terbatas, hak minimum:
+
+```bash
+# Role khusus dengan hanya yang dibutuhkan job ini (SELECT saja tidak perlu)
+psql "postgresql://cleanup_app:${CLEANUP_PASSWORD}@db/crm?options=--role=audit_purger" \
+  -c "CALL purge_audit_events_older_than(interval '30 days');"
+```
+
+```sql
+-- DBA membuat role sempit sekali; skrip mewarisinya
+CREATE ROLE audit_purger NOLOGIN;
+GRANT EXECUTE ON FUNCTION purge_audit_events_older_than(interval) TO audit_purger;
+GRANT audit_purger TO cleanup_app;
+```
+
+## Penegakan teknis
+
+<Enforcement>
+Prinsip ini tidak ditegakkan oleh prompt. Tegakkan dengan kontrol nyata:
+
+- **Credentials terbatas (scoped)**: user database dan IAM role khusus per job yang read-only / write-terbatas; secret admin hidup di vault, tidak pernah di environment job.
+- **Static analysis + policy check di CI**: tolak PR yang merujuk role admin untuk job terjadwal (mis. custom lint, cloud policy engine).
+- **Kebijakan runtime**: permission database, IAM boundary, dan Kubernetes RBAC yang membuat "tidak sengaja terlalu luas" mustahil terjadi bahkan ketika skripnya salah.
+- **Auditing**: setiap pemberian hak dan setiap penggunaan role privileged dicatat dan direview.
+</Enforcement>
+
+## Kasus nyata
+
+<RealCase>
+Pada Januari 2017, seorang operator GitLab, kelelahan setelah seharian penuh kegagalan replikasi, menghapus direktori yang salah di server database utama — mengira direktori itu berisi data secondary. Direktori itu berisi data live primary. Karena tooling dan credentials mengizinkan aksi itu dari tempat dia bekerja, ratusan gigabyte data (issue, merge request, user) hilang; enam jam penulisan data hilang permanen setelah restore dari backup yang lebih lambat dan kurang lengkap dari yang diperkirakan. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ — otoritas yang lebih sempit di shell itu, dan konfirmasi manusia sebelum delete yang tak dapat dibatalkan, akan menahan kesalahan itu. (verification: perlu untuk detail link — baca postmortem-nya sebelum mengutip lebih lanjut.)
+</RealCase>
+
+## Tensi dan trade-off
+
+- **Kecepatan vs. keamanan**: credentials luas lebih cepat dipasang dan menjengkelkan untuk dipisah. Biaya least authority dibayar saat setup, bukan saat insiden — bayar sekali per lingkungan.
+- **Least Authority vs. ambisi otomasi**: agent yang "bisa melakukan apa saja" lebih mengesankan saat demo. Batasi otoritas sesuai task graph yang benar-benar ada, dan perluas secara sadar ketika kebutuhan baru terbukti, bukan preventif.
+- **Ditimbang terhadap Least Astonishment**: jangan memecah otoritas begitu halus sampai operator tidak bisa memprediksi credential mana mengerjakan apa — sedikit role yang jelas batasannya lebih baik daripada banyak role yang membingungkan.
+
+## Prinsip terkait
+
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — tolak secara default, berikan secara eksplisit; pelengkap least authority.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — kontrol berlapis ketika pembatasan otoritas tidak bisa sempurna.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — batasi kerusakan maksimum dari satu aksi apa pun.
+- [Tested Backups](/docs/principles/data/tested-backups) — pertahanan terakhir ketika segalanya sudah gagal.
+
+## Referensi
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — asal istilah "least privilege" (verification: perlu — cari salinan publik yang stabil sebelum menautkan).
+- NIST SP 800-207, *Zero Trust Architecture* — pembingkaian modern otoritas per tugas (verification: perlu).

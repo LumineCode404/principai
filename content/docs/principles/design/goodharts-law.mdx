@@ -1,0 +1,114 @@
+---
+title: Goodhart's Law
+id: goodharts-law
+name: Goodhart's Law
+summary: When a measure becomes a target, it ceases to be a good measure — proxy metrics get gamed by exactly the optimizers you point at them.
+category: design
+type: law
+severity: advisory
+applies_to:
+  - metrics
+  - process
+  - ml
+  - teams
+tags:
+  - metrics
+  - optimization
+  - gaming
+aliases: []
+sources:
+  - 'Marilyn Strathern, 1997 formulation — "When a measure becomes a target, it ceases to be a good measure"'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Never set or optimize a single proxy metric without pairing it with a counter-metric that exposes gaming. Before committing to a target, ask how a motivated optimizer would raise the number without improving the underlying goal, then instrument for exactly that. Treat any metric tied to evaluation or compensation as already under pressure. Report balanced panels, never lone numbers.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+A metric is a proxy for something you actually care about — coverage proxies for safety, uptime proxies for user experience, velocity proxies for value. The moment the proxy becomes the target, effort flows into moving the number rather than the thing it stood for, because moving the number is easier. The optimizers doing this are usually not cheating; they are doing precisely what you pointed them at.
+
+## When to use
+
+- Setting team goals, SLAs, and performance incentives.
+- ML work: choosing and freezing an objective function — reward hacking is Goodhart's Law with gradient descent.
+- Choosing test-coverage, uptime, latency, or velocity targets.
+- Building dashboards that other people will act on.
+
+## When NOT to use
+
+- As an argument against measurement altogether — unmeasured systems fail silently (see Observability First); the fix is paired metrics, not blindness.
+- During exploration: leading indicators that guide discovery are fine as long as nobody's evaluation depends on them.
+- One-off diagnostic readings that are never promoted into targets.
+
+## Anti-pattern
+
+- A 100% line-coverage mandate — the cheapest path is tests that execute code and assert nothing.
+- Bonuses tied to a single number: uptime, tickets closed, lines removed.
+- Model evaluation on a benchmark that has effectively become the training set.
+- Ranking teams on a dashboard they can see — visibility accelerates gaming.
+- Renaming a gamed metric and continuing as before.
+
+## Code example
+
+Wrong — the metric satisfied, the goal abandoned:
+
+```ts
+// Written to close the coverage ticket: line runs, nothing is checked
+it("processes refunds", () => {
+  processRefund(paidOrder); // exception-free execution counts as "covered"
+  expect(true).toBe(true);  // the assertion is decorative
+});
+```
+
+Right — pair the target with a counter-metric:
+
+```ts
+// Mutation testing rewards assertions that can actually fail
+it("refunds the card and marks the order refunded", async () => {
+  const result = await processRefund(paidOrder);
+  expect(result.status).toBe("refunded");
+  expect(gateway.refunds).toHaveLength(1); // money actually moved
+  const stored = await orders.find(paidOrder.id);
+  expect(stored.state).toBe("refunded");   // state actually persisted
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+Gaming is a systems property; fight it with system design:
+
+- **Metric pairing policy**: every target ships with a counter-metric in the same view — coverage with mutation score, velocity with escaped-defect rate, uptime with change-failure rate and recovery time.
+- **Mutation testing in CI** (Stryker, PIT, mutmut) as the counter-metric for coverage: assertions that cannot fail let mutants survive, and surviving mutants fail the build.
+- **No single-metric compensation**: tie evaluation to balanced panels (DORA-style sets), never to one number.
+- **Target review cadence**: re-read every target quarterly and ask "how is this being gamed right now?"; rotate or retire gamed metrics rather than defending them.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+An engineering group set a 100% line-coverage target for a critical service, with review scores tied to it. Coverage climbed within a quarter — and a growing share of new tests were hollow: they invoked code with fixture data and asserted nothing stronger than "did not throw," or snapshotted empty mocks. The number said safe; escaped defects said otherwise, and incidents kept tracing to branches the metric counted as covered. The target was replaced with a paired panel: coverage thresholds plus mutation score, with assert-less tests flagged automatically. The hollow tests started failing CI, and while the coverage number went down, real defect detection went up. (ilustratif — composite of widely reported failure modes, not a named incident; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Goodhart vs Observability First**: measurement is not the enemy — unmeasured systems drift silently. The rule is pairing, not abstinence: every metric gets a counter-metric tuned to catch its specific gaming strategy.
+- **Goodhart vs simplicity of process**: a single north-star number is easy to communicate and easy to game; a small balanced panel is harder to communicate and harder to game. Pay the communication cost.
+- **Goodhart vs ML optimization**: models are literal Goodhart engines — they will exploit any gap between reward and intent (reward hacking). Hold out ground-truth evaluation the optimizer never sees, and keep humans in the loop on objective changes.
+
+## Related principles
+
+- [Observability First](/docs/principles/reliability/observability-first) — you need the metrics; just never one alone.
+- [Fail Visible](/docs/principles/reliability/fail-visible) — gamed proxies hide failures; make the real failures loud.
+- [Keep It Simple](/docs/principles/design/kiss) — minimal dashboards are simpler; simplicity of the metric and honesty of the signal trade off.
+- [Chesterton's Fence](/docs/principles/design/chesterton-fence) — before removing or renaming a long-standing metric, find out why it was installed.
+
+## References
+
+- Marilyn Strathern, 1997 formulation — "When a measure becomes a target, it ceases to be a good measure" (verification: perlu — locate the precise paper and page before quoting; commonly attributed to her 1997 work on British university audit).
+- Google SRE Book — monitoring and alerting practice; alerting on symptoms rather than causes is a partial structural mitigation. https://sre.google/sre-book/

@@ -1,0 +1,120 @@
+---
+title: DRY, With Judgment
+id: dry-tension
+name: DRY, With Judgment
+summary: Duplication is cheaper than the wrong abstraction — unify only knowledge that changes for the same reason.
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - architecture
+  - libraries
+  - services
+  - ui
+tags:
+  - duplication
+  - abstraction
+  - coupling
+aliases:
+  - Don't Repeat Yourself
+sources:
+  - 'Hunt & Thomas, "The Pragmatic Programmer", Addison-Wesley'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Before deduplicating, confirm the copies change for the same reason and will change together. Do not extract a shared abstraction from fewer than three real, independent consumers. Treat deliberate duplication between independently deploying teams as a decoupling decision, not a defect. If a unified abstraction has become a battleground, split it back along reason-for-change lines.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+DRY says every piece of knowledge should have one authoritative representation — but the unit of knowledge is the reason for change, not the text on screen. Duplication of FACTS is bad: one business rule expressed twice will eventually be edited once and ship a bug. Duplication of COINCIDENCE is fine: two blocks that look alike but change for different reasons should stay separate, because merging them couples things that must evolve apart.
+
+## When to use
+
+- A constant, formula, or business rule appears in multiple places that must agree: tax rates, retry limits, status meanings.
+- A bug was fixed in one copy and rediscovered in another.
+- Extracting shared code once at least two — better three — independent consumers exist and a named owner accepts maintenance.
+- Consolidating modules inside a boundary one team owns end to end.
+
+## When NOT to use
+
+- Two teams duplicating a small client to stay independently deployable — the copy is the price of decoupling (see Conway's Law).
+- Blocks that merely look similar but change for different reasons — that is coincidence, not fact.
+- Fewer than three occurrences — extract on the third, not the first.
+- Sharing that would cross an ownership boundary with no owner willing to maintain the result.
+
+## Anti-pattern
+
+- One "unified" helper with a flag for every consumer's difference — now more complex than all copies combined.
+- A shared library with no owner, versioned by hope.
+- Deduplicating by textual-similarity tools alone, with no judgment about why each copy exists.
+- Keeping a wrong abstraction because deleting it means admitting the extraction was premature.
+
+## Code example
+
+Wrong — one helper for two APIs that only look alike:
+
+```ts
+// "Unified" request helper: every option exists for exactly one team
+export function request(path: string, opts: ReqOpts) {
+  if (opts.oauth) { /* payments-only: token refresh */ }
+  if (opts.retryBudget) { /* search-only: backoff policy */ }
+  if (opts.noRedirect) { /* payments-only: auditor requirement */ }
+  return fetch(base(opts.env) + path, opts);
+}
+```
+
+Right — two clients, two policies; the duplication is deliberate:
+
+```ts
+// Payments: per-call token, redirects forbidden, no client retry (idempotency upstream)
+export async function payRequest(path: string, init: RequestInit) {
+  const token = await paymentsToken();
+  return fetch(PAY_BASE + path, { ...init, redirect: "error",
+    headers: { ...init.headers, Authorization: token } });
+}
+
+// Search: stateless, cheap, safe to retry with a budget
+export function search(q: string) {
+  return withRetry(() => fetch(SEARCH_BASE + "?q=" + encodeURIComponent(q)), 3);
+}
+```
+
+## Technical enforcement
+
+<Enforcement>
+Judgment is the tool, but tooling keeps the judgment honest:
+
+- **Copy-paste detection as signal, not gate**: run jscpd / PMD CPD in CI and trend the numbers; humans decide whether each hit is fact or coincidence.
+- **Rule of three in the PR template**: extracting shared code requires naming two existing independent consumers besides the author's, plus a named owner.
+- **ADR for shared libraries**: a short decision record stating what the abstraction unifies, who owns it, and how it versions (see Explicit Contracts).
+- **Coupling metrics**: track inbound dependencies on shared modules; a module consumed by teams with different release cadences needs an explicit versioning policy or a split.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Two teams — payments and search — each had a small HTTP client. A well-meaning engineer unified them into one request helper with options covering both. Over the following year the two upstream APIs evolved apart: different auth models, retry semantics, error payloads. Every change to the helper broke one team; every fix added a flag; the file accumulated options nobody could fully test, and PRs on it became cross-team negotiations. Both teams started routing around it with local wrappers. The helper was finally split back into two focused clients, each smaller than the shared one, and velocity recovered — the duplication had never been the problem; the premature unification was. (ilustratif — composite of common failure modes, not a named incident; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **DRY vs decoupling**: two teams duplicating a two-hundred-line client to stay independently deployable can be right — the shared version couples their release trains forever. Where Conway's Law draws a real organizational boundary, code duplication is often the correct reflection of it.
+- **DRY vs premature abstraction**: an abstraction extracted from one example encodes today's guess about tomorrow's variation; when reality diverges, every caller fights it, and the wrong abstraction costs more to unwind than the duplication it replaced. The rule of three exists to force at least two real data points before unifying anything.
+- **Facts vs coincidence — the operational test**: duplication of FACTS (one rule that must change in lockstep: a rate, a status code, a formula) eventually ships the bug where one copy was missed — unify it. Duplication of COINCIDENCE (looks similar, changes for different reasons) buys independent evolution — leave it, and leave a comment saying it is deliberate.
+
+## Related principles
+
+- [Single Responsibility](/docs/principles/architecture/single-responsibility) — unify along exactly one reason to change.
+- [Conway's Law](/docs/principles/architecture/conways-law) — org boundaries decide whether shared code is a bridge or a battleground.
+- [You Aren't Gonna Need It](/docs/principles/design/yagni) — the rule of three is YAGNI applied to abstraction.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — shared code needs an explicit, versioned contract.
+- [Least Astonishment](/docs/principles/design/least-astonishment) — a shared abstraction must not surprise either consumer.
+
+## References
+
+- Hunt & Thomas, *The Pragmatic Programmer* (Addison-Wesley) — origin of DRY; framed there as a principle about knowledge, not about text. (verification: ok — widely available; verify exact wording against your edition before quoting verbatim).

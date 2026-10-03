@@ -1,0 +1,116 @@
+---
+title: Keep It Simple
+id: kiss
+name: Keep It Simple
+summary: Choose the simplest design that works — every moving part you add today is a part someone must debug at 3 a.m. tomorrow.
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - architecture
+  - services
+  - libraries
+  - scripts
+  - ui
+tags:
+  - simplicity
+  - complexity
+  - maintenance
+aliases:
+  - KISS
+  - Keep It Simple, Stupid
+sources:
+  - 'Attribution to Kelly Johnson (Lockheed Skunk Works) — widespread, unverified'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Prefer the simplest design that satisfies the stated requirement. When two approaches both work, choose the one with fewer moving parts, fewer dependencies, and fewer concepts a reader must hold at once. Require an explicit justification for every source of complexity before implementing it. Do not add machinery for imagined future needs.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+Given two designs that both meet the requirement, the simpler one wins: fewer parts, fewer dependencies, fewer concepts to hold in your head. Complexity is not a feature — it is debt that accrues interest every time someone reads, tests, debugs, or extends the code. Simple here means the smallest number of moving parts that satisfies today's proven requirements, not the shortest or cleverest code.
+
+## When to use
+
+- Choosing between implementation strategies for any new component.
+- Design and code review: complexity must justify itself; simplicity never has to.
+- Debugging and incident response — the simplest reproduction and the simplest fix win.
+- Anything read more often than written: scripts, configs, runbooks, on-call tooling.
+
+## When NOT to use
+
+- Failure handling for real, observed failure modes (timeouts, retries, backpressure) — that complexity is bought with evidence, not speculated.
+- Security and safety layers — see Defense in Depth; each layer must earn its keep, but layers are not deleted for tidiness.
+- Domains with irreducible essential complexity (tax rules, protocol edge cases, pricing) — hiding complexity is not removing it; a clever shortcut just moves it out of view.
+
+## Anti-pattern
+
+- A micro-framework built to avoid writing forty boring lines once.
+- Config flags for behavior nobody uses.
+- "Enterprise-ready" abstractions in a service with one caller and no roadmap.
+- A ten-line function replaced by a dependency with forty transitive packages.
+- Regex and one-liners that save minutes to write and cost hours to read.
+
+## Code example
+
+Wrong — a framework where one expression would do:
+
+```ts
+// "Flexible" free-shipping engine: three classes, one interpreter, zero needs
+class RuleEngine {
+  constructor(private rules: Rule[]) {}
+  run(order: Order): boolean {
+    return this.rules.some((r) => r.matches(order));
+  }
+}
+const eligible = new RuleEngine([new OrPredicate(new ThresholdRule(50), new CustomerTierRule("gold"))]);
+```
+
+Right — the simplest thing that satisfies the requirement:
+
+```ts
+// One boolean: readable at 3 a.m., trivially testable, obviously correct
+export function freeShippingEligible(order: Order): boolean {
+  return order.total >= 50 || order.customer.tier === "gold";
+}
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is not enforced by vibes. Wire it into CI:
+
+- **Complexity linters**: enforce cyclomatic and cognitive complexity limits (ESLint `complexity`, SonarQube) plus per-function length caps; violations need an in-code justification or they fail.
+- **Dependency budget**: new third-party packages require a PR description answering "what does this replace, and what does it cost in upgrade risk?".
+- **Dead-code detection**: run knip / ts-prune so unused "flexibility" is visible on a dashboard and deletable.
+- **Review checklist**: for every design the reviewer asks "what is the simplest version that passes the tests?" — the complex variant has to argue its way in, not the other way around.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On 2 November 2019, Cloudflare deployed a rules update for its web application firewall containing a regular expression with nested quantifiers. On inputs that matched only partially, evaluation time exploded through catastrophic backtracking, spiking CPU on edge servers worldwide; error pages were served to visitors around the globe and a large fraction of traffic degraded. The complexity hid in a dozen-odd characters of a regex that looked unremarkable at review, and a staged rollout made the failure ramp up gradually rather than appear all at once. Engineers restored service by disabling the WAF globally. Simpler rule construction, or a complexity guard on pattern evaluation, would have reduced the blast radius — not the need for rules, just the size of the failure. Postmortem: https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/ (verification: perlu for exact figures and timeline — read the postmortem before quoting numbers).
+</RealCase>
+
+## Tension and trade-off
+
+- **KISS vs Defense in Depth**: layered security reads as complexity, but each layer exists to fail differently. Simplify within layers; do not buy simplicity by deleting layers that each earn their keep.
+- **KISS vs Graceful Degradation**: timeouts, retries, and fallbacks add code — yet they handle failure modes production provably hits. Spend the complexity budget on failure handling before features.
+- **KISS vs Gall's Law**: the truly simple design is the one that can evolve. A design that is minimal on paper but cannot change is more complex in practice than a slightly larger one with clean seams.
+
+## Related principles
+
+- [You Aren't Gonna Need It](/docs/principles/design/yagni) — speculative features are the largest source of needless complexity.
+- [DRY, With Judgment](/docs/principles/design/dry-tension) — every abstraction is complexity; unify only proven duplicates.
+- [Gall's Law](/docs/principles/architecture/gall-law) — working systems grow from simple ones; simplicity enables evolution.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — the counterweight: some complexity is load-bearing safety.
+
+## References
+
+- Kelly Johnson (Lockheed Skunk Works) is widely credited with the dictum; attribution is common but unverified — no primary source located (verification: perlu).
+- Eric Raymond, *The Art of Unix Programming*, Rule of Simplicity — design for simplicity, add complexity only where you must. http://www.catb.org/~esr/writings/taoup/ (verification: perlu).

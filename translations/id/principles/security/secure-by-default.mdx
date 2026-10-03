@@ -1,0 +1,123 @@
+---
+title: Secure by Default
+id: secure-by-default
+name: Secure by Default
+summary: TERJEMAHAN DRAF — Ship the safe configuration as the default — security must be what you get, not what you remember to enable.
+category: security
+type: principle
+severity: important
+applies_to:
+  - "infrastructure"
+  - "libraries"
+  - "services"
+  - "api"
+tags:
+  - "defaults"
+  - "hardening"
+  - "configuration"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "9b31331a409239dd"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/security/secure-by-default.mdx -->
+<!-- source_hash EN: 9b31331a409239dd -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Ship the safe configuration as the out-of-the-box default and require explicit opt-in for anything risky. Never enable a powerful feature — remote code execution, dynamic lookups, admin interfaces, debug endpoints — just because it is convenient for demos. If you cannot name the safe default for a feature, stop and ask a human before shipping it.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Whatever a library, framework, or service ships with enabled is what most installations will run forever. Secure by default means the fresh, unmodified install is the hardened one: encryption on, dangerous features off, debug interfaces unreachable, no default credentials. Anything that weakens posture requires an explicit, documented opt-in — defaults are a decision made on behalf of every user who will never read the documentation.
+
+## When to use
+
+- Libraries and frameworks distributed to people you will never meet or audit.
+- Infrastructure templates and base images that create environments others inherit.
+- Anything with a demo mode — demo configs have a habit of becoming production configs.
+- Client SDKs whose default settings silently propagate into thousands of applications.
+
+## When NOT to use
+
+- One-off internal tools with a written threat model that explicitly accepts the risk.
+- Teaching examples whose entire purpose is demonstrating the unsafe mechanism — clearly labeled, never internet-facing.
+- When the safest default makes the thing unusable for most users: pick the strongest default that still works out of the box, then expose hardening switches for the rest.
+
+## Anti-pattern
+
+- A logging library that interprets and fetches URLs found inside log text.
+- Admin dashboards bound to all interfaces with a default password.
+- TLS verification disabled in the example code that everyone copies into production.
+- Debug mode driven by an environment variable that production also sets.
+- A "hardening guide" offered as a substitute for safe defaults — documentation is not a control.
+
+## Code example
+
+Wrong — the powerful feature is on unless you know to disable it:
+
+```javascript
+// Library default: any string passed to the logger can trigger a remote lookup.
+const logger = createLogger({ app: "billing" });
+// "messageLookup" defaults to true — convenient for demos, catastrophic in prod
+
+logger.warn(`Payment failed for ${userInput}`);
+// userInput came from a request field; the logger fetches what it finds there
+```
+
+Right — inert default, explicit opt-in with a scope:
+
+```javascript
+// Default is inert: log text is data, never executed or fetched.
+const logger = createLogger({ app: "billing" });
+logger.warn(`Payment failed for ${userInput}`);   // always just text
+
+// The feature still exists — for people who ask for it by name:
+// const logger = createLogger({
+//   app: "billing",
+//   messageLookup: { enabled: true, allowHosts: ["metrics.internal"] },
+// });
+```
+
+## Technical enforcement
+
+<Enforcement>
+Defaults must be enforced where users cannot skip them:
+
+- **Hardened base images and templates**: organization-wide images with debug off, no default credentials, current patches — teams inherit safety without acting.
+- **Configuration linting in CI**: fail builds on known-insecure flags — TLS verification off, debug mode in deploy artifacts, wildcard network binds, default passwords.
+- **Default-behavior tests**: a fresh-install test asserting the dangerous feature is off and the safe one is on — defaults are behavior, so test them like behavior.
+- **What prevents vs. detects**: shipping safe defaults prevents misconfiguration for the silent majority who never configure anything; lint and audits detect the minority who opted out — keep both, they cover different people.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In December 2021, Log4Shell (CVE-2021-44228) showed what an unsafe default costs at ecosystem scale. Apache Log4j 2 performed JNDI lookups on strings that passed through log messages, and the feature was enabled by default: any application that logged attacker-controlled input — usernames, headers, form fields — could be tricked into fetching and executing code from a remote server. The vulnerable configuration was not a mistake anyone made; it was the configuration everyone got. Teams worldwide spent weeks patching and inventorying exposure. Secure by default — lookups off unless explicitly enabled — would not have removed the parsing flaw itself, but would have reduced the exposed population from default installations everywhere to the much smaller set that deliberately turned the feature on. Advisory: https://logging.apache.org/log4j/2.x/security.html
+</RealCase>
+
+## Tension and trade-off
+
+- **Secure defaults vs. least astonishment**: the safest default nobody can boot protects nothing — choose the strongest default that still works in the first five minutes.
+- **Secure by default vs. Hyrum's Law**: the moment a default ships, someone depends on it; changing it later is a breaking change, so the unsafe convenience shipped today is a forced migration tomorrow.
+- **Hardening vs. Yagni**: defaults armored against imaginary threat models become configuration mazes that users route around — harden for the threats the thing actually faces.
+
+## Related principles
+
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — the access-control sibling: deny unless granted.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — the default is the first layer, never the only one.
+- [Least Astonishment](/docs/principles/design/least-astonishment) — the safe default should still make sense to whoever discovers it.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — opt-in switches with clear names and a documented blast radius.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — why changing a shipped default is a breaking change.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults and psychological acceptability: defaults people can and will actually live with.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — secure defaults in enterprise architecture: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Hyrum's Law — the contract your defaults become: https://www.hyrumslaw.com

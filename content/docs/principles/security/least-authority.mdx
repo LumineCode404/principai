@@ -1,0 +1,117 @@
+---
+title: Least Authority
+id: least-authority
+name: Least Authority
+summary: Grant only the authority a task actually needs — a cleanup script with full write access turns a small bug into a deleted database.
+category: security
+type: principle
+severity: critical
+applies_to:
+  - destructive-ops
+  - scripts
+  - infrastructure
+  - services
+  - database
+  - ml
+tags:
+  - authorization
+  - credentials
+  - scoping
+  - blast-radius
+aliases:
+  - Least Privilege
+  - Principle of Least Privilege
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Always scope credentials, permissions, and runtime authority to the minimum needed for the specific task at hand. Never run scripts, agents, or services with admin/root/write-everything access when a narrower role exists. If a task appears to require broad authority, stop and ask a human before proceeding.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definition
+
+Every program, script, agent, and person should operate with the smallest set of permissions sufficient for the task — and no more. Authority here means credentials, IAM roles, database users, file permissions, API scopes, and runtime capabilities. If the task only needs to read, the credential must only be able to read.
+
+## When to use
+
+- Operational scripts (cleanup, backfill, migration, export) — the default context for this principle.
+- CI/CD pipelines and deploy jobs.
+- Long-running services and AI agents acting on external systems.
+- Any human account that also has a day-to-day non-admin role.
+
+## When NOT to use
+
+- One-time, time-boxed incident response where a human operator deliberately escalates for firefighting — and revokes afterwards.
+- Local development sandboxes with no access to shared or production state.
+- Seeding a brand-new, empty environment that is explicitly declared disposable.
+
+## Anti-pattern
+
+- A cleanup script connects with the admin account "because it was already in the env file".
+- An agent gets the same AWS keys as the lead developer.
+- A cron job runs as root to delete rows in one table.
+- A read-only report tool holding a read-write connection string "just in case".
+
+## Code example
+
+Wrong — broad authority, destructive blast radius:
+
+```bash
+# Uses DATABASE_URL that belongs to the migration tool: full DDL + delete rights
+psql "$DATABASE_URL" -c "DELETE FROM audit_events WHERE created_at < now() - interval '30 days';"
+```
+
+Right — scoped authority, minimum rights:
+
+```bash
+# Dedicated role with only what this job needs (SELECT is not even required)
+psql "postgresql://cleanup_app:${CLEANUP_PASSWORD}@db/crm?options=--role=audit_purger" \
+  -c "CALL purge_audit_events_older_than(interval '30 days');"
+```
+
+```sql
+-- The DBA creates the narrow role once; the script inherits it
+CREATE ROLE audit_purger NOLOGIN;
+GRANT EXECUTE ON FUNCTION purge_audit_events_older_than(interval) TO audit_purger;
+GRANT audit_purger TO cleanup_app;
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is not enforced by prompts. Enforce it with real controls:
+
+- **Scoped credentials**: separate read-only / write-limited database users and IAM roles per job; the admin secret lives in a vault, never in the job's environment.
+- **Static analysis + policy checks in CI**: reject PRs that reference admin roles for scheduled jobs (e.g. custom lint, cloud policy engines).
+- **Runtime policy**: database permissions, IAM boundaries, and Kubernetes RBAC that make "accidentally too much" impossible even if the script is wrong.
+- **Auditing**: every grant and every use of a privileged role is logged and reviewed.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In January 2017, a GitLab operator, exhausted after a long day of replication failures, deleted the wrong directory on the primary database server — believing it held a secondary's data. The directory held the primary's live data. Because the tooling and credentials allowed that action from where he was working, hundreds of gigabytes of data (issues, merge requests, users) were gone; six hours of writes were permanently lost after restoring from backups that were slower and less complete than expected. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ — narrower authority at that shell, and human-confirmation before an irreversible delete, would have contained the mistake. (verification: perlu for link details — read the postmortem before citing further.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Velocity vs. safety**: broad credentials are faster to wire up and annoying to split. The cost of least authority is paid in setup, not in incidents — pay it once per environment.
+- **Least Authority vs. automation ambition**: an agent that can "do anything" demos better. Scope authority to the task graph you actually have, and extend deliberately when new needs are proven, not preemptively.
+- **Weigh against Least Astonishment**: do not split authority so finely that operators cannot predict which credential does what — few, clearly-scoped roles beat many confusing ones.
+
+## Related principles
+
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — deny by default, grant explicitly; the complement of least authority.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — layered controls when authority scoping cannot be perfect.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — limit the maximum damage of any single action.
+- [Tested Backups](/docs/principles/data/tested-backups) — the last line of defense when everything else failed.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — origin of "least privilege" (verification: perlu — find a stable public copy before linking).
+- NIST SP 800-207, *Zero Trust Architecture* — modern framing of per-task authority (verification: perlu).

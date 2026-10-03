@@ -1,0 +1,58 @@
+---
+title: Glossary
+description: The shared vocabulary of both repos — mandatory status words, untranslated technical terms, and library terms used with exactly one meaning.
+---
+
+Both repos — the EN source and the ID translation — must use the same words for the same things. This glossary is that contract: mandatory in both, consumed by the translator and by `principai check`. How it is enforced is described in [Two-Repo Sync](/docs/concepts/two-repo-sync).
+
+The glossary earns its keep twice. For humans, it keeps the ID translation readable without a decoder ring — the same English term never appears as two different Indonesian words. For agents and tools, it keeps lookups exact: severity is severity in both repos, in frontmatter, in the CLI, and in every check. Vague vocabulary is how drift starts.
+
+## Status vocabulary
+
+The three status words are Indonesian, mandatory, and the only ones allowed anywhere in the library. They make no completeness claims — that is what makes them honest.
+
+The words are Indonesian by origin and stay Indonesian everywhere — including this EN repo. Translating them would create a second vocabulary for the same three states, and the whole point is that there is exactly one.
+
+| Word | Means | Never means |
+| --- | --- | --- |
+| sudah digali | dug — researched with sources, written, checked | finished forever, or complete |
+| belum digali | not yet dug — honest tracking of what exists | a promise, a roadmap, a target |
+| tidak yakin | unsure — we do not know yet | shameful; it is the correct answer to an open question |
+
+When a category feels exhausted, the honest move is to re-research it from a different angle — not to declare it done. The status words are also how the [Taxonomy](/docs/taxonomy) speaks.
+
+## Untranslated technical terms
+
+These stay in English inside the ID repo. Translating them would create synonyms for things that need exact lookup — in frontmatter, in the CLI, in checks.
+
+Terms of art:
+
+- principle, law, heuristic, practice
+- severity, critical, important, advisory
+- profile, must-follow, consider
+- applies_to, aliases, frontmatter
+
+Operational vocabulary:
+
+- dry-run, rollback, backup, restore
+- idempotency, blast radius
+- contract, schema, migration, postmortem
+
+Each may carry an Indonesian explanatory gloss where prose needs it — but the term itself stays English, everywhere, in both repos.
+
+## Library terms
+
+- **source of truth** — the EN repository: the canon every derivative flows from. There is exactly one.
+- **derived translation** — an ID file generated from an EN source. Never edited for meaning on its own authority.
+- **source_hash** — the SHA-256 of an EN source file, recorded in its ID counterpart at sync time. A mismatch means the ID file is stale — detected automatically, before anyone notices by accident.
+- **drift** — any EN/ID divergence beyond translation wording: a missing file, a renamed section, a changed id. Structural drift fails `principai check`.
+- **parity** — the 1:1 structural match both repos must maintain: file list, ids, frontmatter keys, section order, profile membership.
+- **stub** — the untranslated skeleton `principai sync` generates: EN frontmatter, fixed sections, `translation_status: draft`. Machine translation may follow; only a human makes it reviewed.
+
+## Adding or changing a term
+
+Terms change the way everything else does: EN repo first, `glossary.md` updated in both repos in the same sync, and `principai check` catching any file that missed the change. A term that exists in one repo only is drift by definition. A new untranslated term is not a styling preference — it is a lookup key for the CLI and the checks, so adding one is a small decision with wide consequences, taken deliberately.
+
+## Reading order
+
+New to the library: [Quickstart](/docs/getting-started/quickstart), then [the principle format](/docs/concepts/principle-format). Translating: this page first, then [Two-Repo Sync](/docs/concepts/two-repo-sync). Adding categories: [Taxonomy](/docs/taxonomy).

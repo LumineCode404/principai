@@ -1,0 +1,122 @@
+---
+title: Complete Mediation
+id: complete-mediation
+name: Complete Mediation
+summary: Authorize every access through every path — a cached permission or a forgotten side door is still a door.
+category: security
+type: principle
+severity: important
+applies_to:
+  - api
+  - services
+  - security-critical
+tags:
+  - authorization
+  - access-control
+  - caching
+aliases:
+  - Check Every Access
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Authorize every access on every path — every request, every background job, every side door. Never trust a permission decided earlier: not at login, not at session start, not because the object was reachable in a previous request. If you find a path that skips the check, treat it as a vulnerability and report it.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Every access to every protected object must pass through an authorization check — not at login, not at page load, but at the moment of access, on the path that performs it. Cached authority decisions are snapshots of the past: roles change, ownership changes, tokens get revoked, and the check skipped "because we already checked" is skipped at exactly the wrong time. Saltzer and Schroeder named this complete mediation, and it is the principle most often violated by convenience: decorators on some endpoints, an assumed check "further up", a worker that reads the same data without the gate.
+
+## When to use
+
+- APIs with per-object access rules: document, project, and workspace scoped resources.
+- Long-lived sessions and tokens: web apps, mobile apps, agents.
+- Async and background paths: workers, schedulers, webhooks — the doors people forget.
+- Any system where roles, memberships, or ownership can change while sessions are alive.
+
+## When NOT to use
+
+- Fully public resources where authorization is a no-op — an empty check is noise; mark the route explicitly public instead.
+- Immutable, non-sensitive metadata that cannot change ownership — document the assumption, revisit it when the object model changes.
+- Short-lived caches backed by real invalidation on revocation — that is mediation with engineering, not an exception; keep it only as long as the invalidation actually works.
+
+## Anti-pattern
+
+- "Is logged in" treated as an authorization model — authentication reused as permission.
+- The admin check done in the menu rendering code; the endpoint itself assumes only admins know the URL.
+- A permission decision cached at session start and never revisited.
+- A new admin endpoint added "temporarily" without the middleware, because it was an internal demo.
+- A worker processing jobs by reading documents straight from the database, "because the API already checked when the job was created".
+
+## Code example
+
+Wrong — check once, trust forever:
+
+```python
+# Role resolved ONCE at login and stored in the session
+@app.post("/login")
+def login(user):
+    session["role"] = db.get_role(user.id)      # snapshot of the past
+
+@app.delete("/documents/{doc_id}")
+def delete_document(doc_id):
+    if session["role"] != "admin":              # hours stale, checked anyway
+        abort(403)
+    db.delete(doc_id)                           # authority from this morning
+```
+
+Right — check at the moment of access, on the path that performs it:
+
+```python
+# Authority resolved per access, against the current role and THIS object
+@app.delete("/documents/{doc_id}")
+@require_permission("document:delete", doc_id)  # fresh role + this doc
+def delete_document(doc_id):
+    db.delete(doc_id)
+
+# The decorator resolves the CURRENT role (cached only with invalidation
+# on revocation) and ownership of THIS document — every request, every path.
+```
+
+## Technical enforcement
+
+<Enforcement>
+Mediation must be structural so new code cannot opt out:
+
+- **A single authorization point**: framework-level guards that every route must declare — a route without an explicit policy fails startup, deny by default at the routing layer.
+- **Object-level, not just route-level checks**: policies evaluated against the specific resource, kept in one place by ABAC/RBAC libraries or a policy engine.
+- **Revocation that propagates**: role changes and token revocations invalidate or expire cached decisions; short session lifetimes and token introspection bound staleness by design, not by hope.
+- **Coverage tests and route inventory audits**: a test that fails when any route or worker touches a protected model without passing the policy point.
+- **What prevents vs. detects**: guards and startup failures prevent unmediated paths from shipping; audits and coverage tests detect the ones that slipped — mediation decays quietly, so keep the detection half funded.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+Scenario (ilustratif): an application resolves the user's role once, at session start, and caches it for the session's lifetime. The user's admin role is revoked mid-session — an offboarding, a security response — but every request still carries yesterday's answer: for hours, until the session expires, the ex-admin can create, read, and delete with authority that was already withdrawn. There is no single bug to fix; the design asked "is this user an admin" at the wrong time and trusted the answer forever. Mediating every access — resolving authority at the moment of use, with revocation invalidating cached decisions — would have reduced the exposure from hours of full access to seconds. (Ilustratif; verification: perlu — no public postmortem is cited here.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Per-access checks vs. latency**: every access through the policy point costs a lookup; caches are the honest compromise — but a stale cache either over-grants, violating least authority, or under-grants, locking out real users against least astonishment. Set the staleness budget explicitly and wire revocation to invalidation.
+- **Fail-closed mediation vs. graceful degradation**: when the policy store is unreachable, failing closed protects the data but darkens the product, while failing open opens the doors — decide per path, and decide before the outage.
+- **One mediation point vs. single responsibility**: singular enforcement is the point, but one policy module owned by everyone owns nothing — distribute the policy definitions, keep the enforcement point singular.
+
+## Related principles
+
+- [Least Authority](/docs/principles/security/least-authority) — what the answer of each check should be.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — what mediation does when the checker itself fails.
+- [Input Validation](/docs/principles/security/input-validation) — the twin gate at the boundary: validate the data, mediate the authority.
+- [Single Responsibility](/docs/principles/architecture/single-responsibility) — keep the policy point singular without making it a dumping ground.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — permission requirements declared per route, not implied.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — complete mediation is one of the original design principles.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — continuous, per-request evaluation instead of one-time perimeter trust: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

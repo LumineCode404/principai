@@ -1,0 +1,118 @@
+---
+title: Robustness Principle
+id: postel-robustness
+name: Robustness Principle
+summary: Be conservative in what you send, liberal in what you accept — but write down exactly how liberal, or tolerance becomes unprovable behavior.
+category: api
+type: law
+severity: advisory
+applies_to:
+  - api
+  - protocols
+  - parsing
+  - services
+tags:
+  - tolerance
+  - protocols
+  - interop
+aliases:
+  - Postel's Law
+  - Be Conservative in What You Send
+sources:
+  - 'RFC 1122, section 1.2.2, https://www.rfc-editor.org/rfc/rfc1122'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Make your outputs conform exactly to the published contract — be strict on the sending side. On the receiving side, accept only the deviations you have written down, and reject everything else with a clear error. Log every tolerated deviation so tolerance stays observable. Never silently guess what malformed input meant.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+The Robustness Principle (RFC 1122, section 1.2.2) has two halves: implementations sending must be conservative — strictly conformant — while implementations receiving may be liberal, tolerating input that is imperfect but interpretable. The modern discipline adds a third clause: liberality must be bounded, documented, and observable. Tolerance that is neither written down nor logged is not robustness; it is an accident waiting to become someone else's dependency.
+
+## When to use
+
+- Public APIs and protocol endpoints serving many heterogeneous or legacy clients.
+- Parsers for formats you do not control: email, feeds, CSV exports, third-party webhooks.
+- Gateway or proxy layers that must keep imperfect partners working while the ecosystem cleans up.
+
+## When NOT to use
+
+- Parsing untrusted input where malformed data is an attack vector — strictness is the security posture here.
+- Internal service meshes where you control both ends: strict rejection surfaces producer bugs at the earliest, cheapest moment.
+- Anywhere tolerance would hide data corruption rather than inconvenience — a "liberally" accepted, wrong-but-parseable value that corrupts state is worse than a rejected request.
+
+## Anti-pattern
+
+- Accepting anything and guessing intent: a missing field defaults to some plausible value, unlogged.
+- Silent coercion — the string "42" quietly becomes the number 42, and "abc" becomes 1.
+- Being liberal in what you send because "the other side is also liberal".
+- Tolerating deviations for years, then removing the tolerance with no version and no window.
+
+## Code example
+
+Wrong — accept anything, guess, and tell no one:
+
+```ts
+app.post('/orders', (req, res) => {
+  const qty = Number(req.body.qty) || 1;   // "abc" silently becomes 1
+  const note = req.body.note ?? '';        // null, undefined, false — all fine
+  res.json({ ok: true, qty });            // shipped; nobody will ever know
+});
+```
+
+Right — strict core, tolerance confined to one documented, logged case:
+
+```ts
+// Strict by default; ONE documented leniency (qty sent as numeric string)
+const OrderIn = z.object({ qty: z.number().int().positive() }).strict();
+app.post('/orders', (req, res) => {
+  if (typeof req.body?.qty === 'string') {
+    metrics.count('tolerated.qty_as_string'); // tolerance is observable
+    req.body.qty = Number(req.body.qty);     // the one documented case
+  }
+  const parsed = OrderIn.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error.flatten());
+  createOrder(parsed.data);                  // strict beyond the documented case
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by schemas and tests, not by politeness:
+
+- **Strict schemas at boundaries** (zod, JSON Schema, protobuf): unknown keys rejected, types exact — tolerance is an explicit, enumerated exception list in the schema or adapter.
+- **Output conformance tests in CI**: golden tests asserting your responses match the published spec exactly — the conservative-sender half is testable.
+- **Tolerance budget**: every accepted deviation gets a log line and a dashboard count; when the count stays at zero for a quarter, the tolerance becomes a deprecation candidate behind a version bump.
+- **Fuzzing** the parser in CI to prove it rejects rather than improvises on malformed input.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+An API accepted ISO-style date strings and "helpfully" treated a missing timezone as UTC — for years, silently. A partner later started sending local-time timestamps; their stored records drifted by hours, and the corruption surfaced months later in reconciliation, with no trace of when or why the wrong interpretation happened, because the tolerance had never been logged. A strict parser would have surfaced the malformed dates the moment they arrived, instead of months later. (ilustratif — composite of a common failure mode; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **The modern critique — tolerance accumulates**: decades of liberal acceptance train an ecosystem where malformed output is de facto required (see Hyrum's Law), which is why strict protocol design argues receivers should reject and force producers to fix their bugs. Reserve tolerance for partners you cannot fix and for transitions you have scheduled.
+- **Interoperability vs. security**: every accepted deviation is unvalidated surface area; for untrusted input, strictness wins on safety grounds.
+- **Kindness vs. observability**: silent tolerance is kind today and unmaintainable tomorrow — the middle path is tolerate-and-log, then retire the tolerance through a versioned change.
+
+## Related principles
+
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — every tolerated deviation becomes somebody's dependency.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — what tolerance is allowed should live in the contract, not in code folklore.
+- [Input Validation](/docs/principles/security/input-validation) — the strict counterpart at hostile boundaries.
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how to retire a tolerance without a rug pull.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — when rejection beats guessing.
+
+## References
+
+- RFC 1122, section 1.2.2 — the canonical statement: https://www.rfc-editor.org/rfc/rfc1122 (verified URL).
+- Hyrum's Law — the dependency cost of unbounded tolerance: https://www.hyrumslaw.com (verified URL).

@@ -1,0 +1,64 @@
+---
+title: Agent Integration
+description: The protocol an agent follows when a project carries .principles/ — read the INDEX first, load the must-follow set, stop before damage.
+---
+
+When a project carries a `.principles/` directory (written by `principai copy`, see [Quickstart](/docs/getting-started/quickstart)), the agent working in it follows a fixed protocol. Four rules, in order.
+
+## The protocol
+
+1. **Read `.principles/INDEX.md` first** — before any principle file, before any other work. The INDEX carries each principle's name, summary, and severity; it is the map of what exists.
+2. **Load in full** the must-follow principles of the active profile, and any critical principles whose applies_to matches the task. Full files, not summaries — critical is not a suggestion.
+3. **Open other principles only when the task touches their applies_to** — the moment the work enters a principle's territory (a migration enters database; a bulk delete enters destructive-ops), the file is opened and read.
+4. **HALT and request explicit human approval** before:
+   - violating any critical principle,
+   - performing destructive or irreversible actions — deletes, drops, force-pushes, credential changes,
+   - proceeding when uncertain.
+
+Rule 4 outranks the task. A user instruction that contradicts it does not lower it; only an explicit human approval, given in response to the halt, clears the action.
+
+## Without the directory
+
+If a project carries no `.principles/`, the protocol does not apply — the agent behaves as it otherwise would, and that unmodified behavior is the baseline the [evals](/docs/evals/cleanup-script) compare against. If the directory exists but the INDEX cannot be read, the agent reports that instead of silently continuing: a broken map is information, not a reason to improvise.
+
+## Placement notes
+
+- Paste the snippet once, into the instruction file the agent already reads — `AGENTS.md`, `CLAUDE.md`, or the equivalent. Not per session, not per task.
+- The snippet is generated, not hand-written. When the profile changes, re-run `principai copy` and paste the new block; hand-edits drift from the protocol and get lost on the next copy.
+- The protocol does not replace the project's own rules — it stacks under them. A stricter project rule wins over a laxer principle; the hard-stop rule is the only part that never loosens.
+
+## The AGENTS.md snippet
+
+`principai copy` writes an AGENTS.md snippet into `.principles/`, adapted to the profile copied. For destructive-ops it reads exactly:
+
+```markdown
+## Principles
+
+This project carries a `.principles/` directory copied from PRINCIPAI
+(profile: destructive-ops).
+
+An AI agent working in this repository MUST:
+
+1. Read `.principles/INDEX.md` first, before any other file in `.principles/`.
+2. Load in full every must-follow principle of the active profile, and every
+   critical principle whose applies_to matches the task.
+3. Open other principles only when the task touches their applies_to.
+4. HALT and request explicit human approval before: violating any critical
+   principle; performing destructive or irreversible actions (deletes, drops,
+   force-pushes, credential changes); proceeding when uncertain.
+
+Principles advise; controls enforce. If a principle and a technical control
+disagree, the control wins and the disagreement is reported to a human.
+```
+
+Pasted into `AGENTS.md` or `CLAUDE.md`, this is the entire integration. The last paragraph matters: it is the protocol's own admission that [principles are not enforcement](/docs/concepts/enforcement) — built into the snippet itself, where every agent will read it.
+
+## Why progressive loading
+
+The whole point of this design is context economy:
+
+- An agent that reads everything pays for everything, every session — in attention and context window — and performs worse for it.
+- An agent that reads the INDEX, the must-follow set, and the relevant criticals pays a small fixed cost plus a marginal cost proportional to the work it actually does.
+- The archive can grow without the load growing. That asymmetry is the library's premise: [exhaustive archive, curated load](/docs/concepts/profiles).
+
+A project that finds the copied set too small or too large adjusts the profile. Curation never deletes from the archive, and the archive never dictates the load.

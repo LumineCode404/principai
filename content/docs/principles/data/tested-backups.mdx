@@ -1,0 +1,107 @@
+---
+title: Tested Backups
+id: tested-backups
+name: Tested Backups
+summary: A backup without a tested restore is a hope, not a control — restore drills on schedule prove it works.
+category: data
+type: principle
+severity: critical
+applies_to:
+  - database
+  - infrastructure
+  - destructive-ops
+tags:
+  - backups
+  - restore
+  - disaster-recovery
+aliases:
+  - A Backup Is Only Real After a Restore Test
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Never claim data is backed up unless a restore from that backup has completed and its contents were verified. Schedule restore drills on real systems, measure recovery time and recovery point, and treat any backup that has never been restored as if it does not exist. Before any destructive operation, confirm with a human that the restore point is fresh and the restore path is known to work.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definition
+
+A backup is only real after a successful restore test; everything else is a hope with a schedule. The restore path is the actual product: its recovery point objective (how much data you lose) and recovery time objective (how long you are down) are measured properties, not intentions. Drills on a cadence catch the silent rot — backups that stopped days ago, credentials that expired, formats that changed, restores that take far longer than anyone believes.
+
+## When to use
+
+- Any datastore whose loss is unacceptable: production databases, blob storage without re-derivable content, secrets vaults.
+- Before destructive operations — mass deletions, schema migrations, manual surgery — verify the restore point first (see Blast Radius).
+- After every backup-infrastructure change: new tool, new encryption, new storage location.
+- Regimes where restore capability is audited (compliance, contracts, insurance).
+
+## When NOT to use
+
+- Data that can be fully re-derived — a rebuilt cache, a re-materialized dataset from source events; drill the re-derivation instead.
+- Explicitly disposable environments; restoring sandboxes is theater.
+- Never restore onto the live primary — the drill itself must not endanger production; restore into an isolated copy.
+
+## Anti-pattern
+
+- "We have backups" — unasked questions: when was the last one? Who has ever restored one? How long does it take?
+- Backup job success monitored; restore never executed even once.
+- Restores tested only in the first week after the tool was installed, two years ago.
+- Backup credentials stored inside the system being backed up.
+- Retention shorter than the time it takes to notice the corruption — you backed up the corrupted state.
+
+## Code example
+
+Wrong — dumps that nobody ever restores:
+
+```bash
+# Nightly cron dumps and uploads; success is assumed, never proven
+pg_dump "$DATABASE_URL" | gzip | aws s3 cp - "s3://backups/db-$(date +%F).sql.gz"
+```
+
+Right — a scheduled drill that must pass:
+
+```bash
+# Restore the latest backup into an isolated database; time it — that is your RTO
+aws s3 cp "s3://backups/$LATEST" - | gunzip | psql "$DRILL_DB_URL"
+psql "$DRILL_DB_URL" -c "SELECT assert_fresh_data();"   # red build if data is stale
+```
+
+## Technical enforcement
+
+<Enforcement>
+If the restore is not scheduled and automated, it will not happen — make it a job:
+
+- **Restore drill as a CI job**: on a schedule, restore the newest backup to an isolated environment and run data assertions; a red build means the backup is broken.
+- **RTO and RPO as metrics**: every drill measures recovery time and data currency; drift over time is an incident, not a curiosity.
+- **Alert on backup silence**: no successful backup event in N hours pages someone — silent skips, not just loud failures, are the killer.
+- **Pre-destruction gate**: the ops tool requires a verified fresh restore point before a destructive run executes; this is enforced by the tool, not remembered by the operator.
+- **Rehearsed runbooks with owners**: a full-environment restore game day at a fixed cadence, with a name attached.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On 2017-01-31, a GitLab operator, exhausted after hours fighting replication problems, deleted the wrong directory on the primary database server — believing it held a secondary's data. The directory held the primary's live data. The team then discovered that of their five backup and replication mechanisms, most were unusable at that moment: broken, out of date, or unable to deliver recent data; the viable restore path was slower and less complete than expected, and six hours of user data (issues, merge requests, comments) were permanently lost. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ — five mechanisms with zero rehearsed restores. A scheduled restore drill would have reduced the loss from six hours of permanent data loss to a bounded, known recovery point.
+</RealCase>
+
+## Tension and trade-off
+
+- **Tested Backups vs. cost**: drills consume storage, compute, and engineering time; treat the drill as the deliverable and the backup as its input.
+- **Tested Backups vs. Soft Delete / Append-Only Logs**: backups are the last line of defense, not the first — layered recovery (event replay, soft delete, then restore) each reduces how far back the last resort reaches.
+- **RPO vs. write latency**: more frequent backups or synchronous replication cost real write performance; decide per dataset with explicit numbers, not vibes.
+
+## Related principles
+
+- [Blast Radius](/docs/principles/reliability/blast-radius) — the fewer things one mistake can destroy, the less the backup matters.
+- [Least Authority](/docs/principles/security/least-authority) — the operator who deleted the directory should not have had the authority to.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — replayable history is a backup you use every day.
+- [Soft Delete](/docs/principles/data/soft-delete) — reversible deletion for the mistakes that do not need the last resort.
+
+## References
+
+- GitLab, *GitLab.com Database Incident, 2017-01-31* — https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
+- Google SRE Book — https://sre.google/sre-book/ (data integrity and emergency response practice; verify chapter pointers before citing them).

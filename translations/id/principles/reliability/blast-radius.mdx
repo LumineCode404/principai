@@ -1,0 +1,116 @@
+---
+title: Blast Radius
+id: blast-radius
+name: Blast Radius
+summary: TERJEMAHAN DRAF — Limit the maximum damage any single action can cause — batch size caps, per-step confirmations, and staged rollouts turn catastrophes into incidents.
+category: reliability
+type: principle
+severity: critical
+applies_to:
+  - "destructive-ops"
+  - "infrastructure"
+  - "distributed"
+  - "database"
+  - "ml"
+tags:
+  - "scope"
+  - "containment"
+  - "batching"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "1629ca13a85e94cd"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/reliability/blast-radius.mdx -->
+<!-- source_hash EN: 1629ca13a85e94cd -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Before executing any state-changing or infrastructure command, ask what is the worst this single action can do — then cap that worst case. Break destructive work into small batches with a dry-run and a fresh confirmation per step, and prefer staged rollouts over fleet-wide changes. If you cannot state the exact set of resources a command will touch, stop and ask a human.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definition
+
+The blast radius of an action is the amount of state, traffic, or infrastructure it can damage in one execution. Engineer the maximum, not the average: the probability of a typo is fixed, but whether a typo kills one shard or the whole fleet is a design choice. Batch caps, per-step confirmation, and staged rollout are how the worst case gets a ceiling.
+
+## When to use
+
+- Commands that delete, drop, restart, or remove in bulk — filesystem, database, cloud.
+- Deployments and infrastructure changes: canaries, percentages, one environment at a time.
+- Data migrations and backfills over live production tables.
+- ML: bulk dataset deletes, model promotion, cluster-wide retraining jobs.
+- Recovery tooling: keep it outside the failure domain of the thing it recovers.
+
+## When NOT to use
+
+- Genuinely small atomic operations — a single-row insert does not need chunking.
+- Explicitly disposable sandboxes where the worst case is "recreate it in ten minutes".
+- Emergency kill switches that must act globally and immediately — their speed is the point; scope the trust instead (see Least Authority).
+
+## Anti-pattern
+
+- "DELETE FROM users" with the WHERE clause added mentally rather than literally.
+- A debugging command typed at 3am whose scope is "everything that matches".
+- One deploy pipeline applying one plan to every environment at once.
+- Recovery and monitoring tools that live inside the blast radius they are meant to survive.
+
+## Code example
+
+Wrong — one command, unbounded scope:
+
+```bash
+# "Clean up the old backups" — no cap, no dry-run, no confirmation
+find /var/backups -type f -name '*.gz' | xargs rm -f
+```
+
+Right — bounded batch, printed plan, fresh confirmation:
+
+```bash
+./bin/purge --older-than 30d --limit 500 --dry-run   # step 1: print the exact target set
+./bin/purge --older-than 30d --limit 500 --confirm   # step 2: delete only what was printed
+./bin/purge --older-than 30d --limit 500 --confirm   # step 3: next batch, verify between
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by tooling and permissions, not by operator discipline:
+
+- **IAM scoping**: no standing role can destroy resources across environments; destructive verbs are per-environment and require fresh escalation.
+- **Tooling defaults**: dry-run is the default mode; a row/resource limit is required on destructive verbs; multi-batch runs re-confirm with a human between batches.
+- **Migration guards**: the migration tool refuses a DELETE or UPDATE touching more than N rows without a special, reviewed flag.
+- **Staged rollout as config**: percentage-based deployment with automatic halt on error-rate or latency regression is the only approved deploy path.
+- **Out-of-band recovery**: consoles, DNS, and monitoring run on separate credentials and networks from the systems they protect.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On 2017-02-28, while debugging a slow S3 billing subsystem, an authorized S3 team member ran a command meant to remove a small number of servers for that one subsystem. One input was entered incorrectly, and the command removed a larger set of servers than intended — additional S3 subsystems went down with it and required a full restart. The blast radius of a single mistyped command, executed inside shared infrastructure, became hours of unavailability for the many sites and services that depend on S3 in that region. Postmortem: https://aws.amazon.com/message/41926/ — a smaller, confirmed scope would have reduced a regional outage to a maintenance task.
+
+On 2021-10-04, Facebook ran a maintenance command intended to assess the availability of its global backbone; it instead unplugged the connections between the backbone and the data centers, Facebook's routes were withdrawn from the internet, and the platform became unreachable worldwide. Crucially for this principle, DNS, internal tools, and out-of-band management were reachable only through the same affected network — the recovery tools were inside the blast radius. Engineers needed physical access to the machines to restore service. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — out-of-band tooling would have reduced the outage from a physical trip to a remote fix.
+</RealCase>
+
+## Tension and trade-off
+
+- **Speed vs. containment**: capped batches and staged rollouts trade minutes for the guarantee that a mistake is small. Weigh by the value of what is touched, not by operator patience.
+- **Cost vs. isolation**: keeping recovery and monitoring out-of-band costs money every day it is unused — and repays itself the one time it is needed.
+- **Weigh against Least Authority**: scoping who may act and scoping what any action may damage are complementary; neither substitutes for the other.
+
+## Related principles
+
+- [Least Authority](/docs/principles/security/least-authority) — who can act; blast radius is what any action can hit.
+- [Idempotency](/docs/principles/reliability/idempotency) — a repeated action stays as small as the first one.
+- [Tested Backups](/docs/principles/data/tested-backups) — the last line of defense when containment was not enough.
+- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — contain damage at runtime, not just at deploy time.
+
+## References
+
+- AWS, *Summary of the Amazon S3 Service Disruption*, 2017 — https://aws.amazon.com/message/41926/
+- Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/
+- Google SRE Book — https://sre.google/sre-book/ (change management and release engineering practice).

@@ -1,0 +1,120 @@
+---
+title: Fail-Safe Defaults
+id: fail-safe-defaults
+name: Fail-Safe Defaults
+summary: Deny by default and grant explicitly — permission must be earned per action, not assumed until revoked.
+category: security
+type: principle
+severity: critical
+applies_to:
+  - destructive-ops
+  - scripts
+  - api
+  - infrastructure
+  - services
+tags:
+  - access-control
+  - defaults
+  - authorization
+aliases:
+  - Fail-Secure Defaults
+  - Deny by Default
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Default every decision, flag, and permission to the denying or non-destructive state. Never let a destructive action run because a safety flag was forgotten or a check failed open. If a failure, timeout, or error leaves you uncertain whether something is allowed, deny and ask a human.
+</AIInstruction>
+
+<Severity level="critical" />
+
+## Definition
+
+When a system fails, is uncertain, or simply starts fresh, it must fall into a state that denies access and skips destructive action. Permission is a positive, explicit grant per action — never an assumption that persists until someone remembers to revoke it. This is Saltzer and Schroeder's fail-safe defaults: base access decisions on permission rather than exclusion, because the default situation is no permission at all.
+
+## When to use
+
+- Destructive operations: deletes, drops, force-pushes, purges, teardowns, bulk updates.
+- API and service access control: authentication and authorization on every path.
+- Scripts and automation run by tired humans, in the wrong window, on the wrong server.
+- New features and flags: ship disabled, enable deliberately, per environment.
+
+## When NOT to use
+
+- Public, read-only content where denial would defeat the product's purpose — the anonymous grant is explicit and global, not a forgotten default.
+- Liveness endpoints that must keep answering during partial failure so the orchestrator does not kill every instance at once — a deliberate, documented fail-open.
+- Environments explicitly declared disposable, where denial protects nothing.
+
+## Anti-pattern
+
+- A cleanup CLI where the destructive run is the default and the dry-run flag must be remembered every time.
+- An admin endpoint left accessible to any authenticated user because the role check was never written.
+- Firewall rules written as "allow everything, then deny the bad ports".
+- An auth-service timeout that lets the request through "to avoid blocking users".
+- A flag whose old meaning is forgotten, so it now enables a code path nobody intended to run.
+
+## Code example
+
+Wrong — safety is opt-in, destruction is the default:
+
+```bash
+# The safe flag must be remembered on every single invocation.
+./bin/purge-old-records --older-than 30d
+# → connects to prod, deletes rows, no confirmation, no preview
+# The one time the operator is tired, the safe behavior simply does not happen.
+```
+
+Right — destruction requires an explicit, per-run grant:
+
+```python
+# Deleting is opt-in; the default path can only ever print.
+parser.add_argument("--older-than", required=True, help="age cutoff, e.g. 30d")
+parser.add_argument("--apply", action="store_true",
+                    help="actually delete; without this flag the script only prints")
+args = parser.parse_args()
+plan = select_records_older_than(args.older_than)
+if not args.apply:
+    print_plan(plan)        # fail-safe default: show, never touch
+    sys.exit(0)
+delete(plan)                # explicit grant, valid for this run only
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is not enforced by willpower. Enforce it with real controls:
+
+- **Deny-first middleware**: an authorization base policy applied to every route by construction; routes opt in to a permission, never out of the check.
+- **Flags that start disabled**: feature-flag platforms where new flags default to off, and dead code paths require explicit per-environment enablement.
+- **Fail-closed timeouts**: policy and auth lookups that time out deny the request; fail-open is an explicit, reviewed, documented exception.
+- **Two-step destruction**: irreversible operations require a separate confirmation step or a second actor, enforced by the tooling, not by memory.
+- **What prevents vs. detects**: default-deny middleware and disabled-by-default flags prevent the action even when the handler is buggy; audits of flags and grants only detect drift afterwards.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On January 31, 2017, a GitLab operator, exhausted after hours of fighting replication failures, deleted a directory on the wrong server — the one holding the primary database's live data. The destructive command was available by default in his working context: nothing forced a dry run, a confirmation, or a second check before an irreversible delete. Roughly 300 GB of data was lost, and about six hours of database writes proved unrecoverable because the restores available were slower and less complete than expected. Fail-safe defaults would not have stopped the initial mistake, but they would have reduced a one-line command into a printed plan and a moment of embarrassment. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
+</RealCase>
+
+## Tension and trade-off
+
+- **Fail-closed vs. graceful degradation**: when a dependency fails, denying everything converts its outage into yours — decide per path, before the incident, whether fail-closed is proportionate.
+- **Deny by default vs. least astonishment**: operators who hit unpredictable denials learn reflexive force flags; grants must be easy to give, visible when given, and predictable to reason about.
+- **Explicit grants vs. least authority**: per-action grants everywhere turn into ceremony; narrow each grant itself so renewing it is safe instead of annoying.
+
+## Related principles
+
+- [Least Authority](/docs/principles/security/least-authority) — the sibling rule: grants are narrow, and doubt means denial.
+- [Secure by Default](/docs/principles/security/secure-by-default) — the same idea applied to shipped configuration.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — default-deny is one layer, not the whole wall.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — containment for the day a denial fails or is bypassed.
+- [Least Astonishment](/docs/principles/design/least-astonishment) — safe defaults that still make sense to the person hitting them.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults is one of the original design principles.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — deny-by-default, per-request access decisions: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

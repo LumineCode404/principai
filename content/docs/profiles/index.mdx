@@ -1,0 +1,61 @@
+---
+title: Profiles
+description: The curation layer — a profile packages the principles for one kind of work, with must-follow and consider roles and an explicit priority order for when they conflict.
+---
+
+The archive may grow without limit; an agent's context window may not. A profile is the layer between the two: **a package of principles for one kind of work**, selected so that what lands in a project's `.principles/` directory is small, relevant, and sharp.
+
+## What a profile is
+
+Every profile has three parts:
+
+1. **A context description** — the kind of work the profile is for, stated concretely enough that an agent or a human can decide in seconds whether it applies. "Cleanup scripts, migrations, backfills, bulk deletes" — not "operations in general".
+2. **A principle list with roles** — each principle is either **must-follow** (loaded in full and obeyed; the agent halts for human approval before violating it) or **consider** (opened on demand, when the task touches its subject). The role governs loading, not importance: a consider principle can still outrank a must-follow one when severity or the profile's priority order says so.
+3. **A priority order for conflicts** — principles collide in real work. Each profile states in advance which one wins, so the agent is not improvising ethics mid-task.
+
+## Roles versus severity
+
+Two axes, easily confused:
+
+- **Role** (must-follow / consider) is about *loading*: how the principle enters the agent's context, and what happens when the agent is about to violate it.
+- **Severity** (critical / important / advisory) is about *weight*: how bad the violation tends to be. Severity is carried by the principle itself, in its frontmatter.
+
+A critical principle in consider is not a contradiction — it means "you do not need this in context for every task, but when the task touches its subject, treat it as load-bearing". The INDEX carries both axes, so an agent can sort without opening files.
+
+## How loading works
+
+<Steps>
+  <Step title="The INDEX is always read">
+    `principai copy` writes a `.principles/INDEX.md` listing every included principle with its role, severity, and a one-line summary. This is the only part that must sit in the agent's context at all times.
+  </Step>
+  <Step title="Must-follow is read in full">
+    Before work starts, the agent opens every must-follow principle, plus any critical-severity principle the current task touches.
+  </Step>
+  <Step title="The rest is opened on demand">
+    Consider principles are opened when the task touches their subject — not before. Depth is paid only where the task justifies it.
+  </Step>
+</Steps>
+
+<Callout type="info" title="Curation never deletes from the archive">
+  A profile selects; it never removes. Principles left out of a profile still exist in the library, and an agent may open them when a task calls for them. See the [library's own rules](/docs) — filtering happens here and at severity, never by not writing a principle down.
+</Callout>
+
+## The profiles
+
+Each profile page states its context, the must-follow and consider lists, the priority order for conflicts, and the copy command that loads it.
+
+<Cards>
+  <Card title="Destructive Operations" description="Cleanup scripts, migrations, backfills, bulk deletes — work where a mistake destroys data. The first profile, and the reason this library exists." href="/docs/profiles/destructive-ops" />
+  <Card title="Database Service" description="Services that own data: tested restores, expand-contract schema changes, idempotent writes, loud failures." href="/docs/profiles/database-service" />
+  <Card title="Public API" description="HTTP and service APIs consumed by others: versioned, explicit contracts and honest failures." href="/docs/profiles/public-api" />
+</Cards>
+
+<Callout type="warn" title="Not a finished catalogue">
+  Three profiles exist. More are planned as categories are dug and as real usage shows which packages earn their keep — we do not claim coverage of every kind of work, and we never will.
+</Callout>
+
+## Writing your own
+
+A profile is data, not code: a name, a context, principle references with roles, and a priority order. `principai profile list` and `principai profile show` inspect the ones defined in this checkout — see the [CLI reference](/docs/cli/reference) for exact usage.
+
+A new profile earns its place the same way everything here does: a real kind of work that repeatedly needs the same package of principles. When two profiles overlap heavily, that is a signal to look for the underlying kind of work — not to grow both until they are the same list with different names.

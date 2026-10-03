@@ -1,0 +1,63 @@
+---
+title: Two-Repo Sync (EN / ID)
+description: The decision record for the English/Indonesian parity model — one source of truth, one-way propagation, automated drift detection.
+---
+
+The library exists in English and Indonesian. This page records how the two stay in sync — the decision, the alternatives considered, the propagation mechanism, and the costs. It is a decision record: written to be checked against reality, not admired.
+
+## Chosen model
+
+- **The EN repo is the single source of truth.** The website and the library live in one repository; `content/docs` is the English canon. Every meaning-bearing change starts there.
+- **The ID repo is derived.** `principai sync` generates the Indonesian tree from the EN source. The EN repo carries a `translations/id/` tree demonstrating the derived output; the ID repo is its published home.
+- **One direction only.** Meaning flows EN to ID. There is no two-way merge — see Conflicts and single-repo edits for the one narrow exception, which is not about meaning.
+
+## Why EN-first
+
+Alternatives, compared honestly:
+
+- **EN-first (chosen).** The source material — papers, postmortems, standards — is English-primary; translating a canon from a translation compounds errors. Agents are most accurate in English, and this library is written for agents. One-way propagation eliminates two-way merge conflicts entirely.
+- **ID-first.** Rejected: every English citation would become a translation of a translation, and the flow inverts against the language the sources speak.
+- **Neutral structure plus two translations.** A language-neutral outline with EN and ID both derived from it sounds fair. In practice it doubles the translation work, has no natural reader, and leaves two derived sets drifting with no arbiter.
+- **Single repo with en and id peer folders.** Rejected as a peer structure: peer folders invite peer edits, and two-way merge conflicts return. The chosen model keeps an ID tree only as clearly derived output — marked by `source_hash` and `translation_status`, never a peer.
+
+Costs we accept openly:
+
+- **Translation lag.** The ID repo lags EN between syncs. That is normal and made visible by staleness marking, not hidden.
+- **Reviewer bottleneck.** One human reviewer grants `reviewed` status. The pipeline queues behind that person; we do not pretend otherwise.
+- **Glossary discipline.** Untranslated terms must stay consistent across every file. The [Glossary](/docs/glossary) is mandatory reading for translator and checker alike.
+
+## Propagation
+
+1. A change is written in EN first — new principle, edited meaning, corrected citation.
+2. `principai sync` generates the ID counterpart: a stub carrying the EN frontmatter and the fixed section structure, with `translation_status: draft`. The stub's `source_hash` records the SHA-256 of the EN source at sync time.
+3. A draft may be machine- or agent-translated. That is explicitly allowed — drafts are honest about being drafts.
+4. It becomes `reviewed` only after human approval. No exception.
+5. Meaning-changing edits go through EN, then re-sync. An ID file never changes meaning on its own authority.
+
+## Drift detection
+
+Two kinds, checked separately by `principai check --against`:
+
+- **Structural parity** — hard requirements, 1:1 in both repos: the file list, the ids, the frontmatter keys, the section order, profile membership. A file in EN with no ID counterpart — or the reverse — is drift. A renamed section is drift.
+- **Content staleness** — soft and automatic: when the EN source changes, its `source_hash` no longer matches the hash recorded in the ID file, and the ID file is marked `translation_status: stale` until re-synced and re-approved.
+
+Structural drift is a broken pipeline. Staleness is expected lag made visible.
+
+## Glossary
+
+Technical terms that stay untranslated — principle, severity, dry-run, blast radius, and the rest — live in `glossary.md` in **both** repos. The translator consumes it to translate consistently; `principai check` consumes it to reject ID files that translated what should not be translated. See the [Glossary](/docs/glossary).
+
+## Enforcement in CI
+
+`principai check` runs in pre-commit and CI:
+
+- **Structural drift is a hard fail.** The pipeline does not pass with a broken structure.
+- **Stale translations raise a hard warning or fail**, configurable per repo. Lag is allowed; invisible lag is not.
+
+## Conflicts and single-repo edits
+
+ID-only edits are allowed for translation quality — phrasing, register, naturalness. Never for structure (sections, frontmatter shape) and never for meaning. If the meaning is wrong in the ID file, either the canon is wrong or the translation is: fix EN if the canon is wrong, then re-sync and retranslate. Never patch meaning locally.
+
+## Keeping the cost down
+
+What is automated: stub generation, hash tracking, structural parity checks, staleness marking. What stays manual: the actual translation quality and the review approval. Everything mechanical is mechanical; the only irreplaceable human work is judgment.

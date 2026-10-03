@@ -1,0 +1,40 @@
+---
+title: Overview
+description: A private library of software engineering principles, AI-friendly by design, with a curation layer so what loads into agents is small, relevant, and sharp.
+---
+
+PRINCIPAI is a library of software engineering principles written to be **read by AI agents** — one principle per markdown file, a fixed section order, a curation layer (profiles), a small CLI to copy subsets into projects, and evals to check whether the library actually changes agent behavior.
+
+## Why it exists
+
+A cleanup script once deleted a database. Broad credentials, no dry-run, no confirmation, a non-idempotent delete — the classic chain. Least Authority, Fail-Safe Defaults, and Idempotency exist precisely for that chain, and it still bites teams today: in 2017 an operator at GitLab deleted the wrong directory on a tired night and took the primary database with it.
+
+The idea is simple: when you start a project, you copy the *relevant* subset of principles into `.principles/` in that project. Any AI agent working there reads the INDEX, obeys the must-follow set, opens other principles only when the task touches them — and halts for human approval before violating a `critical` principle or doing anything destructive.
+
+## What this library is — and is not
+
+<Callout type="warn" title="Principles are advisors, not enforcers">
+  Principles in context help an agent choose a safer design. They do **not** prevent incidents. Real prevention lives in technical controls: read-only credentials, dry-run defaults, tested backups, environment separation, human confirmation. Every principle in this library names its enforcement pairing, and we never claim a principle "prevents" anything — it reduces risk, controls contain it.
+</Callout>
+
+## Design principles of the library itself
+
+- **The archive may be exhaustive; the load is curated.** These are two different concerns, separated explicitly through profiles, summaries, and severity.
+- **One principle, one file.** Overlapping principles stay in one file; alternative names go in `aliases`.
+- **Curation never deletes from the archive.** Filtering happens in the profile and severity layers — never by not writing a principle down.
+- **No target numbers.** We never promise a count of principles or categories. Categories are marked *sudah digali* (dug), *belum digali* (not yet dug), or *tidak yakin* (unsure).
+- **No completeness claims.** Only those three status words. When a field feels exhausted, we re-research it from a different angle.
+- **Honest sources.** Real incidents are public and traceable, with links we have actually opened. Anything unverifiable is marked `ilustratif` and the frontmatter carries `verification: perlu`.
+
+## Start here
+
+<Card title="Quickstart" description="Copy a profile into a project and see what the agent does differently." href="/docs/getting-started/quickstart" />
+<Card title="Principle format" description="The anatomy of one principle file — sections, severity, applies_to." href="/docs/concepts/principle-format" />
+<Card title="Browse principles" description="The archive, organized by category." href="/docs/principles" />
+<Card title="Profiles" description="The curation layer: must-follow and consider, per kind of work." href="/docs/profiles" />
+<Card title="Evals" description="Proving the library changes agent behavior — scenario, rubric, method." href="/docs/evals" />
+<Card title="CLI reference" description="principai — list, show, search, copy, profile, check, sync, status." href="/docs/cli" />
+
+## Maintenance contact
+
+Questions, corrections, and incident reports: [luminecode@proton.me](mailto:luminecode@proton.me)

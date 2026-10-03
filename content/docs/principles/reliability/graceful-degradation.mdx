@@ -1,0 +1,113 @@
+---
+title: Graceful Degradation
+id: graceful-degradation
+name: Graceful Degradation
+summary: When a component degrades, shed the optional and keep the essential — partial service beats total outage.
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - services
+  - distributed
+  - ui
+tags:
+  - partial-failure
+  - load-shedding
+  - resilience
+aliases:
+  - Fail Gracefully
+sources:
+  - 'Google SRE Workbook, https://sre.google/workbook/'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Classify every dependency as essential or optional before an outage classifies it for you. Give each outbound call a timeout, wrap it in a circuit breaker, and design a concrete fallback for every optional feature. Under overload, shed optional work first — never let a slow dependency occupy your worker threads.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+A system degrades gracefully when the failure or overload of a component reduces capability instead of availability: checkout still works while the recommendation carousel disappears. This requires classifying dependencies as essential or optional before the incident, and writing down the fallback for each optional one. Partial failure is the steady state of distributed systems; the real choice is between planned partial service and unplanned total outage.
+
+## When to use
+
+- User-facing pages and APIs assembled from many services: return the essential response, drop the slow enrichment.
+- High-fanout request paths where one slow dependency can starve the whole worker pool.
+- Traffic spikes and dependency brownouts: shed load explicitly before the process dies.
+- ML systems: serve the last good model when fresh training or feature pipelines lag.
+
+## When NOT to use
+
+- Correctness and safety paths — auth, payments, security checks — where "degraded" means fail-open; that is fail-unsafe, not graceful (see Fail-Safe Defaults).
+- Products whose essential path IS the optional component (a translation service without translation is an outage, not a degradation).
+- Write paths where degraded means silently persisting incomplete data — that trades an outage for corruption (see Fail-Visible).
+
+## Anti-pattern
+
+- Page render blocks on a recommendations widget; one slow recs service turns every page into an error.
+- Outbound calls with no timeout; a slow dependency gradually owns every worker thread.
+- All-or-nothing aggregation: either every section of the response assembles or nothing is returned.
+- Retrying harder into the failing dependency instead of shedding it (see Retry Budget).
+- Serving degraded content with no signal at all to users or dashboards — nobody can tell healthy from degraded.
+
+## Code example
+
+Wrong — one optional widget holds the whole page:
+
+```python
+def render_page(user):
+    recs = recs_client.get(user.id)      # no timeout, no fallback, essential path blocked
+    cart = cart_client.get(user.id)
+    return template(recs=recs, cart=cart)
+```
+
+Right — shed the optional, keep the essential:
+
+```python
+def render_page(user):
+    cart = cart_client.get(user.id, timeout=0.1)          # essential: hard timeout
+    try:
+        recs = recs_client.get(user.id, timeout=0.05)     # optional: short budget
+    except (Timeout, Unavailable):
+        recs = Recommendations.empty()                   # fallback, not a 500
+    return template(recs=recs, cart=cart)
+```
+
+## Technical enforcement
+
+<Enforcement>
+Degradation is a designed behavior, so it can be enforced as one:
+
+- **Timeouts on every outbound call**, sized to the dependency's latency SLO — enforced by HTTP client and service mesh defaults, not per-developer discipline.
+- **Circuit breakers with named fallbacks** wired at the framework level; a dependency without a fallback cannot be declared optional.
+- **Admission control before resource exhaustion**: queue limits and explicit busy responses with retry guidance; the kernel OOM killer is not a load-shedding strategy.
+- **Degradation must be observable**: a "served degraded" metric and a user-visible signal (empty state, stale marker) are part of the feature, not an optional extra.
+- **Game days**: kill a dependency in staging on a schedule; the core path surviving is a pass criterion.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On 2019-11-02, Cloudflare deployed a new WAF rule containing a regular expression that catastrophically backtracked on certain inputs. Due to a bug in the software that deploys rules, it went live on edge machines worldwide at once instead of gradually; the regex exhausted CPU on those machines, and requests worldwide returned 502s until engineers used a global kill switch to disable the WAF entirely. Postmortem: https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/ — the inline security layer took the essential path down with it; requests were dropped rather than served degraded. The same postmortem is also a lesson in Blast Radius and staged rollout: the intended gradual deployment would have contained the rule's effect to a testable subset.
+</RealCase>
+
+## Tension and trade-off
+
+- **Graceful Degradation vs. Fail-Visible**: shedding can mask real errors; every degradation must be visible in metrics and in the response, or you trade an outage for slow, silent rot.
+- **Graceful Degradation vs. Fail-Safe Defaults**: never degrade a security or safety check to preserve response time — degraded security is a breach, not an outage.
+- **Weigh against Least Astonishment**: tell users what is missing or stale; a page that quietly lies about freshness erodes more trust than an honest degraded state.
+
+## Related principles
+
+- [Retry Budget](/docs/principles/reliability/retry-budget) — stop feeding a failing dependency; shed it instead.
+- [Observability First](/docs/principles/reliability/observability-first) — degradation you cannot see is indistinguishable from failure.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — fail loudly at the layer that owns the decision, degrade at the layer that owns the user.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — deny by default; essential checks never "degrade" to allow.
+
+## References
+
+- Google SRE Workbook — https://sre.google/workbook/ (the "Cascading Failures" chapter covers load shedding and resource exhaustion directly).
+- Cloudflare, *Details of the Cloudflare Outage on November 2, 2019* — https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/

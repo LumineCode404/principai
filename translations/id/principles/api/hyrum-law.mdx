@@ -1,0 +1,116 @@
+---
+title: Hyrum's Law
+id: hyrum-law
+name: Hyrum's Law
+summary: TERJEMAHAN DRAF — With enough users, every observable behavior of your system will be depended on by somebody — including the ones you never promised.
+category: api
+type: law
+severity: important
+applies_to:
+  - "api"
+  - "libraries"
+  - "services"
+  - "distributed"
+tags:
+  - "compatibility"
+  - "observable-behavior"
+  - "dependencies"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "b074e646fc72db90"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/api/hyrum-law.mdx -->
+<!-- source_hash EN: b074e646fc72db90 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Treat everything a consumer can observe — field order, error text, timing, package existence — as part of your contract. Before changing any observable behavior, find out who depends on it, communicate through a version and a deprecation window, and measure usage until the last consumer has migrated. Never dismiss a break with "it was undocumented".
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+When the number of consumers of an interface is large enough, every observable behavior will be depended on by somebody, regardless of what the contract promises. The real interface is what consumers actually use: response shapes, error messages, rate-limit timing, the presence of a field nobody documented. Changing such behavior — even fixing it — is a breaking change and must be priced, communicated, and versioned as one.
+
+## When to use
+
+- Any public or shared API, library, or event stream with consumers you do not control.
+- Evaluating "harmless" bug fixes that alter observable output.
+- Planning deprecations, removals, or major version bumps.
+- Reviewing database or storage shapes that other teams read directly.
+
+## When NOT to use
+
+- As a veto over security or correctness fixes — when the behavior is harmful, ship the fix and manage the window, loudly.
+- Internal code with a single consumer you also own, deployed in lockstep.
+- Pre-launch code with no real consumers yet — the law has no subjects until someone depends on the behavior.
+
+## Anti-pattern
+
+- "It's not in the docs, so we can change it" — with a large consumer base, that is never true.
+- Consumers parsing error message strings, or timing requests to infer internal state — and producers obliging forever.
+- Returning ORM rows straight from an endpoint: every internal column becomes someone's contract.
+- Removing a dependency or field because "nobody uses it" — without usage metrics to prove it.
+
+## Code example
+
+Wrong — the storage shape leaks; the ORM's columns become the contract:
+
+```ts
+app.get('/users/:id', async (req, res) => {
+  const row = await db.users.find({ id: req.params.id });
+  res.json(row); // createdAt, internal flags, future columns: all observed, all depended on
+});
+```
+
+Right — the contract is chosen, typed, and validated:
+
+```ts
+const UserDTO = z.object({ id: z.string(), name: z.string() }).strict();
+app.get('/users/:id', async (req, res) => {
+  const row = await db.users.find({ id: req.params.id });
+  res.json(UserDTO.parse({ id: row.id, name: row.display_name })); // pick, don't leak
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+This principle is enforced by machinery, not by careful consumers:
+
+- **Consumer-driven contract tests** (Pact) in CI on both producer and consumer sides: the verified contract is what consumers actually use, not what the docs claim.
+- **Explicit DTOs and serializers**: internal shapes never cross the boundary unfiltered.
+- **API diff gates**: OpenAPI diffing in CI classifies changes and blocks breaking ones that lack a version bump.
+- **Deprecation metrics**: per-field and per-endpoint usage tracking; removal is allowed only when the counter reaches zero — or an explicit, communicated sunset date passes.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In March 2016, a developer unpublished his own packages from npm after a naming dispute; among them was left-pad, a tiny string-padding utility. Fresh installs and CI pipelines across the JavaScript ecosystem failed — thousands of dependent builds, including major frameworks' toolchains. Nobody ever contracted for the continued existence of that package; the ecosystem's build pipelines depended on it all the same. Exact-version pinning and registry-level removal policies would have reduced the blast radius, not prevented it — the dependency formed with or without a contract. Coverage: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).
+</RealCase>
+
+## Tension and trade-off
+
+- **Stability vs. progress**: this law prices every fix; the honest response is versioned change with a deprecation window, not freezing (see Versioned Contracts).
+- **Hyrum vs. minimal surfaces**: the fewer observable details you expose — DTOs over raw rows, opaque IDs over sequential ones — the less there is to depend on. Design as if everything visible will become permanent.
+- **Empathy vs. entitlement**: some dependencies are consumer abuse (parsing error strings); you may still break them, but deliberately, with notice and a migration path — not out of surprise.
+
+## Related principles
+
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — the sanctioned way to change what consumers depend on.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — shrink the implicit surface by declaring the explicit one.
+- [Robustness Principle](/docs/principles/api/postel-robustness) — liberal acceptance multiplies the observable behaviors consumers attach to.
+- [Supply-Chain Vetting](/docs/principles/security/supply-chain-vetting) — left-pad is also a supply-chain story: know what you transitively depend on.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — the scope of what a break can take down.
+- [Expand-Contract](/docs/principles/data/expand-contract) — the Hyrum-aware procedure for schema changes.
+
+## References
+
+- Hyrum's Law: https://www.hyrumslaw.com (verified URL).
+- The Register, npm left-pad aftermath, March 2016: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).

@@ -1,0 +1,116 @@
+---
+title: Defense in Depth
+id: defense-in-depth
+name: Defense in Depth
+summary: No single control is perfect — layer independent controls so one failure never becomes a breach.
+category: security
+type: principle
+severity: important
+applies_to:
+  - infrastructure
+  - services
+  - api
+  - security-critical
+tags:
+  - layering
+  - resilience
+  - security
+aliases:
+  - Layered Defence
+  - Defense in Depth
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Never rely on a single control to stop a security failure. When you design a boundary, assume the control in front of it will eventually fail — a bug, a misconfiguration, an expired certificate — and place an independent layer behind it. If removing one layer would leave the system unprotected, stop and redesign the boundary.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Every control fails eventually: code has bugs, configurations drift, certificates expire, people get tired. Defense in depth arranges multiple, independent controls so a single failure is contained by the next layer instead of becoming the incident. Independence is the load-bearing word — three copies of the same check share one failure mode and are one control wearing a costume.
+
+## When to use
+
+- Security-critical paths: authentication, authorization, payments, key handling.
+- Boundaries facing untrusted input: public APIs, file uploads, network edges.
+- Infrastructure where misconfiguration is a realistic failure mode — it usually is.
+- Any system whose single security failure would also be a business-ending event.
+
+## When NOT to use
+
+- Prototypes with no real data, where one honest layer plus fast iteration beats three aspirational layers nobody maintains.
+- "Depth" made of copies: the same check duplicated in different places shares its failure mode — consolidate and build a genuinely different control instead.
+- Latency-critical paths guarding low-value assets, where every extra hop costs more than the thing it protects.
+
+## Anti-pattern
+
+- "The WAF blocks it, so the app does not need to validate input."
+- A private network treated as the only boundary: anything that gets inside owns everything.
+- Secrets protected by file permissions alone, with no vault and no rotation behind them.
+- Monitoring that would tell you about a breach, running on the same infrastructure the breach takes down.
+- One penetration test passed years ago, declared secure forever.
+
+## Code example
+
+Wrong — one layer, total exposure when it fails:
+
+```javascript
+// The ONLY thing between the internet and account deletion is the network rule
+app.post("/admin/delete-user", (req, res) => {
+  // trusted because the load balancer only forwards internal traffic here
+  deleteUser(req.body.userId);   // one misconfigured routing rule and prod is wide open
+});
+```
+
+Right — independent layers behind the boundary:
+
+```javascript
+// Layer 1: network rule. Layer 2: app-level role check on every request.
+app.post("/admin/delete-user", requireRole("admin"), (req, res) => {
+  // Layer 3: audit trail of who deleted what. Layer 4: soft, recoverable delete.
+  softDeleteUser(req.body.userId, { by: res.locals.user.id, reason: "admin-console" });
+});
+```
+
+## Technical enforcement
+
+<Enforcement>
+Depth must live in the platform, not in individual memory:
+
+- **Segmentation plus per-service authorization**: even a fully compromised pod still faces service-level auth checks and mutual TLS policies — not just the network perimeter.
+- **A second authorization path**: policy engines or IAM conditions evaluated independently of application code, so an app bug does not decide access alone.
+- **Off-host, append-only audit logs**: evidence that survives the very compromise it records.
+- **Recoverable destruction**: soft deletes and tested backups so a defeated application layer is not the end of the story.
+- **What prevents vs. detects**: segmentation and per-service auth stop movement after a breach; logs and alerts detect what already happened. You need both — detection is the layer that tells you the others failed.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+In February 2014, Apple's iOS and OS X releases were found to contain a duplicated "goto fail" line inside the certificate-validation function. The extra unconditional jump skipped the checks that verify a server's certificate chain, yet the function still returned success — TLS connections were accepted with any certificate. The one layer responsible for validation failed silently, and there was no second layer behind it: no independent pinning check, no validator that disagreed, no test exercising the failure path. Defense in depth would not have made the typo impossible — it would have reduced the exposure: an independent validation or pinning layer would have caught connections the broken function approved. Details: https://www.imperialviolet.org/2014/02/22/applebug.html
+</RealCase>
+
+## Tension and trade-off
+
+- **Depth vs. KISS**: every layer adds configuration surface, failure modes, and debugging pain; put depth on critical paths, not uniformly everywhere.
+- **Depth vs. Observability-First**: layers that fail quietly turn debugging into archaeology — per-layer logging is part of the layer, not an optional extra.
+- **Depth vs. Yagni**: speculative layers against hypothetical attacks cost real maintenance forever; scale the depth to what a breach would actually cost.
+
+## Related principles
+
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — each layer should fail toward denial, not toward openness.
+- [Least Authority](/docs/principles/security/least-authority) — bounds what any single compromised layer can reach.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — layers exist to shrink the reachable damage set.
+- [Soft Delete](/docs/principles/data/soft-delete) — recoverable destruction as the last defensive layer.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — evidence designed to survive the incident.
+
+## References
+
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — separation of privilege: requiring multiple conditions before granting access.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — layered, per-request defenses: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

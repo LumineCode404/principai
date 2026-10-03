@@ -1,0 +1,116 @@
+---
+title: Observability First
+id: observability-first
+name: Observability First
+summary: You cannot operate what you cannot see — logs, metrics, and traces exist before the incident, not after it.
+category: reliability
+type: principle
+severity: important
+applies_to:
+  - services
+  - distributed
+  - database
+  - ml
+tags:
+  - logging
+  - metrics
+  - tracing
+  - alerts
+aliases:
+  - Observability Before Optimization
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+status: draft
+verification: ok
+---
+
+<AIInstruction>
+Never deploy or operate a system you cannot answer basic questions about — is it working, for whom, how fast, and why not — using telemetry that already exists. Instrument failure modes before shipping, and wire dashboards and alerts before the first production deploy. If the observability you needed during an incident was missing, note the gap and close it before the next one — and never let the tools you recover with depend on the system being recovered.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Observability is the ability to ask new questions about a system's internal state from its outputs, without shipping new code. The outputs — structured logs, metrics, traces — must exist before the incident, because the incident is exactly when there is no time to add them. The test: page yourself at 3am and ask whether you can localize the failing component from a dashboard in minutes, or whether you start guessing.
+
+## When to use
+
+- Every service before its first production deploy — "before" is the whole point.
+- Migrations and schema changes: old and new paths must be comparable side by side (see Expand-Contract).
+- Databases and queues: replication lag, queue depth, age of the oldest message, backup freshness.
+- ML: training/serving skew, feature quality metrics, per-model error signals.
+
+## When NOT to use
+
+- Do not log secrets or PII — telemetry is a data breach surface (see Secrets Hygiene); redact at the emitter, not downstream.
+- Do not instrument to absurd resolution where collection cost distorts the system — sample traces instead of tracing everything.
+- Do not build bespoke dashboards for hypothetical questions — instrument real failure modes and the golden signals first (weigh against YAGNI).
+
+## Anti-pattern
+
+- "It's slow, add a log line" — in production, after the incident started.
+- A single success/failure counter with no dimensions: no endpoint, tenant, region, or version to slice by.
+- Unstructured prose log lines that cannot be filtered, counted, or joined.
+- Alerts with no runbook, paging for everything so that no one reads anything.
+- Internal tooling hosted inside the infrastructure it is supposed to observe.
+
+## Code example
+
+Wrong — invisible failure:
+
+```python
+try:
+    charge(order)
+except PaymentError:
+    pass                       # or print("error") — no metric, no context, no trace
+```
+
+Right — visible failure, still loud:
+
+```python
+try:
+    charge(order)
+except PaymentError as e:
+    log.error("charge_failed", order_id=order.id, code=e.code)   # structured, searchable
+    metrics.increment("payments.failed", tags={"code": e.code})   # counted, sliceable
+    trace.set_error(e)                                           # correlated request-wide
+    raise                                                        # observable AND failing
+```
+
+## Technical enforcement
+
+<Enforcement>
+Observability is enforced by pipeline and process, not by good intentions:
+
+- **Scaffold-time defaults**: every new service starts with golden-signal dashboards (error ratio, latency percentiles, saturation) and error alerts from the project template.
+- **CI checks**: a route or handler that emits no standard error metric and structured error log does not pass review — "no unobserved endpoint".
+- **Structured logging with a schema**: a shared library and lint rules reject ad-hoc print-style logging in production code.
+- **Trace propagation middleware**: trace IDs are mandatory across service boundaries, so one slow request can be followed end to end.
+- **Out-of-band hosting**: status pages, incident tooling, and monitoring run on separate infrastructure and credentials from everything they watch.
+- **Runbook requirement**: an alert without a runbook link is deleted before it is allowed to page anyone.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+On 2021-10-04, Facebook's route withdrawal made the platform unreachable worldwide — and the same failure domain contained the tools engineers use to observe and operate the network. Internal systems, DNS, and out-of-band management were themselves unreachable; diagnosis and remote recovery were blocked, and restoration required engineers physically present at the data centers. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — when you cannot observe, you cannot even recover. The general lesson predates and outlives this incident: recovery paths must survive the failures they exist to fix. (verification: perlu for link details — read the postmortem before quoting specifics.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Observability vs. cost**: full-resolution telemetry is expensive; sample traces and aggregate logs, but never sample away the signal that carries alerts.
+- **Observability vs. privacy**: telemetry is a data breach surface — PII and secrets are redacted at the emitter, not downstream.
+- **Weigh against YAGNI**: instrument the failure modes and golden signals you actually have; resist inventing metrics for hypothetical questions.
+
+## Related principles
+
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — the error must be raised before it can be observed.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — keep the observation tools outside the blast radius they must survive.
+- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — degradation must be a visible state, not an invisible one.
+- [Secrets Hygiene](/docs/principles/security/secrets-hygiene) — telemetry must never become the leak.
+
+## References
+
+- Google SRE Book — https://sre.google/sre-book/ (monitoring distributed systems; the four golden signals; postmortem culture).
+- Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/

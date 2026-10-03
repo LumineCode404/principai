@@ -1,0 +1,58 @@
+---
+title: Taxonomy
+description: The living category map of the principles archive — what has been dug, what has not been dug yet, and what we are unsure about.
+---
+
+This is the living map of the archive's categories. It serves three readers at once: humans browsing the library, agents deciding what applies_to territory they are in, and profiles referencing categories when they select principles. Three rules govern it, and they are non-negotiable:
+
+<Callout type="warn" title="Taxonomy rules">
+  No completeness claims. No target numbers. Only the three status words — sudah digali, belum digali, tidak yakin. A category is dug when it is researched with sources and written; dug is not a finish line.
+</Callout>
+
+The rules exist because category maps rot in one specific way: they start promising coverage. The moment a taxonomy implies "everything is here," it stops being a map and becomes marketing. This one stays a map.
+
+## Current categories (sudah digali)
+
+| Category | Focus | Status |
+| --- | --- | --- |
+| [security](/docs/principles/security) | Who may do what, and what contains mistakes: authority, defaults, secrets, the supply chain | sudah digali |
+| [reliability](/docs/principles/reliability) | How systems fail visibly and how failure stays small: idempotency, blast radius, degradation | sudah digali |
+| [data](/docs/principles/data) | How data survives mistakes: tested backups, soft deletes, expand-contract migrations | sudah digali |
+| [architecture](/docs/principles/architecture) | How structure shapes outcomes: responsibilities, dependencies, organizational forces | sudah digali |
+| [api](/docs/principles/api) | Contracts between systems: explicitness, versioning, robustness and its costs | sudah digali |
+| [design](/docs/principles/design) | Judgment under ambiguity: simplicity, astonishment, fences, measured targets | sudah digali |
+
+Dug means researched and written — not finished, not exhaustive. Individual principles keep being added to dug categories as they are found; the status word does not change.
+
+## Belum digali
+
+Not yet dug. This list is explicitly **not** a target, a roadmap, or a promise — it is honest tracking of what the field contains and the archive does not yet:
+
+testing · ops/SRE practices · distributed systems (deeper) · concurrency · performance · accessibility · UX · privacy engineering · applied cryptography · human factors · safety engineering · economics/cost · maintainability and evolution · observability practices · supply chain (deeper) · AI/ML systems · documentation · team process · database internals · networking · formal methods · internationalization
+
+Some individual principles already touch these areas from inside dug categories — observability-first lives in reliability. A topic appearing above means the category has not been dug as a category; it does not mean the archive is silent on the subject.
+
+## Tidak yakin
+
+- **Where Law, Principle, and Heuristic blur.** Goodhart's Law is called a law but behaves like an empirical observation; Chesterton's Fence is called a heuristic but is treated as wisdom. The `type` field records our current call, not a settled truth — the boundaries between the three are themselves tidak yakin.
+- **Whether practice deserves its own category.** `type: practice` currently lives inside the existing categories. Whether practices — checklists like restore drills and review gates — form a category of their own, or fit better as a type within categories, is undecided. We do not pretend the current shape is final.
+
+## How a category gets dug
+
+Digging is a process with an end that is never an end:
+
+1. Research the field from primary sources — papers, books, postmortems — not from listicles.
+2. Write principles one per file, following the [principle format](/docs/concepts/principle-format), each starting `status: draft`.
+3. Verify incidents and citations; mark verification honestly — ok or perlu.
+4. Human review moves files to reviewed. The category is marked sudah digali when its core is researched and written; digging continues afterwards without changing the word.
+
+The order matters: research before writing, review before reviewed. A category is never marked dug by the volume of files it contains — only by whether the digging happened.
+
+## Proposing additions
+
+1. Write the principle into the relevant existing category — or argue for a new category inside the proposal itself, marked tidak yakin rather than assumed.
+2. Mark the file `status: draft` and `verification: perlu`. Every new file starts honest.
+3. Follow the [principle format](/docs/concepts/principle-format).
+4. Submit for review. `reviewed` is granted only by human approval, and the tables above are updated in the same change.
+
+What is never done: deleting a category because it feels embarrassing to leave it belum digali. The map stays as honest as the archive.

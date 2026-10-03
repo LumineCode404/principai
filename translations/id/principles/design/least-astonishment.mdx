@@ -1,0 +1,123 @@
+---
+title: Principle of Least Astonishment
+id: least-astonishment
+name: Principle of Least Astonishment
+summary: TERJEMAHAN DRAF — Do what the reader expects — match conventions so the obvious reading is the correct one.
+category: design
+type: principle
+severity: advisory
+applies_to:
+  - "api"
+  - "ui"
+  - "libraries"
+  - "developer-experience"
+tags:
+  - "surprise"
+  - "conventions"
+  - "ergonomics"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "193a9ab5f779cdd6"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/design/least-astonishment.mdx -->
+<!-- source_hash EN: 193a9ab5f779cdd6 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Make the obvious reading the correct one: names, defaults, and API shapes must follow the dominant convention of the platform. State every side effect of an operation in its name, documentation, or response. Before shipping a behavior, ask whether a reader could predict it from the signature alone. If it would surprise you as a caller, change it or document it loudly.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+A component is well designed when its behavior matches what a competent reader predicts from its name, signature, and surrounding conventions. Surprise is a design bug even when the behavior is technically correct — the reader acts on their wrong assumption, and the damage lands in data. Conventions do most of the work: following the platform's defaults is usually more important than being locally clever.
+
+## When to use
+
+- Naming anything public: endpoints, functions, flags, config keys.
+- Choosing defaults — the default should be the safest and most common case, not the most flexible one.
+- API and library surface design, including error and empty responses.
+- UX flows and CLI interactions where muscle memory carries users.
+
+## When NOT to use
+
+- When the convention itself is dangerous — surprising-but-safe beats familiar-and-destructive (see Secure by Default).
+- Legacy surfaces with many existing callers — changing surprising-but-shipped behavior breaks the world (see Hyrum's Law); version the change instead.
+- Domains with no established convention — your choice becomes the convention; make it once, centrally, and document it prominently.
+
+## Anti-pattern
+
+- A delete endpoint that also deletes dependent records without saying so.
+- A getter that writes; a list method that paginates differently from every other list in the codebase.
+- Flags whose names promise less than they do — a purgeCache that also drops connections.
+- Errors swallowed and replaced with empty success responses.
+- Timezone-naive or locale-naive defaults in a global product.
+
+## Code example
+
+Wrong — "helpful" magic:
+
+```ts
+// DELETE /users/:id — also silently wipes the user's invoices and tokens
+async function deleteUser(id: string) {
+  await db.users.delete(id);
+  await db.invoices.deleteMany({ userId: id }); // surprise: undocumented cascade
+  await db.tokens.deleteMany({ userId: id });   // surprise: sessions die silently
+}
+```
+
+Right — the obvious reading is the correct reading:
+
+```ts
+// Deleting a user deletes a user. Nothing else.
+async function deleteUser(id: string) {
+  await db.users.delete(id);
+}
+
+// Purging data is a separate, named, explicit operation
+async function purgeUserData(id: string) {
+  await db.users.delete(id);
+  const invoices = await db.invoices.deleteMany({ userId: id });
+  return { deletedInvoices: invoices.count }; // the response admits what happened
+}
+```
+
+## Technical enforcement
+
+<Enforcement>
+Surprise is testable if you make it so:
+
+- **Contract tests**: automated tests assert that each endpoint performs only its documented effects; an undocumented cascade fails CI.
+- **API review checklist**: "list every effect this operation has — is each one in the name, the docs, or the response?" No unlisted effects ship.
+- **Schema enforcement**: OpenAPI (or equivalent) schemas are validated against actual responses in CI, so surprises surface before consumers do.
+- **Convention linting**: naming rules for flags, config keys, and endpoints; divergence from the project's established patterns requires an ADR.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+An internal platform exposed a delete endpoint for user records. To "save callers a round trip," it also deleted the user's dependent records — invoices, API keys, audit entries — without documenting or reporting the cascade. Callers, patterned on every other delete endpoint in the company (which returned a conflict when dependencies existed), assumed a single-row delete. A routine offboarding script removed hundreds of dependent records in one afternoon; because the cascade was silent, the loss was found days later by reconciliation, not by the operator. The fix was not just documentation: the cascade became a separate, explicit purge endpoint whose response reports everything it removed — reducing, not preventing, the damage of the next wrong assumption. (ilustratif — composite, not a named incident; verification: perlu)
+</RealCase>
+
+## Tension and trade-off
+
+- **Least Astonishment vs Postel's Robustness**: silently accepting and repairing malformed input is also a surprise — the caller never learns their request was wrong. Prefer explicit contracts with loud, actionable errors over quiet forgiveness.
+- **Least Astonishment vs Hyrum's Law**: whatever you ship becomes load-bearing; surprising behavior that has already shipped cannot simply be fixed without breaking its dependents. Version the correction (see Versioned Contracts).
+- **Convenience vs predictability**: convention-over-configuration and smart defaults save insiders time and astonish newcomers. Budget the magic, and make the hidden defaults discoverable.
+
+## Related principles
+
+- [Postel's Robustness](/docs/principles/api/postel-robustness) — the perennial counterweight: leniency in what you accept.
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — shipped behavior, wanted or not, becomes the contract.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — effects documented and enforced are effects that cannot surprise.
+- [Soft Delete](/docs/principles/data/soft-delete) — reversible deletion reduces the cost of a wrong assumption.
+- [Fail Visible](/docs/principles/reliability/fail-visible) — when surprise happens anyway, it must be seen.
+
+## References
+
+- Eric Raymond, *The Art of Unix Programming*, Rule of Least Surprise — design interfaces that match the culture's expectations. http://www.catb.org/~esr/writings/taoup/ (verification: perlu).

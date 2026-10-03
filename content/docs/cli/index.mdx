@@ -1,0 +1,60 @@
+---
+title: CLI
+description: The principai command line tool — copying curated subsets of the library into projects, and keeping the library honest.
+---
+
+`principai` is the command line tool that ships with the library. It is Bun/Node-based, has zero heavy dependencies, and operates on the principle library — this repository's `content/docs/principles` tree, or any compatible checkout.
+
+The same tool powers everything an agent or a maintainer does with the library day to day: finding a principle, packaging one for a project, and checking that the archive itself still holds together.
+
+## What it is for
+
+The CLI exists for two jobs:
+
+1. **Copying curated subsets into target projects.** `copy`, `copy --profile`, and `all` write a `.principles/` directory — with an INDEX and an AGENTS.md snippet — into whatever project is about to get an agent.
+2. **Keeping the library honest.** `check`, `status`, and `sync` validate the archive itself: frontmatter, section order, cross-links, translation stubs, and per-category digging status — with no counts promised and no completeness claims.
+
+## Commands
+
+<Cards>
+  <Card title="list, show, search" description="Browse the archive — list by category and filter, display one principle, search names, aliases, tags, summaries, and bodies." href="/docs/cli/reference" />
+  <Card title="copy, all, profile" description="Copy categories, single principles, or whole profiles into a project's .principles/ directory, INDEX and AGENTS.md included." href="/docs/cli/reference" />
+  <Card title="add" description="Scaffold a new principle file from the template." href="/docs/cli/reference" />
+  <Card title="check, status, sync" description="Validate the library, report digging status per category, and keep translation stubs current." href="/docs/cli/reference" />
+</Cards>
+
+Full usage, flags, and examples for every command live in the [CLI reference](/docs/cli/reference).
+
+## Typical workflow
+
+<Steps>
+  <Step title="Find what you need">
+    `principai list` and `principai search` answer what exists — by category, tag, severity, or a search term across names, aliases, tags, summaries, and bodies.
+  </Step>
+  <Step title="Inspect a profile">
+    `principai profile show destructive-ops` prints the context, the principle roles, and the priority order before anything is copied.
+  </Step>
+  <Step title="Copy into the target project">
+    `principai copy --profile destructive-ops --to ~/work/crm` writes `.principles/` there — principles, INDEX, and the AGENTS.md snippet.
+  </Step>
+  <Step title="Verify what landed">
+    Open the generated `.principles/INDEX.md` and confirm the must-follow set matches the work the project is about to get.
+  </Step>
+</Steps>
+
+## Requirements
+
+- **Bun 1.x** (recommended) or **Node 18 or newer**
+- A checkout of this library — or a compatible one — to operate on
+
+Run commands from the repository root:
+
+```bash
+bun run principai list
+```
+
+Every command also answers `--help`. The tooling is intentionally small: no plugins, no telemetry, no background services — a checkout of the library on one side, a `.principles/` directory on the other, and nothing in between that needs babysitting.
+
+<Callout type="info" title="No network by default">
+  None of the browse or copy commands touch the network. The single exception is `check --links`, which verifies reference URLs — and only when explicitly asked, because it is slow.
+</Callout>

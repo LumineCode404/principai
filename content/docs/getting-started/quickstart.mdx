@@ -1,0 +1,64 @@
+---
+title: Quickstart
+description: The five-minute path from zero to an agent working under the destructive-ops profile — copy, paste, and watch it read the INDEX first.
+---
+
+The fastest honest test of this library: put it in front of an agent and watch what changes. Five minutes.
+
+<Steps>
+
+### Pick a profile
+
+For scripts, migrations, and cleanup — any work that deletes, drops, or rewrites state — the profile is [destructive-ops](/docs/profiles/destructive-ops). It exists for exactly the chain this library was built around. Other kinds of work fit other profiles; see [Profiles](/docs/concepts/profiles).
+
+### Copy it into your project
+
+From the principai checkout, with your project as the target:
+
+```bash
+bun run principai copy --profile destructive-ops --to ~/code/my-project
+```
+
+Output:
+
+```text
+  ✓ 13 principles → ~/code/my-project/.principles/
+  ✓ INDEX.md written (name · summary · severity)
+  ✓ AGENTS.md snippet written
+  ⚠ critical principles present: agent must ask before destructive ops
+```
+
+That last line is a feature. The CLI tells you, in so many words, that the agent it is about to advise will refuse to destroy things without asking first.
+
+### Inspect what was created
+
+```text
+~/code/my-project/.principles/
+  INDEX.md
+  AGENTS.snippet.md
+  least-authority.mdx
+  fail-safe-defaults.mdx
+  idempotency.mdx
+  ...
+```
+
+- **INDEX.md** — name, summary, and severity of every copied principle. The only file an agent reads by default.
+- **AGENTS.snippet.md** — a ready-to-paste block for your project's agent instructions.
+- **Principle files** — the full archive entries, opened on demand.
+
+### Paste the snippet
+
+Append the snippet to your project's `AGENTS.md`, `CLAUDE.md`, or whatever instruction file your agent reads. The exact block and the protocol behind it: [Agent Integration](/docs/getting-started/agent-integration).
+
+### Start working — and watch
+
+Ask the agent for what you would normally ask for: a cleanup script, a migration, a bulk delete. Then watch the order of operations:
+
+1. It reads `.principles/INDEX.md` first — before any principle file.
+2. It loads the must-follow set, and any relevant criticals, in full.
+3. It opens other principles only when the task touches them.
+4. Before anything destructive — it stops, states what it is about to do, and asks.
+
+If step 4 never fires on a genuinely destructive request, something is wrong: check that the snippet was pasted, check that the agent read the INDEX, and compare against the protocol's exact terms in [Agent Integration](/docs/getting-started/agent-integration).
+
+</Steps>

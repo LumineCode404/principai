@@ -1,0 +1,116 @@
+---
+title: Expand-Contract
+id: expand-contract
+name: Expand-Contract
+summary: TERJEMAHAN DRAF — Change schemas in compatible phases — add the new, migrate the data, then remove the old only when nothing reads it.
+category: data
+type: practice
+severity: important
+applies_to:
+  - "database"
+  - "api"
+  - "migration"
+tags:
+  - "migration"
+  - "schema"
+  - "compatibility"
+aliases: []
+sources: []
+status: draft
+verification: perlu
+source_hash: "8a1be40ed581c6c7"
+translation_status: draft
+---
+
+<!-- Draf terjemahan dari EN: content/docs/principles/data/expand-contract.mdx -->
+<!-- source_hash EN: 8a1be40ed581c6c7 -->
+<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+
+<AIInstruction>
+Never deliver a schema or interface change in one breaking step. Add the new structure alongside the old, migrate data and readers gradually, and remove the old path only when usage telemetry proves nothing reads it — every intermediate state must survive with mixed versions running. If a migration would drop, rename, or repurpose something that other code may still read, stop and verify the consumers first.
+</AIInstruction>
+
+<Severity level="important" />
+
+## Definition
+
+Expand-contract (parallel change) splits a breaking change into three compatible phases: expand (add the new structure without removing the old), migrate (backfill, dual-write, and switch readers over), and contract (remove the old only when usage telemetry shows zero readers). Every intermediate deploy must be safe to leave running for hours, because rollouts are gradual and rollback goes to old code, not forward.
+
+## When to use
+
+- Schema changes on tables with live traffic: add column, backfill, switch, then drop.
+- Renaming or repurposing API fields — old and new fields served side by side across contract versions.
+- Storage and message-format migrations with in-flight producers and consumers.
+- Any system where deploy is not atomic and multiple app versions run simultaneously — which is the normal case.
+
+## When NOT to use
+
+- Pre-launch systems with no consumers and no data — migrate in one step and keep history trivial.
+- Tables small enough to rebuild atomically inside one maintenance-window transaction with downtime already scheduled.
+- When the old path is a security liability (leaking a secret, exposing private data) — plan a fast, explicit removal with compensations instead of a slow migration.
+
+## Anti-pattern
+
+- One migration, one deploy: DROP the old column and ADD the new one in the same release the app starts using it.
+- Adding a NOT NULL column with a default to a hot table in the same deploy that writes it.
+- Dual-write with no reconciliation job — the two paths drift silently and nobody notices.
+- "Nothing reads the old field" verified by asking the loudest team, not by checking traffic.
+
+## Code example
+
+Wrong — one step, atomic in the worst sense:
+
+```sql
+-- Old code (still running during rollout) SELECTs legacy_total everywhere
+ALTER TABLE orders DROP COLUMN legacy_total, ADD COLUMN total_cents BIGINT;
+```
+
+Right — three compatible phases:
+
+```sql
+-- Phase 1 (expand): additive only, nullable, no exclusive lock drama
+ALTER TABLE orders ADD COLUMN total_cents BIGINT;
+
+-- Phase 2 (migrate): backfill in batches; app dual-writes both and reconciles
+UPDATE orders SET total_cents = legacy_total * 100
+ WHERE total_cents IS NULL AND id % 64 = 0;
+
+-- Phase 3 (contract): only after usage logs show zero reads of legacy_total
+ALTER TABLE orders DROP COLUMN legacy_total;
+```
+
+## Technical enforcement
+
+<Enforcement>
+The phases are enforced by tooling that refuses to let humans compress them:
+
+- **Migration linters in CI**: destructive DDL (DROP COLUMN, RENAME, type narrowing) cannot ship in the same release as the additive change; the split is mandatory.
+- **Lock guards**: migrations run under lock and statement timeouts; a migration that would take a long exclusive lock on a hot table is rejected.
+- **Usage telemetry before contract**: read counts per field and per consumer on dashboards; the drop is only allowed after zero for a full rollout cycle.
+- **Reconciliation job**: while dual-writing, a scheduled diff between old and new paths alerts on drift — drift is a bug, not a tuning knob.
+- **Decoupled deploy order**: migrations and app releases are separate pipelines with separate rollback plans.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+(ilustratif) A team ships the "cleanup" half of a rename migration on a Friday afternoon. Some app servers run the previous release for another hour; each one hits its first SELECT of the dropped column and fails every request it touches, and the rollback requires re-adding the column and re-running the backfill. The postmortem's first line: "we thought the deploy had finished." (verification: perlu — real drop-column incidents exist in public write-ups; belum digali — verify specific sources before citing any of them.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Expand-Contract vs. speed**: three phases cost planning and coordination; a one-step migration is only acceptable when every reader is under your control and the table is cold.
+- **Expand-Contract vs. clarity**: dual paths double schema and code surface; the contract phase is a commitment, not an option — schedule it, or the expansion becomes permanent debt.
+- **Weigh against YAGNI / KISS**: for changes that are trivially backward compatible (additive, nullable, unused elsewhere), a straight migration is the simpler correct choice.
+
+## Related principles
+
+- [Hyrum's Law](/docs/principles/api/hyrum-law) — someone, somewhere, reads the old field; assume it and verify with telemetry.
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — the API-facing form of the same phase discipline.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — dual-write without reconciliation drifts silently in the direction of corruption.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — a bad migration phase should cost one batch, not the table.
+
+## References
+
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — schema evolution and encoding compatibility (verification: perlu — check the exact chapters before citing page numbers).
+- Google SRE Workbook — https://sre.google/workbook/ (making production changes safely; verify chapter pointers).

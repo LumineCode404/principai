@@ -1,0 +1,72 @@
+---
+title: "Profile: Database Service"
+description: Must-follow and consider principles for services that own data — the ones holding the only copy of something someone cares about.
+must_follow:
+  - "data/tested-backups"
+  - "data/expand-contract"
+  - "reliability/idempotency"
+  - "security/input-validation"
+  - "reliability/fail-visible"
+consider:
+  - "data/soft-delete"
+  - "data/append-only-logs"
+  - "reliability/observability-first"
+  - "security/least-authority"
+  - "reliability/blast-radius"
+---
+
+A database service is distinguished by one property: it holds the only copy of something someone cares about. Everything in this profile follows from that.
+
+## Context
+
+Use this profile for services that own data:
+
+- a service that owns a primary datastore — PostgreSQL, MySQL, a managed database
+- queues with durable state, event stores, search indexes that cannot be rebuilt from elsewhere
+- internal platforms whose clients treat them as the system of record
+
+If other services read from you and believe what they read, this is the profile. Scripts that operate destructively on a database from outside should additionally load the [Destructive Operations](/docs/profiles/destructive-ops) profile.
+
+<Callout type="info" title="What this profile is not">
+  It is not for stateless facades, caches, or read replicas — components whose data can be rebuilt from the owner's copy. Their failure is an availability problem, not a data-loss problem, and they are served by the reliability principles alone.
+</Callout>
+
+## Must-follow
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Tested Backups | The service is the thing backups exist for; a scheduled restore drill is a feature of a data-owning service, not ops overhead. | [Tested Backups](/docs/principles/data/tested-backups) |
+| Expand-Contract | Schema changes ship as additive steps, so every deploy order is safe and a rollback is a deploy — not surgery. | [Expand-Contract](/docs/principles/data/expand-contract) |
+| Idempotency | Consumers retry, jobs re-run, deploys happen twice; writes that survive repetition are the ones that keep data trustworthy. | [Idempotency](/docs/principles/reliability/idempotency) |
+| Input Validation | The service is the boundary for every client's data; invalid data that gets in never fully leaves. | [Input Validation](/docs/principles/security/input-validation) |
+| Fail-Visible | Silent partial writes corrupt quietly for weeks; a data owner fails loudly and rolls back. | [Fail-Visible](/docs/principles/reliability/fail-visible) |
+
+All five must-follow principles are critical-severity, and all five are ones a data-owning service violates quietly — the damage surfaces in a query weeks later, not in a deploy log. That is why they load in full rather than on demand.
+
+## Consider
+
+| Principle | Why | Link |
+| --- | --- | --- |
+| Soft Delete | Rows your clients may want back — reversible deletion at the cost of storage. | [Soft Delete](/docs/principles/data/soft-delete) |
+| Append-Only Logs | Replayable history: rebuild derived state, audit changes, recover from mistakes. | [Append-Only Logs](/docs/principles/data/append-only-logs) |
+| Observability-First | Data quality is an operational signal — measure it like latency. | [Observability-First](/docs/principles/reliability/observability-first) |
+| Least Authority | For the service's own DB users: an app role, a migration role, and no superuser at runtime. | [Least Authority](/docs/principles/security/least-authority) |
+| Blast Radius | For migrations: cap the rows touched per batch and stage the rollout. | [Blast Radius](/docs/principles/reliability/blast-radius) |
+
+## Priority when they conflict
+
+1. **Backups before features.** No new write path ships until the restore path for it is tested.
+2. **Expand-Contract means no breaking deploy ordering.** Add first, remove only after nothing reads the old shape — any order of deploys must be safe, because you do not control the consumer's schedule.
+3. **Idempotent migrations over clever one-shots.** A migration that can be re-run beats a brilliant one that cannot; one-shot cleverness is how schemas drift.
+
+<Callout type="info" title="Why Fail-Visible outranks graceful behavior here">
+  A service that owns data degrades honestly before it degrades silently: rejecting a write with a clear error is recoverable, accepting it into a half-broken state is not. This is the deliberate trade against [Graceful Degradation](/docs/principles/reliability/graceful-degradation), which stays in consider.
+</Callout>
+
+## Copy this profile
+
+```bash
+bun run principai copy --profile database-service --to .
+```
+
+This writes the selected principles into `.principles/` at the target path, together with the INDEX and the AGENTS.md snippet. Run it from a checkout of the library; point `--to` at the service's repository.

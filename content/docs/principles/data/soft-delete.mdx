@@ -1,0 +1,111 @@
+---
+title: Soft Delete
+id: soft-delete
+name: Soft Delete
+summary: Delete in two phases — mark now, purge after the recovery window — so one bad click is reversible.
+category: data
+type: practice
+severity: advisory
+applies_to:
+  - database
+  - services
+  - destructive-ops
+tags:
+  - deletion
+  - recovery
+  - audit
+aliases:
+  - Mark Deleted
+  - Purge Later
+sources:
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+status: draft
+verification: perlu
+---
+
+<AIInstruction>
+Never issue a physical delete for business data in one step. Mark rows deleted with an audit trail (who, when, why), filter them out of queries by default, and purge for real only after a defined recovery window — with purge jobs that are themselves observable. When asked to delete something, confirm which of the two phases is actually wanted, and route irreversible purges through a human.
+</AIInstruction>
+
+<Severity level="advisory" />
+
+## Definition
+
+Soft delete splits deletion into two phases: an immediate, reversible logical delete (set a deleted_at timestamp, hide from queries) and a delayed, irreversible purge after a retention window. The recovery window converts one bad click, one buggy script, or one confused customer moment into an undo instead of an incident. Deletion stops being a single irreversible verb; it becomes a state transition with an audit trail, followed much later by a real removal.
+
+## When to use
+
+- User-generated content: accounts, posts, messages, files — anything a user can "delete" from a UI.
+- Admin and moderation actions, where honest mistakes and abuse investigations overlap.
+- Reference data with foreign-key dependents — hard-delete cascades are where schemas go to die.
+- Anywhere the business needs an audit of deletions: who deleted what, when, and why.
+
+## When NOT to use
+
+- When law or contract defines a hard deletion deadline — the recovery window is capped by that deadline, not by comfort; right-to-erasure requests are the classic case.
+- Security-sensitive values — a soft-deleted API key is still a credential; revoke and destroy immediately.
+- High-volume ephemeral rows (sessions, cache entries) where two-phase machinery costs more than the data; use TTL expiry.
+- Data you should never have kept: soft-deleting PII you had no right to retain is retention, not deletion.
+
+## Anti-pattern
+
+- The "Delete account" button wired directly to a hard DELETE with cascades.
+- Soft delete without default query filtering — deleted rows resurface in every report until someone notices.
+- Unique indexes that ignore the deleted state, so a deleted row blocks re-registration; use a partial unique index instead.
+- Purge jobs nobody owns; the "temporary" deleted_at column quietly becomes permanent storage and a compliance liability.
+
+## Code example
+
+Wrong — irreversible, instant:
+
+```python
+def delete_account(user):
+    db.run("DELETE FROM users WHERE id = ?", user.id)        # gone, instantly, for real
+    db.run("DELETE FROM orders WHERE user_id = ?", user.id)  # cascade by hand, pray
+```
+
+Right — mark with audit, purge later:
+
+```python
+def delete_account(user, actor):
+    # Phase 1: reversible mark + audit, applied instantly
+    db.run("UPDATE users SET deleted_at = now(), deleted_by = ? WHERE id = ?",
+           actor.id, user.id)
+# Phase 2 (scheduled, after the 30-day window): purge in batches, with metrics per run
+```
+
+## Technical enforcement
+
+<Enforcement>
+The two phases are enforced by the database and the query layer, not by memory:
+
+- **Query-layer default filter**: the ORM excludes deleted rows unless a query explicitly opts in; soft-deleted data is invisible to normal code paths.
+- **Permission split**: application roles hold no hard-DELETE on soft-delete tables; only the purge job's dedicated role does, and only for rows past the window (see Least Authority).
+- **Partial unique indexes**: uniqueness applies among live rows only, so deletion never blocks re-registration.
+- **Purge as a first-class job**: batched, dry-runnable, metric-emitting, with alerts — deletion of deletions is still deletion (see Blast Radius).
+- **Audit fields mandatory**: deleted_by, deleted_at, and reason are required columns; a deletion without provenance is a bug.
+</Enforcement>
+
+## Real-world case
+
+<RealCase>
+(ilustratif) A customer, mid-way through a frustrating support ticket, deletes their account in another tab. The request is legitimate, the confirmation dialog is clicked through, and the workspace with all its files is hard-deleted before the agent reading the ticket ever sees it. With a 30-day soft-delete window, the account is restored in minutes and the support conversation continues; without one, the answer is "have you checked whether your data was important." (verification: perlu — the composite story is constructed; trash/undo windows are a common real product pattern, but this specific sequence is illustrative, belum digali.)
+</RealCase>
+
+## Tension and trade-off
+
+- **Soft Delete vs. compliance**: retention windows must shrink to legal deadlines; when a regulation says gone, gone wins — track the tightest applicable deadline per data class.
+- **Soft Delete vs. storage and liability**: deleted data that is never purged is a liability wearing a feature's clothes; the purge is part of the principle, not an optional extra.
+- **Weigh against Blast Radius / user expectation**: a visible trash can and an explicit undo are honest UX; a hidden forever-deleted_at flag surprises users and engineers alike.
+
+## Related principles
+
+- [Blast Radius](/docs/principles/reliability/blast-radius) — the recovery window is a blast-radius cap in the time dimension.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — deletion as an event in history rather than an edit of it.
+- [Tested Backups](/docs/principles/data/tested-backups) — the last resort when the window has already closed.
+- [Least Authority](/docs/principles/security/least-authority) — only the purge role may destroy, and only past the window.
+
+## References
+
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — log-structured storage and retention (verification: perlu — confirm framing before quoting).
+- Privacy erasure regimes (e.g. the EU GDPR right to erasure) cap how long "deleted" may linger — check the exact obligations with counsel before writing retention policy (verification: perlu).

@@ -1,0 +1,161 @@
+---
+title: CLI Reference
+description: Every principai command with usage, flags, and examples — list, show, search, add, copy, profile, check, sync, status.
+---
+
+Every command below runs from a checkout of the library. With Bun:
+
+```bash
+bun run principai <command> [options]
+```
+
+The same commands run on Node 18 or newer through the package scripts. No command touches the network except `check --links`, and only when explicitly asked.
+
+## principai list
+
+```bash
+principai list [category] [--tag <tag>] [--type <type>] [--severity <severity>]
+```
+
+Lists principles, optionally filtered to one category. `--tag` filters by tag, `--type` by frontmatter type (principle, law, heuristic, practice), `--severity` by severity level (critical, important, advisory).
+
+```bash
+$ bun run principai list --severity critical
+security    least-authority       Least Authority
+security    fail-safe-defaults    Fail-Safe Defaults
+reliability idempotency           Idempotency
+...
+```
+
+## principai show
+
+```bash
+principai show <name>
+```
+
+Displays one principle in full. Names resolve through aliases: asking for a principle by an alternative name finds the file, because aliases are searched when the exact id does not match.
+
+```bash
+$ bun run principai show least-privilege
+```
+
+## principai search
+
+```bash
+principai search <term>
+```
+
+Searches names, aliases, tags, summaries, and bodies across the archive, and returns the matching principles with the field that matched.
+
+```bash
+$ bun run principai search backup
+```
+
+## principai add
+
+```bash
+principai add <name> [path]
+```
+
+Scaffolds a new principle file from the template — frontmatter, the fixed section order, and placeholder content. When a path is given, it also creates the paired stub in the ID tree, so the new principle is trackable by `sync` from the start.
+
+```bash
+$ bun run principai add secrets-rotation content/docs/principles/security/
+```
+
+## principai copy
+
+```bash
+principai copy <category|name...> --to <path> [--with-related]
+```
+
+Copies a subset of the library into a target project's `.principles/` directory. Arguments are category names, principle names, or a mix. `--with-related` follows the Related principles links of everything being copied and includes those principles too.
+
+```bash
+$ bun run principai copy security idempotency --to ~/work/crm --with-related
+```
+
+## principai copy --profile
+
+```bash
+principai copy --profile <name> --to <path>
+```
+
+Copies per profile: every must-follow and consider principle, with the roles and the priority order recorded in the INDEX. See [Profiles](/docs/profiles) for the profiles that exist.
+
+```bash
+$ bun run principai copy --profile destructive-ops --to ~/work/crm
+```
+
+## principai all
+
+```bash
+principai all --to <path>
+```
+
+Copies the entire principles tree. Use it when the target project wants the archive, not the curation — the INDEX will then list everything, so the standing load on the agent is larger.
+
+```bash
+$ bun run principai all --to ~/work/library-mirror
+```
+
+## principai profile
+
+```bash
+principai profile list
+principai profile show <name>
+```
+
+Inspects profiles: `list` shows the profiles defined in the checkout; `show` prints one profile's context, principle roles, and priority order.
+
+```bash
+$ bun run principai profile show destructive-ops
+```
+
+## principai check
+
+```bash
+principai check [--against <path>] [--links]
+```
+
+Validates the library: frontmatter against the schema, section order, cross-links between principles, dangling aliases, and profile references. `--against` adds two-repo structural parity against a second checkout — useful after translation work. `--links` additionally verifies reference URLs over the network; it is opt-in because it is slow.
+
+```bash
+$ bun run principai check --against ../principai-id
+```
+
+## principai sync
+
+```bash
+principai sync
+```
+
+Generates and updates the ID translation stubs from EN changes: new principles get stubs, changed principles are marked stale via `source_hash`, and untouched ones are left alone.
+
+```bash
+$ bun run principai sync
+```
+
+## principai status
+
+```bash
+principai status
+```
+
+Prints a summary of categories with their digging status — *sudah digali*, *belum digali*, *tidak yakin*. No counts are promised and no completeness is claimed; the three status words are the whole vocabulary.
+
+```bash
+$ bun run principai status
+security     sudah digali
+reliability  sudah digali
+...
+```
+
+## What every copy writes
+
+Every copy command — `copy`, `copy --profile`, and `all` — also writes two files at the target:
+
+- `.principles/INDEX.md` — the always-loaded list of what was copied, with roles, severity, and one-line summaries.
+- An `AGENTS.md` snippet — instructing agents to read the INDEX, obey must-follow principles, open the rest on demand, and halt for human approval before violating a critical principle or doing anything destructive.
+
+That snippet is the contract that turns a pile of files into a loaded library.

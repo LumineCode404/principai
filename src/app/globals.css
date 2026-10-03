@@ -205,3 +205,13 @@ span[style*="--shiki-dark:#808080"] {
 [data-theme-switch] {
   display: none;
 }
+
+/*
+ * Sidebar active link: fd-primary (#0282d8) over the active tint
+ * (fd-primary/10 on #070707) computes to a marginal ~4.6:1 — axe's
+ * oklab compositing lands it under 4.5:1 on some runs. Use the lighter
+ * brand shade (already used for hover/interactive text) for a stable pass.
+ */
+aside a[data-active="true"] {
+  color: #5cb3f2;
+}

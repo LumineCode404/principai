@@ -2,7 +2,7 @@
 title: Graceful Degradation
 id: graceful-degradation
 name: Graceful Degradation
-summary: TERJEMAHAN DRAF — When a component degrades, shed the optional and keep the essential — partial service beats total outage.
+summary: Saat sebuah komponen mengalami degradation, buang yang opsional dan pertahankan yang esensial — layanan parsial lebih baik daripada outage total.
 category: reliability
 type: principle
 severity: important
@@ -14,104 +14,106 @@ tags:
   - "partial-failure"
   - "load-shedding"
   - "resilience"
-aliases: []
-sources: []
+aliases:
+  - "Fail Gracefully"
+sources:
+  - 'Google SRE Workbook, https://sre.google/workbook/'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "aca446228531fc88"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/reliability/graceful-degradation.mdx */}
-{/* source_hash EN: aca446228531fc88 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/reliability/graceful-degradation.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Classify every dependency as essential or optional before an outage classifies it for you. Give each outbound call a timeout, wrap it in a circuit breaker, and design a concrete fallback for every optional feature. Under overload, shed optional work first — never let a slow dependency occupy your worker threads.
+Klasifikasikan setiap dependency sebagai esensial atau opsional sebelum sebuah outage mengklasifikasikannya dengan caranya sendiri. Beri setiap outbound call sebuah timeout, bungkus dengan circuit breaker, dan rancang fallback konkret untuk setiap fitur opsional. Saat overload, buang pekerjaan opsional lebih dulu — jangan pernah biarkan dependency yang lambat menduduki worker thread.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-A system degrades gracefully when the failure or overload of a component reduces capability instead of availability: checkout still works while the recommendation carousel disappears. This requires classifying dependencies as essential or optional before the incident, and writing down the fallback for each optional one. Partial failure is the steady state of distributed systems; the real choice is between planned partial service and unplanned total outage.
+Sebuah sistem mengalami degradation secara graceful ketika kegagalan atau overload pada satu komponen mengurangi kapabilitas alih-alih ketersediaan: checkout tetap berfungsi sementara carousel rekomendasi lenyap. Ini menuntut klasifikasi dependency menjadi esensial atau opsional sebelum incident, dan pencatatan fallback untuk setiap yang opsional. Partial failure adalah kondisi mapan sistem terdistribusi; pilihan sebenarnya adalah antara layanan parsial yang direncanakan dan outage total yang tak direncanakan.
 
-## When to use
+## Kapan pakai
 
-- User-facing pages and APIs assembled from many services: return the essential response, drop the slow enrichment.
-- High-fanout request paths where one slow dependency can starve the whole worker pool.
-- Traffic spikes and dependency brownouts: shed load explicitly before the process dies.
-- ML systems: serve the last good model when fresh training or feature pipelines lag.
+- Halaman dan API yang menghadap user, dirakit dari banyak service: kembalikan respons esensial, jatuhkan enrichment yang lambat.
+- Request path ber-fanout tinggi tempat satu dependency yang lambat bisa membuat seluruh worker pool kelaparan.
+- Lonjakan trafik dan brownout pada dependency: lakukan load shedding secara eksplisit sebelum prosesnya mati.
+- Sistem ML: sajikan model terakhir yang baik ketika training baru atau feature pipeline tertinggal.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Correctness and safety paths — auth, payments, security checks — where "degraded" means fail-open; that is fail-unsafe, not graceful (see Fail-Safe Defaults).
-- Products whose essential path IS the optional component (a translation service without translation is an outage, not a degradation).
-- Write paths where degraded means silently persisting incomplete data — that trades an outage for corruption (see Fail-Visible).
+- Path kebenaran dan keselamatan — auth, pembayaran, security check — tempat "degraded" berarti fail-open; itu fail-unsafe, bukan graceful (lihat Fail-Safe Defaults).
+- Produk yang path esensialnya JUSTRU komponen opsional tersebut (layanan penerjemahan tanpa penerjemahan adalah outage, bukan degradation).
+- Path tulis tempat degraded berarti diam-diam menyimpan data yang tidak lengkap — itu menukar outage dengan korupsi (lihat Fail-Visible).
 
 ## Anti-pattern
 
-- Page render blocks on a recommendations widget; one slow recs service turns every page into an error.
-- Outbound calls with no timeout; a slow dependency gradually owns every worker thread.
-- All-or-nothing aggregation: either every section of the response assembles or nothing is returned.
-- Retrying harder into the failing dependency instead of shedding it (see Retry Budget).
-- Serving degraded content with no signal at all to users or dashboards — nobody can tell healthy from degraded.
+- Render halaman terblokir oleh widget rekomendasi; satu service recs yang lambat mengubah setiap halaman menjadi error.
+- Outbound call tanpa timeout; dependency yang lambat perlahan-lahan memiliki setiap worker thread.
+- Agregasi all-or-nothing: seluruh bagian respons harus terakit, atau tidak ada apa pun yang dikembalikan.
+- Me-retry lebih keras ke dependency yang gagal, alih-alih melepaskannya (lihat Retry Budget).
+- Menyajikan konten degraded tanpa sinyal apa pun ke user atau dashboard — tidak ada yang bisa membedakan sehat dari degraded.
 
-## Code example
+## Contoh kode
 
-Wrong — one optional widget holds the whole page:
+Salah — satu widget opsional menahan seluruh halaman:
 
 ```python
 def render_page(user):
-    recs = recs_client.get(user.id)      # no timeout, no fallback, essential path blocked
+    recs = recs_client.get(user.id)      # tanpa timeout, tanpa fallback, path esensial terblokir
     cart = cart_client.get(user.id)
     return template(recs=recs, cart=cart)
 ```
 
-Right — shed the optional, keep the essential:
+Benar — buang yang opsional, pertahankan yang esensial:
 
 ```python
 def render_page(user):
-    cart = cart_client.get(user.id, timeout=0.1)          # essential: hard timeout
+    cart = cart_client.get(user.id, timeout=0.1)          # esensial: timeout keras
     try:
-        recs = recs_client.get(user.id, timeout=0.05)     # optional: short budget
+        recs = recs_client.get(user.id, timeout=0.05)     # opsional: budget pendek
     except (Timeout, Unavailable):
-        recs = Recommendations.empty()                   # fallback, not a 500
+        recs = Recommendations.empty()                   # fallback, bukan 500
     return template(recs=recs, cart=cart)
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Degradation is a designed behavior, so it can be enforced as one:
+Degradation adalah perilaku yang sengaja dirancang, sehingga bisa ditegakkan seperti perilaku rancangan lainnya:
 
-- **Timeouts on every outbound call**, sized to the dependency's latency SLO — enforced by HTTP client and service mesh defaults, not per-developer discipline.
-- **Circuit breakers with named fallbacks** wired at the framework level; a dependency without a fallback cannot be declared optional.
-- **Admission control before resource exhaustion**: queue limits and explicit busy responses with retry guidance; the kernel OOM killer is not a load-shedding strategy.
-- **Degradation must be observable**: a "served degraded" metric and a user-visible signal (empty state, stale marker) are part of the feature, not an optional extra.
-- **Game days**: kill a dependency in staging on a schedule; the core path surviving is a pass criterion.
+- **Timeout pada setiap outbound call**, diukur terhadap latency SLO dependency — ditegakkan oleh default HTTP client dan service mesh, bukan oleh disiplin per developer.
+- **Circuit breaker dengan fallback bernama** yang dipasang di level framework; dependency tanpa fallback tidak boleh dideklarasikan opsional.
+- **Admission control sebelum resource habis**: limit queue dan respons busy yang eksplisit disertai panduan retry; OOM killer milik kernel bukanlah strategi load shedding.
+- **Degradation harus observable**: metric "served degraded" dan sinyal yang terlihat user (empty state, penanda stale) adalah bagian dari fitur, bukan tambahan opsional.
+- **Game day**: matikan satu dependency di staging sesuai jadwal; path inti yang tetap hidup adalah kriteria lulus.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On 2019-11-02, Cloudflare deployed a new WAF rule containing a regular expression that catastrophically backtracked on certain inputs. Due to a bug in the software that deploys rules, it went live on edge machines worldwide at once instead of gradually; the regex exhausted CPU on those machines, and requests worldwide returned 502s until engineers used a global kill switch to disable the WAF entirely. Postmortem: https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/ — the inline security layer took the essential path down with it; requests were dropped rather than served degraded. The same postmortem is also a lesson in Blast Radius and staged rollout: the intended gradual deployment would have contained the rule's effect to a testable subset.
+Pada 2019-11-02, Cloudflare men-deploy aturan WAF baru yang berisi regular expression dengan backtracking katastrofik pada input tertentu. Karena bug pada software yang men-deploy aturan, aturan itu live serentak di mesin-mesin edge seluruh dunia alih-alih bertahap; regex itu menghabiskan CPU di mesin-mesin tersebut, dan request di seluruh dunia mengembalikan 502 sampai para engineer memakai kill switch global untuk menonaktifkan WAF sepenuhnya. Postmortem: https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/ — lapisan security inline ikut menjatuhkan path esensial bersamanya; request di-drop, bukannya disajikan secara degraded. Postmortem yang sama juga merupakan pelajaran tentang Blast Radius dan staged rollout: deployment bertahap yang memang direncanakan akan membatasi efek aturan itu pada subset yang bisa diuji.
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Graceful Degradation vs. Fail-Visible**: shedding can mask real errors; every degradation must be visible in metrics and in the response, or you trade an outage for slow, silent rot.
-- **Graceful Degradation vs. Fail-Safe Defaults**: never degrade a security or safety check to preserve response time — degraded security is a breach, not an outage.
-- **Weigh against Least Astonishment**: tell users what is missing or stale; a page that quietly lies about freshness erodes more trust than an honest degraded state.
+- **Graceful Degradation vs. Fail-Visible**: shedding bisa menutupi error yang sesungguhnya; setiap degradation harus terlihat di metric dan di respons, atau outage hanya tertukar dengan pembusukan yang lambat dan senyap.
+- **Graceful Degradation vs. Fail-Safe Defaults**: jangan pernah mendegradasi security check atau safety check demi menjaga response time — security yang degraded adalah pelanggaran (breach), bukan outage.
+- **Ditimbang terhadap Least Astonishment**: sampaikan kepada user apa yang hilang atau stale; halaman yang diam-diam berbohong tentang kebaruan datanya mengikis kepercayaan lebih dalam daripada state degraded yang jujur.
 
-## Related principles
+## Prinsip terkait
 
-- [Retry Budget](/docs/principles/reliability/retry-budget) — stop feeding a failing dependency; shed it instead.
-- [Observability First](/docs/principles/reliability/observability-first) — degradation you cannot see is indistinguishable from failure.
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — fail loudly at the layer that owns the decision, degrade at the layer that owns the user.
-- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — deny by default; essential checks never "degrade" to allow.
+- [Retry Budget](/id/docs/principles/reliability/retry-budget) — berhenti memberi makan dependency yang gagal; lepaskan saja.
+- [Observability First](/id/docs/principles/reliability/observability-first) — degradation yang tak terlihat tidak bisa dibedakan dari kegagalan.
+- [Fail-Visible](/id/docs/principles/reliability/fail-visible) — gagal dengan keras di layer yang memiliki keputusan, degrade di layer yang memiliki user.
+- [Fail-Safe Defaults](/id/docs/principles/security/fail-safe-defaults) — tolak secara default; check esensial tidak pernah "mendegradasi" diri menjadi mengizinkan.
 
-## References
+## Referensi
 
-- Google SRE Workbook — https://sre.google/workbook/ (the "Cascading Failures" chapter covers load shedding and resource exhaustion directly).
+- Google SRE Workbook — https://sre.google/workbook/ (bab "Cascading Failures" membahas load shedding dan resource exhaustion secara langsung).
 - Cloudflare, *Details of the Cloudflare Outage on November 2, 2019* — https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-november-2-2019/

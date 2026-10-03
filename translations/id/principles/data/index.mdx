@@ -1,0 +1,15 @@
+---
+title: "Data"
+description: Backup yang teruji, delete yang reversibel, dan history yang tidak bisa ditulis ulang.
+---
+
+Data mengalah usia kode yang menulisnya. Prinsip di kategori ini memperlakukan data sebagai bagian sistem dengan blast radius terpanjang — perubahan schema merusak urutan deploy, delete bersifat permanen, dan history adalah satu-satunya saksi setelah sebuah incident.
+
+<Cards>
+  <Card title="Tested Backups" description="Backup tanpa restore yang teruji hanyalah harapan, bukan kontrol — restore drill terjadwal membuktikannya bekerja." href="/id/docs/principles/data/tested-backups" />
+  <Card title="Expand-Contract" description="Ubah schema dalam fase yang kompatibel — tambahkan yang baru, migrasikan datanya, lalu hapus yang lama hanya ketika tak ada yang membacanya." href="/id/docs/principles/data/expand-contract" />
+  <Card title="Soft Delete" description="Hapus dalam dua fase — tandai sekarang, purge setelah recovery window — agar satu klik yang keliru bisa dibatalkan." href="/id/docs/principles/data/soft-delete" />
+  <Card title="Append-Only Logs" description="Catat fakta sebagai event yang di-append, tidak pernah history yang diedit — append-only log adalah bukti dan undo sekaligus." href="/id/docs/principles/data/append-only-logs" />
+</Cards>
+
+[database-service profile](/docs/profiles/database-service) adalah kurasi untuk service yang memiliki databasenya sendiri — tested backups dan expand-contract memimpin set must-follow-nya.

@@ -2,7 +2,7 @@
 title: Secure by Default
 id: secure-by-default
 name: Secure by Default
-summary: TERJEMAHAN DRAF — Ship the safe configuration as the default — security must be what you get, not what you remember to enable.
+summary: Ship konfigurasi aman sebagai default — security harus menjadi apa yang langsung didapat, bukan apa yang harus diingat untuk diaktifkan.
 category: security
 type: principle
 severity: important
@@ -15,109 +15,113 @@ tags:
   - "defaults"
   - "hardening"
   - "configuration"
-aliases: []
-sources: []
+aliases:
+  - "Safe by Default"
+  - "Secure Defaults"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "9b31331a409239dd"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/security/secure-by-default.mdx */}
-{/* source_hash EN: 9b31331a409239dd */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/security/secure-by-default.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Ship the safe configuration as the out-of-the-box default and require explicit opt-in for anything risky. Never enable a powerful feature — remote code execution, dynamic lookups, admin interfaces, debug endpoints — just because it is convenient for demos. If you cannot name the safe default for a feature, stop and ask a human before shipping it.
+Ship konfigurasi aman sebagai default out-of-the-box dan wajibkan opt-in eksplisit untuk apa pun yang berisiko. Jangan pernah mengaktifkan fitur yang kuat — remote code execution, dynamic lookup, admin interface, debug endpoint — hanya karena nyaman untuk demo. Jika tidak bisa menyebutkan default aman untuk sebuah fitur, berhenti dan tanyakan ke manusia sebelum men-ship-nya.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Whatever a library, framework, or service ships with enabled is what most installations will run forever. Secure by default means the fresh, unmodified install is the hardened one: encryption on, dangerous features off, debug interfaces unreachable, no default credentials. Anything that weakens posture requires an explicit, documented opt-in — defaults are a decision made on behalf of every user who will never read the documentation.
+Apa pun yang bawaannya aktif ketika sebuah library, framework, atau service di-ship adalah apa yang akan dijalankan sebagian besar instalasi selamanya. Secure by default berarti hasil install segar tanpa modifikasi adalah versi yang sudah di-hardening: enkripsi menyala, fitur berbahaya mati, debug interface tak terjangkau, tanpa default credentials. Segala hal yang melemahkan postur keamanan mensyaratkan opt-in eksplisit dan terdokumentasi — default adalah keputusan yang diambil atas nama setiap user yang tidak akan pernah membaca dokumentasinya.
 
-## When to use
+## Kapan pakai
 
-- Libraries and frameworks distributed to people you will never meet or audit.
-- Infrastructure templates and base images that create environments others inherit.
-- Anything with a demo mode — demo configs have a habit of becoming production configs.
-- Client SDKs whose default settings silently propagate into thousands of applications.
+- Library dan framework yang didistribusikan ke orang-orang yang tak akan pernah ditemui atau di-audit.
+- Template infrastructure dan base image yang menciptakan lingkungan yang diwarisi pihak lain.
+- Apa pun dengan mode demo — config demo punya kebiasaan menjadi config production.
+- Client SDK yang pengaturan default-nya menyebar senyap ke ribuan aplikasi.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- One-off internal tools with a written threat model that explicitly accepts the risk.
-- Teaching examples whose entire purpose is demonstrating the unsafe mechanism — clearly labeled, never internet-facing.
-- When the safest default makes the thing unusable for most users: pick the strongest default that still works out of the box, then expose hardening switches for the rest.
+- Tool internal sekali-pakai dengan threat model tertulis yang secara eksplisit menerima risikonya.
+- Contoh pembelajaran yang tujuan utamanya memang mendemonstrasikan mekanisme yang tidak aman — berlabel jelas, tidak pernah menghadap internet.
+- Ketika default paling aman membuat produk tak terpakai bagi sebagian besar user: pilih default terkuat yang tetap berfungsi out-of-the-box, lalu ekspos switch hardening untuk sisanya.
 
 ## Anti-pattern
 
-- A logging library that interprets and fetches URLs found inside log text.
-- Admin dashboards bound to all interfaces with a default password.
-- TLS verification disabled in the example code that everyone copies into production.
-- Debug mode driven by an environment variable that production also sets.
-- A "hardening guide" offered as a substitute for safe defaults — documentation is not a control.
+- Library logging yang menginterpretasikan dan men-fetch URL yang ditemukan di dalam teks log.
+- Admin dashboard yang terikat ke semua interface dengan password default.
+- Verifikasi TLS dimatikan dalam contoh kode yang semua orang salin ke production.
+- Debug mode yang digerakkan oleh environment variable yang juga diset oleh production.
+- "Hardening guide" yang ditawarkan sebagai pengganti default yang aman — dokumentasi bukan kontrol.
 
-## Code example
+## Contoh kode
 
-Wrong — the powerful feature is on unless you know to disable it:
+Salah — fitur yang kuat menyala kecuali tahu cara mematikannya:
 
 ```javascript
-// Library default: any string passed to the logger can trigger a remote lookup.
+// Default library: string apa pun yang masuk ke logger bisa memicu remote lookup.
 const logger = createLogger({ app: "billing" });
-// "messageLookup" defaults to true — convenient for demos, catastrophic in prod
+// "messageLookup" default-nya true — nyaman untuk demo, katastrofik di prod
 
 logger.warn(`Payment failed for ${userInput}`);
-// userInput came from a request field; the logger fetches what it finds there
+// userInput datang dari sebuah field request; logger men-fetch apa yang ditemukannya di sana
 ```
 
-Right — inert default, explicit opt-in with a scope:
+Benar — default inert, opt-in eksplisit dengan scope:
 
 ```javascript
-// Default is inert: log text is data, never executed or fetched.
+// Default-nya inert: teks log adalah data, tidak pernah dieksekusi atau di-fetch.
 const logger = createLogger({ app: "billing" });
-logger.warn(`Payment failed for ${userInput}`);   // always just text
+logger.warn(`Payment failed for ${userInput}`);   // selalu sekadar teks
 
-// The feature still exists — for people who ask for it by name:
+// Fiturnya tetap ada — untuk orang yang menyebut namanya secara eksplisit:
 // const logger = createLogger({
 //   app: "billing",
 //   messageLookup: { enabled: true, allowHosts: ["metrics.internal"] },
 // });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Defaults must be enforced where users cannot skip them:
+Default harus ditegakkan di tempat yang tidak bisa dilewati user:
 
-- **Hardened base images and templates**: organization-wide images with debug off, no default credentials, current patches — teams inherit safety without acting.
-- **Configuration linting in CI**: fail builds on known-insecure flags — TLS verification off, debug mode in deploy artifacts, wildcard network binds, default passwords.
-- **Default-behavior tests**: a fresh-install test asserting the dangerous feature is off and the safe one is on — defaults are behavior, so test them like behavior.
-- **What prevents vs. detects**: shipping safe defaults prevents misconfiguration for the silent majority who never configure anything; lint and audits detect the minority who opted out — keep both, they cover different people.
+- **Base image dan template yang ter-hardening**: image se-organisasi dengan debug mati, tanpa default credentials, patch terkini — tim mewarisi keamanan tanpa harus berbuat apa pun.
+- **Configuration linting di CI**: gagalkan build pada flag yang diketahui tidak aman — verifikasi TLS mati, debug mode di deploy artifact, wildcard network bind, password default.
+- **Test perilaku default**: test fresh-install yang menegaskan fitur berbahaya mati dan fitur aman menyala — default adalah perilaku, jadi test-lah seperti perilaku.
+- **Yang mencegah vs. yang mendeteksi**: men-ship default yang aman mencegah misconfiguration bagi mayoritas senyap yang tak pernah mengonfigurasi apa pun; lint dan audit mendeteksi minoritas yang memilih keluar — pelihara keduanya, keduanya melindungi orang yang berbeda.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-In December 2021, Log4Shell (CVE-2021-44228) showed what an unsafe default costs at ecosystem scale. Apache Log4j 2 performed JNDI lookups on strings that passed through log messages, and the feature was enabled by default: any application that logged attacker-controlled input — usernames, headers, form fields — could be tricked into fetching and executing code from a remote server. The vulnerable configuration was not a mistake anyone made; it was the configuration everyone got. Teams worldwide spent weeks patching and inventorying exposure. Secure by default — lookups off unless explicitly enabled — would not have removed the parsing flaw itself, but would have reduced the exposed population from default installations everywhere to the much smaller set that deliberately turned the feature on. Advisory: https://logging.apache.org/log4j/2.x/security.html
+Pada Desember 2021, Log4Shell (CVE-2021-44228) memperlihatkan harga sebuah default yang tidak aman pada skala ekosistem. Apache Log4j 2 melakukan JNDI lookup pada string yang lewat di pesan log, dan fitur itu aktif secara default: aplikasi apa pun yang mencatat input yang dikendalikan penyerang — username, header, form field — bisa ditipu untuk men-fetch dan mengeksekusi kode dari server remote. Konfigurasi yang rentan bukan kesalahan yang dibuat oleh siapa pun; itu konfigurasi yang diterima oleh semua orang. Tim di seluruh dunia menghabiskan berminggu-minggu untuk patch dan menginventarisasi paparan. Secure by default — lookup mati kecuali diaktifkan secara eksplisit — tidak akan menghilangkan cacat parsing-nya sendiri, tetapi akan mengurangi populasi yang terekspos dari instalasi default di mana-mana menjadi himpunan yang jauh lebih kecil yang dengan sengaja menyalakan fitur itu. Advisory: https://logging.apache.org/log4j/2.x/security.html
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Secure defaults vs. least astonishment**: the safest default nobody can boot protects nothing — choose the strongest default that still works in the first five minutes.
-- **Secure by default vs. Hyrum's Law**: the moment a default ships, someone depends on it; changing it later is a breaking change, so the unsafe convenience shipped today is a forced migration tomorrow.
-- **Hardening vs. Yagni**: defaults armored against imaginary threat models become configuration mazes that users route around — harden for the threats the thing actually faces.
+- **Default aman vs. least astonishment**: default paling aman yang tak bisa di-boot siapa pun tidak melindungi apa pun — pilih default terkuat yang masih berfungsi dalam lima menit pertama.
+- **Secure by default vs. Hyrum's Law**: begitu sebuah default di-ship, seseorang bergantung padanya; mengubahnya nanti adalah breaking change, maka kenyamanan yang tidak aman yang di-ship hari ini adalah migration paksa esok hari.
+- **Hardening vs. YAGNI**: default yang dirawani untuk threat model imajiner menjadi labirin konfigurasi yang dilewati user lewat jalan memutar — hardening-lah untuk ancaman yang benar-benar dihadapi produk itu.
 
-## Related principles
+## Prinsip terkait
 
-- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — the access-control sibling: deny unless granted.
-- [Defense in Depth](/docs/principles/security/defense-in-depth) — the default is the first layer, never the only one.
-- [Least Astonishment](/docs/principles/design/least-astonishment) — the safe default should still make sense to whoever discovers it.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — opt-in switches with clear names and a documented blast radius.
-- [Hyrum's Law](/docs/principles/api/hyrum-law) — why changing a shipped default is a breaking change.
+- [Fail-Safe Defaults](/id/docs/principles/security/fail-safe-defaults) — saudara di sisi access control: tolak kecuali diberikan.
+- [Defense in Depth](/id/docs/principles/security/defense-in-depth) — default adalah lapisan pertama, tidak pernah satu-satunya.
+- [Least Astonishment](/id/docs/principles/design/least-astonishment) — default yang aman pun harus tetap masuk akal bagi siapa pun yang menemukannya.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — switch opt-in dengan nama jelas dan blast radius yang terdokumentasi.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — mengapa mengubah default yang sudah di-ship adalah breaking change.
 
-## References
+## Referensi
 
-- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults and psychological acceptability: defaults people can and will actually live with.
-- NIST SP 800-207, *Zero Trust Architecture*, 2020 — secure defaults in enterprise architecture: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
-- Hyrum's Law — the contract your defaults become: https://www.hyrumslaw.com
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults dan psychological acceptability: default yang benar-benar bisa dan akan dijalankan manusia.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — default aman dalam arsitektur enterprise: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Hyrum's Law — contract yang lahir dari default yang di-ship: https://www.hyrumslaw.com

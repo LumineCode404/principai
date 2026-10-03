@@ -2,7 +2,7 @@
 title: Retry Budget
 id: retry-budget
 name: Retry Budget
-summary: TERJEMAHAN DRAF — Retries amplify outages — use exponential backoff with jitter and a hard budget on total retry volume.
+summary: Retry memperbesar outage — pakai exponential backoff dengan jitter dan budget keras atas total volume retry.
 category: reliability
 type: principle
 severity: important
@@ -14,109 +14,112 @@ tags:
   - "retries"
   - "backoff"
   - "load"
-aliases: []
-sources: []
+aliases:
+  - "Retry with Backoff and Budget"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
+  - 'Google SRE Workbook, https://sre.google/workbook/'
 status: draft
 verification: perlu
 source_hash: "b846311683a2d472"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/reliability/retry-budget.mdx */}
-{/* source_hash EN: b846311683a2d472 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/reliability/retry-budget.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Treat every retry as a bet that pays off only when the failure is transient and the callee has spare capacity. Use exponential backoff with full jitter, cap attempts per request, and enforce a global budget on total retry volume — when the budget is spent, fail fast and surface the error. Never ship a retry loop that lacks all three limits.
+Perlakukan setiap retry sebagai taruhan yang hanya terbayar ketika kegagalannya transient dan pihak yang dipanggil punya kapasitas sisa. Gunakan exponential backoff dengan full jitter, batasi jumlah attempt per request, dan tegakkan budget global atas total volume retry — saat budget habis, gagal cepat dan tampilkan error-nya. Jangan pernah mengirim retry loop yang kehilangan ketiga batas itu.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-A retry budget is a hard, measured limit on how much extra load retries may add — for example, retries may be at most a fixed small share of all requests — combined with exponential backoff and jitter so attempts spread over time. Retries are hope converted into load; when the callee is already failing, that load lands on the weakest component and converts a blip into an outage. The budget is what keeps hope affordable.
+Retry budget adalah batas keras yang terukur atas seberapa besar beban tambahan yang boleh ditambahkan retry — misalnya, retry paling banyak sebagian kecil tetap dari seluruh request — dikombinasikan dengan exponential backoff dan jitter agar attempt menyebar dalam waktu. Retry adalah harapan yang dikonversi menjadi beban; ketika pihak yang dipanggil sudah gagal, beban itu mendarat di komponen terlemah dan mengubah blip menjadi outage. Budget-lah yang menjaga harapan itu tetap terjangkau.
 
-## When to use
+## Kapan pakai
 
-- Any client of a remote dependency (HTTP, RPC, database, broker) with timeout-capable calls.
-- Event-driven consumers that requeue or re-deliver failed messages.
-- Batch pipelines that re-run failed items.
-- SDKs and libraries others will embed — their retry defaults become someone else's architecture (see Hyrum's Law).
+- Client apa pun dari dependency remote (HTTP, RPC, database, broker) dengan panggilan yang mendukung timeout.
+- Consumer event-driven yang me-requeue atau mengirim ulang pesan yang gagal.
+- Pipeline batch yang menjalankan ulang item yang gagal.
+- SDK dan library yang akan di-embed pihak lain — default retry-nya menjadi arsitektur orang lain (lihat Hyrum's Law).
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Non-idempotent operations without a key — retrying a payment without idempotency is a correctness bug, not resilience.
-- Latency-sensitive requests whose caller already left — retrying after the user abandoned the page is pure load with no beneficiary.
-- Client errors and business rejections — retrying a validation error is a loop with extra steps.
-- Strictly ordered work where a delayed retry would apply state out of order.
+- Operasi non-idempotent tanpa key — me-retry pembayaran tanpa idempotency adalah bug kebenaran, bukan resiliensi.
+- Request sensitif-latency yang caller-nya sudah pergi — me-retry setelah user meninggalkan halaman adalah beban murni tanpa penerima manfaat.
+- Client error dan penolakan bisnis — me-retry validation error adalah loop dengan langkah ekstra.
+- Pekerjaan yang ketat urutannya, tempat retry yang tertunda akan menerapkan state di luar urutan.
 
 ## Anti-pattern
 
-- Immediate retries, fixed count, no jitter — every client hammers in lockstep, exactly when the target is worst off.
-- Nested retries at every layer: client, gateway, service, and database each retry three times; the multipliers compound.
-- Retrying harder precisely when the dependency is overloaded — amplifying the very signal that should trigger shedding.
-- Retry policy decided per call site by each developer independently, with no global view.
+- Retry instan, jumlah tetap, tanpa jitter — setiap client menghantam serentak, tepat saat target berada di kondisi terburuknya.
+- Retry bersarang di setiap layer: client, gateway, service, dan database masing-masing me-retry tiga kali; multiplier-nya saling menggandakan.
+- Me-retry lebih keras justru saat dependency overload — mengamplifikasi sinyal yang seharusnya memicu shedding.
+- Kebijakan retry diputuskan per call site oleh tiap developer secara terpisah, tanpa pandangan global.
 
-## Code example
+## Contoh kode
 
-Wrong — synchronized, unbounded retry:
+Salah — retry tersinkronisasi dan tanpa batas:
 
 ```python
 for attempt in range(3):
     try:
-        return search_client.query(q)      # instant retries, in lockstep everywhere
+        return search_client.query(q)      # retry instan, serentak di mana-mana
     except Timeout:
-        continue                           # no jitter, no budget, no deadline
-raise SearchUnavailable(q)                 # after hammering an already-dying service
+        continue                           # tanpa jitter, tanpa budget, tanpa deadline
+raise SearchUnavailable(q)                 # setelah menghantam service yang sekarat
 ```
 
-Right — backoff, jitter, deadline, and a global cap:
+Benar — backoff, jitter, deadline, dan cap global:
 
 ```python
 def search(q, deadline):
     for attempt in range(3):
         if monotonic() >= deadline:
-            raise SearchUnavailable(q)                       # caller left: stop retrying
+            raise SearchUnavailable(q)                       # caller sudah pergi: berhenti me-retry
         sleep(random.uniform(0, 0.1 * 2 ** attempt))         # exponential + full jitter
         try:
-            return search_client.query(q, timeout=0.2)       # hard timeout per attempt
+            return search_client.query(q, timeout=0.2)       # timeout keras per attempt
         except (Timeout, Unavailable):
             continue
     raise SearchUnavailable(q)
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Retries are a system property, not a per-developer preference — enforce them centrally:
+Retry adalah properti sistem, bukan preferensi per developer — tegakkan secara terpusat:
 
-- **Client library defaults**: backoff, jitter, attempt cap, and retry-on status list ship in the standard client; bare retry helpers are rejected in code review.
-- **Retry budgets at the caller**: a token-bucket or circuit-breaker allows at most 1 retry per N requests; when the budget is empty, requests fail fast with a loud error.
-- **Server-side protection**: the callee distinguishes and rejects excess retry traffic (busy responses with retry-after guidance) so callers learn instead of hammering.
-- **Deadline propagation**: every request carries its remaining patience; nested retries cannot multiply beyond the caller's deadline.
-- **Tests**: killing a dependency in staging must produce bounded, measurable extra load — visible as a bump, not a storm.
+- **Default client library**: backoff, jitter, cap attempt, dan daftar status retry-on dikirim bersama client standar; helper retry polos ditolak di code review.
+- **Retry budget di sisi caller**: token-bucket atau circuit-breaker mengizinkan paling banyak 1 retry per N request; saat budget kosong, request gagal cepat dengan error yang keras.
+- **Proteksi di sisi server**: pihak yang dipanggil membedakan dan menolak trafik retry berlebih (respons busy disertai panduan retry-after) sehingga caller belajar alih-alih terus menghantam.
+- **Propagasi deadline**: setiap request membawa sisa kesabarannya; retry bersarang tidak bisa berlipat melampaui deadline milik caller.
+- **Test**: mematikan satu dependency di staging harus menghasilkan beban tambahan yang terbatas dan terukur — terlihat sebagai bump, bukan storm.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-(ilustratif) A downstream dependency blips for sixty seconds during a deploy. Every client retries immediately — three attempts, no jitter — and retry traffic exceeds normal traffic right as the dependency comes back up. The recovering service spends the next forty minutes processing a synchronized queue of retries instead of user requests; the monitoring graph shows the caller failing long after the dependency was healthy. Backoff with jitter plus a hard budget would have reduced a self-inflicted partial outage to a brief bump in error rate. (verification: perlu — retry-storm incidents are described in public postmortems; belum digali — verify specific sources before citing any of them.)
+(ilustratif) Sebuah dependency downstream mengalami blip selama enam puluh detik di tengah deploy. Setiap client langsung me-retry — tiga attempt, tanpa jitter — dan trafik retry melampaui trafik normal tepat ketika dependency itu kembali hidup. Service yang sedang pulih menghabiskan empat puluh menit berikutnya memproses antrian retry yang tersinkronisasi alih-alih request user; grafik monitoring menunjukkan caller gagal jauh setelah dependency sehat kembali. Backoff dengan jitter plus budget keras akan mengurangi partial outage yang menimpa diri sendiri itu menjadi bump singkat pada error rate. (verification: perlu — insiden retry storm dijelaskan dalam postmortem publik; belum digali — verifikasi sumber spesifik sebelum mengutip salah satunya.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Retry Budget vs. latency SLOs**: aggressive retries buy milliseconds of availability in good times and cost minutes of outage in bad times; budget for the bad times.
-- **Retry Budget vs. Idempotency**: retrying is only safe where idempotency already holds; make the operation safe before making the retry automatic.
-- **Weigh against Fail-Visible**: budget-exhausted failures must surface as loud errors — a framework that silently drops them converts unavailability into data loss.
+- **Retry Budget vs. latency SLO**: retry agresif membeli milidetik availability saat kondisi baik dan berbiaya menit outage saat kondisi buruk; buat budgetnya untuk kondisi buruk.
+- **Retry Budget vs. Idempotency**: me-retry hanya aman di tempat idempotency sudah berlaku; buat operasinya aman sebelum membuat retry-nya otomatis.
+- **Ditimbang terhadap Fail-Visible**: kegagalan yang budget-nya habis harus muncul sebagai error yang keras — framework yang diam-diam menjatuhkannya mengubah unavailability menjadi kehilangan data.
 
-## Related principles
+## Prinsip terkait
 
-- [Idempotency](/docs/principles/reliability/idempotency) — the precondition for any automatic retry.
-- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — shed load to a failing dependency instead of feeding it.
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — a spent budget must alarm, not vanish.
-- [Hyrum's Law](/docs/principles/api/hyrum-law) — your retry defaults become someone's production behavior.
+- [Idempotency](/id/docs/principles/reliability/idempotency) — prasyarat untuk retry otomatis apa pun.
+- [Graceful Degradation](/id/docs/principles/reliability/graceful-degradation) — buang beban ke dependency yang gagal alih-alih memberinya makan.
+- [Fail-Visible](/id/docs/principles/reliability/fail-visible) — budget yang habis harus membunyikan alarm, bukan menghilang.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — default retry menjadi perilaku production orang lain.
 
-## References
+## Referensi
 
-- Google SRE Book — https://sre.google/sre-book/ (handling overload and shedding excess requests).
-- Google SRE Workbook — https://sre.google/workbook/ (the "Cascading Failures" chapter on retry amplification).
+- Google SRE Book — https://sre.google/sre-book/ (penanganan overload dan pembuangan request berlebih).
+- Google SRE Workbook — https://sre.google/workbook/ (bab "Cascading Failures" tentang amplifikasi retry).

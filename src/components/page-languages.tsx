@@ -4,7 +4,7 @@ import { source, sourceId, sourceZh } from "@/lib/source";
 /**
  * Per-page language chips: shows the SAME page in every language it exists in.
  * Honest by construction — a language that lacks this page simply does not
- * appear. English is the source of truth; zh is complete; id is partial.
+ * appear. English is the source of truth; zh and id each cover all principles.
  */
 export function PageLanguages({
   current,

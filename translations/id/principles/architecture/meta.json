@@ -1,0 +1,10 @@
+{
+  "title": "Arsitektur",
+  "pages": [
+    "index",
+    "single-responsibility",
+    "dependency-inversion",
+    "gall-law",
+    "conways-law"
+  ]
+}

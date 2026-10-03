@@ -2,7 +2,7 @@
 title: Robustness Principle
 id: postel-robustness
 name: Robustness Principle
-summary: TERJEMAHAN DRAF — Be conservative in what you send, liberal in what you accept — but write down exactly how liberal, or tolerance becomes unprovable behavior.
+summary: Berkonservatiflah dalam apa yang dikirim, liberal dalam apa yang diterima — tetapi tuliskan dengan tepat seberapa liberalnya, atau toleransi berubah menjadi perilaku yang tak terbukti.
 category: api
 type: law
 severity: advisory
@@ -15,107 +15,110 @@ tags:
   - "tolerance"
   - "protocols"
   - "interop"
-aliases: []
-sources: []
+aliases:
+  - "Postel's Law"
+  - "Be Conservative in What You Send"
+sources:
+  - 'RFC 1122, section 1.2.2, https://www.rfc-editor.org/rfc/rfc1122'
 status: draft
 verification: perlu
 source_hash: "c26471c7049bb096"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/api/postel-robustness.mdx */}
-{/* source_hash EN: c26471c7049bb096 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/api/postel-robustness.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Make your outputs conform exactly to the published contract — be strict on the sending side. On the receiving side, accept only the deviations you have written down, and reject everything else with a clear error. Log every tolerated deviation so tolerance stays observable. Never silently guess what malformed input meant.
+Buat output sesuai persis dengan contract yang dipublikasikan — ketat di sisi pengiriman. Di sisi penerima, terima hanya deviasi yang sudah dituliskan, dan tolak sisanya dengan error yang jelas. Log setiap deviasi yang ditoleransi agar toleransi tetap observable. Jangan pernah menebak secara diam-diam apa maksud input yang malform.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-The Robustness Principle (RFC 1122, section 1.2.2) has two halves: implementations sending must be conservative — strictly conformant — while implementations receiving may be liberal, tolerating input that is imperfect but interpretable. The modern discipline adds a third clause: liberality must be bounded, documented, and observable. Tolerance that is neither written down nor logged is not robustness; it is an accident waiting to become someone else's dependency.
+Robustness Principle (RFC 1122, section 1.2.2) punya dua separuh: implementasi yang mengirim harus konservatif — konforman secara ketat — sementara implementasi yang menerima boleh liberal, menoleransi input yang tidak sempurna tetapi masih bisa ditafsirkan. Disiplin modern menambahkan klausul ketiga: liberalitas harus berbatas, terdokumentasi, dan observable. Toleransi yang tidak dituliskan maupun di-log bukanlah robustness; ia adalah kecelakaan yang menunggu menjadi dependency milik orang lain.
 
-## When to use
+## Kapan pakai
 
-- Public APIs and protocol endpoints serving many heterogeneous or legacy clients.
-- Parsers for formats you do not control: email, feeds, CSV exports, third-party webhooks.
-- Gateway or proxy layers that must keep imperfect partners working while the ecosystem cleans up.
+- API publik dan endpoint protokol yang melayani banyak client heterogen atau legacy.
+- Parser untuk format di luar kendali sendiri: email, feed, ekspor CSV, webhook pihak ketiga.
+- Layer gateway atau proxy yang harus menjaga partner yang tidak sempurna tetap berjalan selagi ekosistem membereskan dirinya.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Parsing untrusted input where malformed data is an attack vector — strictness is the security posture here.
-- Internal service meshes where you control both ends: strict rejection surfaces producer bugs at the earliest, cheapest moment.
-- Anywhere tolerance would hide data corruption rather than inconvenience — a "liberally" accepted, wrong-but-parseable value that corrupts state is worse than a rejected request.
+- Mem-parse input yang tidak dipercaya tempat data malform adalah attack vector — strictness adalah postur keamanan di sini.
+- Internal service mesh yang kedua ujungnya dikuasai sendiri: penolakan ketat menyingkap bug producer pada momen paling awal dan paling murah.
+- Di mana pun toleransi akan menyembunyikan kerusakan data alih-alih sekadar merepotkan — nilai yang salah-tetapi-bisa-diparse, diterima "secara liberal", lalu merusak state, lebih buruk daripada request yang ditolak.
 
 ## Anti-pattern
 
-- Accepting anything and guessing intent: a missing field defaults to some plausible value, unlogged.
-- Silent coercion — the string "42" quietly becomes the number 42, and "abc" becomes 1.
-- Being liberal in what you send because "the other side is also liberal".
-- Tolerating deviations for years, then removing the tolerance with no version and no window.
+- Menerima apa saja dan menebak maksudnya: field yang hilang di-default ke suatu nilai yang masuk akal, tanpa log.
+- Koersi diam-diam — string "42" pelan-pelan menjadi angka 42, dan "abc" menjadi 1.
+- Bersikap liberal dalam apa yang dikirim karena "pihak lain juga liberal".
+- Menoleransi deviasi bertahun-tahun, lalu menghapus toleransi itu tanpa versi dan tanpa window.
 
-## Code example
+## Contoh kode
 
-Wrong — accept anything, guess, and tell no one:
+Salah — terima apa saja, menebak, dan tak memberi tahu siapa pun:
 
 ```ts
 app.post('/orders', (req, res) => {
-  const qty = Number(req.body.qty) || 1;   // "abc" silently becomes 1
-  const note = req.body.note ?? '';        // null, undefined, false — all fine
-  res.json({ ok: true, qty });            // shipped; nobody will ever know
+  const qty = Number(req.body.qty) || 1;   // "abc" diam-diam menjadi 1
+  const note = req.body.note ?? '';        // null, undefined, false — semua dianggap lumrah
+  res.json({ ok: true, qty });            // sudah terkirim; tak akan ada yang pernah tahu
 });
 ```
 
-Right — strict core, tolerance confined to one documented, logged case:
+Benar — inti yang ketat, toleransi dikurung pada satu kasus terdokumentasi dan ter-log:
 
 ```ts
-// Strict by default; ONE documented leniency (qty sent as numeric string)
+// Ketat secara default; SATU kelonggaran terdokumentasi (qty dikirim sebagai string numerik)
 const OrderIn = z.object({ qty: z.number().int().positive() }).strict();
 app.post('/orders', (req, res) => {
   if (typeof req.body?.qty === 'string') {
-    metrics.count('tolerated.qty_as_string'); // tolerance is observable
-    req.body.qty = Number(req.body.qty);     // the one documented case
+    metrics.count('tolerated.qty_as_string'); // toleransi menjadi observable
+    req.body.qty = Number(req.body.qty);     // satu-satunya kasus terdokumentasi
   }
   const parsed = OrderIn.safeParse(req.body);
   if (!parsed.success) return res.status(400).json(parsed.error.flatten());
-  createOrder(parsed.data);                  // strict beyond the documented case
+  createOrder(parsed.data);                  // ketat di luar kasus terdokumentasi
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by schemas and tests, not by politeness:
+Prinsip ini ditegakkan oleh schema dan test, bukan oleh kesantunan:
 
-- **Strict schemas at boundaries** (zod, JSON Schema, protobuf): unknown keys rejected, types exact — tolerance is an explicit, enumerated exception list in the schema or adapter.
-- **Output conformance tests in CI**: golden tests asserting your responses match the published spec exactly — the conservative-sender half is testable.
-- **Tolerance budget**: every accepted deviation gets a log line and a dashboard count; when the count stays at zero for a quarter, the tolerance becomes a deprecation candidate behind a version bump.
-- **Fuzzing** the parser in CI to prove it rejects rather than improvises on malformed input.
+- **Schema ketat di boundary** (zod, JSON Schema, protobuf): key tak dikenal ditolak, type persis — toleransi adalah daftar pengecualian yang eksplisit dan terenumerasi di schema atau adapter.
+- **Output conformance test di CI**: golden test yang menegaskan response cocok persis dengan spec yang dipublikasikan — separuh pengirim-konservatif itu bisa diuji.
+- **Tolerance budget**: setiap deviasi yang diterima mendapat satu baris log dan satu hitungan di dashboard; ketika hitungan bertahan di nol selama satu kuartal, toleransi itu menjadi kandidat deprecation di balik kenaikan versi.
+- **Fuzzing** parser di CI untuk membuktikan ia menolak, bukan berimprovisasi, atas input yang malform.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-An API accepted ISO-style date strings and "helpfully" treated a missing timezone as UTC — for years, silently. A partner later started sending local-time timestamps; their stored records drifted by hours, and the corruption surfaced months later in reconciliation, with no trace of when or why the wrong interpretation happened, because the tolerance had never been logged. A strict parser would have surfaced the malformed dates the moment they arrived, instead of months later. (ilustratif — composite of a common failure mode; verification: perlu)
+Sebuah API menerima string tanggal bergaya ISO dan dengan "santun" memperlakukan timezone yang hilang sebagai UTC — bertahun-tahun, diam-diam. Sebuah partner kemudian mulai mengirim timestamp waktu lokal; record tersimpan mereka bergeser berjam-jam, dan kerusakan itu muncul berbulan-bulan kemudian dalam reconciliation, tanpa jejak kapan dan mengapa penafsiran yang salah terjadi, karena toleransinya tidak pernah di-log. Parser yang ketat akan menyingkap tanggal malform itu pada saat mereka tiba, bukan berbulan-bulan kemudian. (ilustratif — komposit dari mode kegagalan yang umum; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **The modern critique — tolerance accumulates**: decades of liberal acceptance train an ecosystem where malformed output is de facto required (see Hyrum's Law), which is why strict protocol design argues receivers should reject and force producers to fix their bugs. Reserve tolerance for partners you cannot fix and for transitions you have scheduled.
-- **Interoperability vs. security**: every accepted deviation is unvalidated surface area; for untrusted input, strictness wins on safety grounds.
-- **Kindness vs. observability**: silent tolerance is kind today and unmaintainable tomorrow — the middle path is tolerate-and-log, then retire the tolerance through a versioned change.
+- **Kritik modern — toleransi menumpuk**: puluhan tahun penerimaan liberal melatih ekosistem tempat output malform menjadi kebutuhan de facto (lihat Hyrum's Law), itulah sebabnya desain protokol yang ketat berargumen penerima sebaiknya menolak dan memaksa producer memperbaiki bug-nya sendiri. Simpan toleransi untuk partner yang tak bisa diperbaiki dan untuk transisi yang sudah dijadwalkan.
+- **Interoperabilitas vs. keamanan**: setiap deviasi yang diterima adalah area permukaan tanpa validasi; untuk input yang tak dipercaya, strictness menang dengan alasan keamanan.
+- **Kebaikan vs. observability**: toleransi senyap itu baik hari ini dan tak terpelihara besok — jalan tengahnya adalah toleransi-dan-log, lalu pensiunkan toleransi itu lewat perubahan yang berversi.
 
-## Related principles
+## Prinsip terkait
 
-- [Hyrum's Law](/docs/principles/api/hyrum-law) — every tolerated deviation becomes somebody's dependency.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — what tolerance is allowed should live in the contract, not in code folklore.
-- [Input Validation](/docs/principles/security/input-validation) — the strict counterpart at hostile boundaries.
-- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how to retire a tolerance without a rug pull.
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — when rejection beats guessing.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — setiap deviasi yang ditoleransi menjadi dependency seseorang.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — toleransi apa pun yang diizinkan seharusnya hidup di contract, bukan di dongeng kode.
+- [Input Validation](/id/docs/principles/security/input-validation) — pasangan yang ketat di boundary yang bermusuhan.
+- [Versioned Contracts](/id/docs/principles/api/versioned-contracts) — cara memensiunkan sebuah toleransi tanpa menarik karpet dari bawah kaki.
+- [Fail-Visible](/id/docs/principles/reliability/fail-visible) — kapan penolakan mengalahkan penebakan.
 
-## References
+## Referensi
 
-- RFC 1122, section 1.2.2 — the canonical statement: https://www.rfc-editor.org/rfc/rfc1122 (verified URL).
-- Hyrum's Law — the dependency cost of unbounded tolerance: https://www.hyrumslaw.com (verified URL).
+- RFC 1122, section 1.2.2 — pernyataan kanoniknya: https://www.rfc-editor.org/rfc/rfc1122 (verified URL).
+- Hyrum's Law — biaya dependency dari toleransi tanpa batas: https://www.hyrumslaw.com (verified URL).

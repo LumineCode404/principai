@@ -1,0 +1,19 @@
+---
+title: "Keamanan · Security"
+description: Scoping otoritas, validasi input, dan gagal tertutup — kategori yang menjaga bug kecil agar tidak menjadi database yang terhapus.
+---
+
+Keamanan di sini bukan checklist compliance — ini adalah disiplin tentang scope dan default. Rantai kegagalan yang dijaga kategori ini konkret: credentials yang terlalu luas, dry-run yang hilang, input yang tidak divalidasi, default yang mengasumsikan kepercayaan. Setiap prinsip di bawah menyebut [penegakan teknisnya](/docs/concepts/enforcement); prinsip menasihati, kontrol yang menegakkan.
+
+<Cards>
+  <Card title="Least Authority" description="Berikan hanya otoritas yang benar-benar dibutuhkan tugas — skrip cleanup dengan akses tulis penuh mengubah bug kecil menjadi database yang terhapus." href="/id/docs/principles/security/least-authority" />
+  <Card title="Fail-Safe Defaults" description="Tolak secara default dan berikan secara eksplisit — permission harus diperoleh per aksi, bukan diasumsikan ada sampai dicabut." href="/id/docs/principles/security/fail-safe-defaults" />
+  <Card title="Input Validation" description="Validasi setiap input di trust boundary sebelum menyentuh state — tolak sedini mungkin, tuntas, dan tanpa ambigu." href="/id/docs/principles/security/input-validation" />
+  <Card title="Secrets Hygiene" description="Secret tidak pernah hidup di kode, log, ticket, atau history — satu kebocoran bersifat permanen karena git tidak pernah melupakan apa pun." href="/id/docs/principles/security/secrets-hygiene" />
+  <Card title="Defense in Depth" description="Tidak ada kontrol tunggal yang sempurna — susun kontrol independen berlapis agar satu kegagalan tidak pernah menjadi breach." href="/id/docs/principles/security/defense-in-depth" />
+  <Card title="Secure by Default" description="Ship konfigurasi aman sebagai default — security harus menjadi apa yang langsung didapat, bukan apa yang harus diingat untuk diaktifkan." href="/id/docs/principles/security/secure-by-default" />
+  <Card title="Supply Chain Vetting" description="Setiap dependency adalah orang asing dengan akses commit ke production — pin, audit, dan review sebelum mengadopsi." href="/id/docs/principles/security/supply-chain-vetting" />
+  <Card title="Complete Mediation" description="Otorisasi setiap akses di setiap jalur — permission yang di-cache atau pintu samping yang terlupakan tetaplah pintu." href="/id/docs/principles/security/complete-mediation" />
+</Cards>
+
+[destructive-ops profile](/docs/profiles/destructive-ops) memuat subset must-follow dari kategori ini untuk cleanup script, migration, dan operasi bulk.

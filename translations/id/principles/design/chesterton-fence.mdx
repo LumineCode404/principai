@@ -2,7 +2,7 @@
 title: Chesterton's Fence
 id: chesterton-fence
 name: Chesterton's Fence
-summary: TERJEMAHAN DRAF — Never remove a fence until you know why it was built — in code, the comment is rarely where the reason lives.
+summary: Jangan pernah menghapus fence sebelum tahu mengapa ia didirikan — dalam kode, comment jarang menjadi tempat alasannya berada.
 category: design
 type: heuristic
 severity: advisory
@@ -17,103 +17,104 @@ tags:
   - "understanding"
   - "risk"
 aliases: []
-sources: []
+sources:
+  - 'G.K. Chesterton, "The Thing", 1929'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "c64335ab03c37bb9"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/design/chesterton-fence.mdx */}
-{/* source_hash EN: c64335ab03c37bb9 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/design/chesterton-fence.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Before deleting or changing code you did not write, find out why it exists: git history, tests, linked incidents, and the people who were present. Treat unexplained code as load-bearing until proven otherwise. If you cannot establish why a fence was built, do not remove it — escalate to someone who may know. Land removals as small, separately revertable changes with monitoring attached.
+Sebelum menghapus atau mengubah kode yang tidak Anda tulis, cari tahu mengapa kode itu ada: git history, test, incident yang terkait, dan orang-orang yang saat itu hadir. Perlakukan kode yang tak terjelaskan sebagai load-bearing sampai terbukti sebaliknya. Jika tidak bisa dipastikan mengapa sebuah fence didirikan, jangan hapus — eskalasi ke seseorang yang mungkin tahu. Terapkan penghapusan sebagai perubahan kecil yang terpisah dan revertable, dengan monitoring terpasang.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-Chesterton's fence: a reformer sees a fence across a field and demands its removal; the owner refuses until the reformer can say why it was put there. In code the fence is the weird branch, the extra validation, the delay nobody can explain, the flag nobody remembers — and the reason is rarely in a comment; it lives in an incident, a customer escalation, or a five-year-old commit message. Changing what you do not understand is not refactoring; it is guessing with production traffic.
+Chesterton's fence: seorang reformis melihat fence melintang di sebuah ladang dan menuntut penghapusannya; pemiliknya menolak sampai si reformis bisa mengatakan mengapa fence itu didirikan. Dalam kode, fence itu adalah branch yang aneh, validation yang ekstra, delay yang tak bisa dijelaskan siapa pun, flag yang tak diingat siapa pun — dan alasannya jarang ada di comment; ia hidup dalam sebuah incident, eskalasi customer, atau commit message berumur lima tahun. Mengubah apa yang tidak dipahami bukanlah refactor; itu menebak dengan traffic production.
 
-## When to use
+## Kapan pakai
 
-- Touching legacy code with unclear invariants.
-- Reviewing deletion and "cleanup" PRs.
-- Infrastructure changes: security groups, cron schedules, retry loops, timeouts.
-- Repurposing old names — flags, config keys, status codes, endpoints.
+- Menyentuh legacy code dengan invariant yang tidak jelas.
+- Me-review PR penghapusan dan "cleanup".
+- Perubahan infrastructure: security group, jadwal cron, retry loop, timeout.
+- Memfungsikan ulang nama lama — flag, config key, status code, endpoint.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- When the fence is provably a leftover: verified dead code with no callers, no references in configs or docs, and a history showing why it died — delete it (see YAGNI).
-- When the behavior is captured by an executable test that documents the invariant — the reason now lives in the suite, not in oral history.
-- Greenfield code you wrote yourself, before anyone depends on it.
+- Ketika fence itu terbukti sebuah sisa: dead code terverifikasi tanpa caller, tanpa referensi di config atau docs, dan dengan history yang menunjukkan mengapa ia mati — hapus (lihat YAGNI).
+- Ketika perilakunya ditangkap oleh test yang executable dan mendokumentasikan invariant-nya — alasannya kini hidup di dalam suite, bukan dalam sejarah lisan.
+- Kode greenfield yang Anda tulis sendiri, sebelum ada siapa pun yang bergantung padanya.
 
 ## Anti-pattern
 
-- "This looks dead, deleting." as the entire PR description.
-- Repurposing an existing flag for new behavior because the name is close enough.
-- Removing a validation "because it rejects our new valid input" without finding the bad input it was rejecting.
-- Big-bang cleanup PRs deleting fifty unexplained things in one diff.
-- Mixing a cleanup into an unrelated feature change, so neither can be reverted alone.
+- "Ini kelihatan mati, hapus." sebagai seluruh deskripsi PR.
+- Memfungsikan ulang flag yang ada untuk perilaku baru karena namanya dianggap cukup mirip.
+- Menghapus sebuah validation "karena menolak input valid baru kita" tanpa menemukan input buruk yang sedang ia tolak.
+- PR cleanup big-bang yang menghapus lima puluh hal tak terjelaskan dalam satu diff.
+- Mencampur cleanup ke dalam perubahan fitur yang tak terkait, sehingga keduanya tak bisa di-revert sendiri-sendiri.
 
-## Code example
+## Contoh kode
 
-Wrong — removing the fence by looks:
+Salah — menghapus fence berdasarkan penampilan:
 
 ```ts
-// PR title: "cleanup: remove pointless delay in order submit"
+// Judul PR: "cleanup: hapus delay tak berguna di order submit"
 async function submit(order: Order) {
-  return api.submit(order); // delay removed — nobody knew what it was for
+  return api.submit(order); // delay dihapus — tak ada yang tahu untuk apa
 }
 ```
 
-Right — find the reason first, then decide:
+Benar — temukan alasannya dulu, baru putuskan:
 
 ```ts
-// The delay sheds load from a downstream queue that drops bursts
-// (incident 2021-04, now documented in ADR-114).
-// Keep it until the queue fix ships; remove BOTH together.
+// Delay itu meredam beban dari queue downstream yang menjatuhkan burst
+// (incident 2021-04, kini terdokumentasi di ADR-114).
+// Pertahankan sampai perbaikan queue terkirim; hapus KEDUANYA bersama-sama.
 async function submit(order: Order) {
   await delay(1500);
   return api.submit(order);
 }
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Fences are cheap to respect when process demands evidence:
+Fence murah untuk dihormati ketika proses menuntut bukti:
 
-- **Deletion evidence rule**: PRs that delete code must link their proof — git blame summary, no-caller evidence from static analysis (knip, vulture), or the incident that introduced the code. "Looks dead" is not evidence.
-- **Quarantine before delete**: prefer disable-behind-a-flag plus a monitoring window over hard deletion, expand-contract style, so the removal itself is revertable.
-- **Staged rollout with auto-rollback**: deploy deletion changes canary-first with alerting on the affected path (see Blast Radius, Observability First).
-- **Review checklist**: the reviewer must be able to answer "why did this exist?" — if neither author nor reviewer can, the deletion waits.
+- **Aturan bukti penghapusan**: PR yang menghapus kode harus menautkan buktinya — ringkasan git blame, bukti tanpa-caller dari static analysis (knip, vulture), atau incident yang memperkenalkan kode itu. "Kelihatan mati" bukan bukti.
+- **Karantina sebelum hapus**: utamakan disable-di-balik-flag plus jendela monitoring daripada hard delete, gaya expand-contract, sehingga penghapusannya sendiri revertable.
+- **Staged rollout dengan auto-rollback**: deploy perubahan penghapusan canary-first dengan alerting pada path yang terdampak (lihat Blast Radius, Observability First).
+- **Checklist review**: reviewer harus bisa menjawab "mengapa ini dulu ada?" — jika penulis maupun reviewer tidak bisa, penghapusan menunggu.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On 1 August 2012, Knight Capital deployed new code for its Retail Liquidity Program. The new code repurposed an old feature flag that had once activated a deactivated "Power Peg" order function — code that had been left on servers rather than removed. The deployment reached only seven of eight servers. When markets opened, orders carrying the repurposed flag triggered the dormant Power Peg code on the missed server — a safeguard that had once bounded it had been retired years earlier — and it pumped erroneous orders into the market for the better part of an hour. Knight lost more than USD 460 million and survived only through acquisition. A verified deployment would have reduced that day's damage; not reusing a flag whose old meaning was still live in production would have removed the failure mode. SEC order: https://www.sec.gov/litigation/admin/2013/34-70694.pdf (verification: ok for the incident and the order; perlu for exact figures — read the order before quoting precise numbers).
+Pada 1 Agustus 2012, Knight Capital men-deploy kode baru untuk Retail Liquidity Program-nya. Kode baru itu memfungsikan ulang feature flag lama yang dulu pernah mengaktifkan fungsi order "Power Peg" yang sudah dinonaktifkan — kode yang dibiarkan di server-server alih-alih dihapus. Deployment itu hanya sampai ke tujuh dari delapan server. Ketika pasar dibuka, order-order yang membawa flag yang dipakai ulang itu memicu kode Power Peg yang terpendam di server yang terlewat — safeguard yang dulu membatasinya sudah dipensiunkan bertahun-tahun sebelumnya — dan kode itu memompa order keliru ke pasar selama sebagian besar satu jam. Knight kehilangan lebih dari USD 460 juta dan hanya bertahan lewat akuisisi. Deployment yang terverifikasi akan mengurangi kerusakan hari itu; tidak memakai ulang flag yang makna lamanya masih hidup di production akan menghilangkan failure mode itu. SEC order: https://www.sec.gov/litigation/admin/2013/34-70694.pdf (verification: ok untuk insiden dan ordernya; perlu untuk angka eksak — baca ordernya sebelum mengutip angka persis).
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Fence-keeping vs code hygiene**: dead code is a real liability — bit-rot, review cost, false confidence. The rule is not "never delete"; it is "understand, then delete." Verified-dead code should go (see YAGNI).
-- **Fence-hunting vs velocity**: waiting for the one engineer who knows a subsystem costs days. Mitigate with small, revertable deletions under monitoring rather than big-bang removal — or ship the removal behind a flag first.
-- **Oral history vs codified knowledge**: a fence whose reason lives in one person's memory is already failing. The durable fix is moving the reason into tests, ADRs, and runbooks — making the intent observable, not just the behavior.
+- **Memelihara fence vs higiene kode**: dead code adalah liability nyata — bit-rot, biaya review, keyakinan palsu. Aturannya bukan "jangan pernah hapus"; melainkan "pahami, lalu hapus". Kode yang terbukti mati harus pergi (lihat YAGNI).
+- **Berburu fence vs velocity**: menunggu satu-satunya engineer yang memahami sebuah subsistem berbiaya berhari-hari. Mitigasilah dengan penghapusan kecil yang revertable di bawah monitoring alih-alih removal big-bang — atau kirimkan penghapusannya di balik flag terlebih dahulu.
+- **Sejarah lisan vs knowledge terkodifikasi**: fence yang alasannya hidup di ingatan satu orang sudah gagal sejak awal. Perbaikan yang tahan lama adalah memindahkan alasannya ke test, ADR, dan runbook — menjadikan intent-nya observable, bukan hanya perilakunya.
 
-## Related principles
+## Prinsip terkait
 
-- [Observability First](/docs/principles/reliability/observability-first) — you cannot judge a fence you cannot see working.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — stage deletions so the worst case is small.
-- [Expand-Contract](/docs/principles/data/expand-contract) — remove in safe phases; never big-bang.
-- [Single Responsibility](/docs/principles/architecture/single-responsibility) — the Knight flag failed by carrying two meanings at once.
-- [You Aren't Gonna Need It](/docs/principles/design/yagni) — the counterweight for code that is provably dead.
+- [Observability First](/id/docs/principles/reliability/observability-first) — Anda tidak bisa menilai fence yang tidak bisa Anda lihat bekerjanya.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — pentaskan penghapusan sehingga worst case-nya kecil.
+- [Expand-Contract](/id/docs/principles/data/expand-contract) — hapus dalam fase yang aman; jangan pernah big-bang.
+- [Single Responsibility](/id/docs/principles/architecture/single-responsibility) — flag Knight gagal karena membawa dua makna sekaligus.
+- [You Aren't Gonna Need It](/id/docs/principles/design/yagni) — pemberat untuk kode yang terbukti mati.
 
-## References
+## Referensi
 
-- G.K. Chesterton, *The Thing* (1929) — the fence parable; commonly located in the essay "The Drift from Domesticity" (verification: ok for the book and year; locate the exact passage before quoting verbatim).
+- G.K. Chesterton, *The Thing* (1929) — parabel fence itu; umumnya terletak di esai "The Drift from Domesticity" (verification: ok untuk buku dan tahunnya; temukan bagian persisnya sebelum mengutip verbatim).
 - SEC Administrative Order, Release No. 34-70694 (2013) — In the Matter of Knight Capital Americas LLC. https://www.sec.gov/litigation/admin/2013/34-70694.pdf

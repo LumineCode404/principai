@@ -2,7 +2,7 @@
 title: Observability First
 id: observability-first
 name: Observability First
-summary: TERJEMAHAN DRAF — You cannot operate what you cannot see — logs, metrics, and traces exist before the incident, not after it.
+summary: Apa yang tak terlihat tak bisa dioperasikan — log, metric, dan trace harus ada sebelum incident, bukan setelahnya.
 category: reliability
 type: principle
 severity: important
@@ -16,105 +16,107 @@ tags:
   - "metrics"
   - "tracing"
   - "alerts"
-aliases: []
-sources: []
+aliases:
+  - "Observability Before Optimization"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "5876fc2ebf49be48"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/reliability/observability-first.mdx */}
-{/* source_hash EN: 5876fc2ebf49be48 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/reliability/observability-first.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Never deploy or operate a system you cannot answer basic questions about — is it working, for whom, how fast, and why not — using telemetry that already exists. Instrument failure modes before shipping, and wire dashboards and alerts before the first production deploy. If the observability you needed during an incident was missing, note the gap and close it before the next one — and never let the tools you recover with depend on the system being recovered.
+Jangan pernah men-deploy atau mengoperasikan sistem ketika pertanyaan dasar tentangnya — apakah bekerja, untuk siapa, seberapa cepat, dan mengapa tidak — tidak bisa dijawab dengan telemetry yang memang sudah ada. Instrumentasikan failure mode sebelum shipping, dan pasang dashboard serta alert sebelum deploy production yang pertama. Jika observability yang dibutuhkan saat sebuah incident ternyata tidak ada, catat gap itu dan tutup sebelum incident berikutnya — dan jangan pernah biarkan tool yang dipakai untuk recovery bergantung pada sistem yang sedang direcovery.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Observability is the ability to ask new questions about a system's internal state from its outputs, without shipping new code. The outputs — structured logs, metrics, traces — must exist before the incident, because the incident is exactly when there is no time to add them. The test: page yourself at 3am and ask whether you can localize the failing component from a dashboard in minutes, or whether you start guessing.
+Observability adalah kemampuan mengajukan pertanyaan baru tentang state internal sebuah sistem dari output-nya, tanpa harus shipping kode baru. Output itu — log terstruktur, metric, trace — harus ada sebelum incident, karena incident justru saatnya ketika tidak ada waktu untuk menambahkannya. Ujiannya: page diri sendiri pada jam 3 pagi dan tanyakan, apakah komponen yang gagal bisa dilokalkan dari sebuah dashboard dalam hitungan menit, atau justru mulai menebak-nebak.
 
-## When to use
+## Kapan pakai
 
-- Every service before its first production deploy — "before" is the whole point.
-- Migrations and schema changes: old and new paths must be comparable side by side (see Expand-Contract).
-- Databases and queues: replication lag, queue depth, age of the oldest message, backup freshness.
-- ML: training/serving skew, feature quality metrics, per-model error signals.
+- Setiap service sebelum deploy production pertamanya — "sebelum" adalah intinya.
+- Migration dan perubahan schema: path lama dan baru harus bisa dibandingkan berdampingan (lihat Expand-Contract).
+- Database dan queue: replication lag, kedalaman queue, usia pesan tertua, kebaruan backup.
+- ML: training/serving skew, metric kualitas feature, sinyal error per model.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Do not log secrets or PII — telemetry is a data breach surface (see Secrets Hygiene); redact at the emitter, not downstream.
-- Do not instrument to absurd resolution where collection cost distorts the system — sample traces instead of tracing everything.
-- Do not build bespoke dashboards for hypothetical questions — instrument real failure modes and the golden signals first (weigh against YAGNI).
+- Jangan mencatat secrets atau PII ke log — telemetry adalah permukaan data breach (lihat Secrets Hygiene); lakukan redaksi di emitter, bukan di hilir (downstream).
+- Jangan melakukan instrumentasi hingga resolusi absurd yang biaya pengumpulannya mendistorsi sistem — lakukan sampling terhadap trace alih-alih men-trace semuanya.
+- Jangan membangun dashboard khusus untuk pertanyaan hipotetis — instrumentasikan failure mode nyata dan golden signals lebih dulu (ditimbang terhadap YAGNI).
 
 ## Anti-pattern
 
-- "It's slow, add a log line" — in production, after the incident started.
-- A single success/failure counter with no dimensions: no endpoint, tenant, region, or version to slice by.
-- Unstructured prose log lines that cannot be filtered, counted, or joined.
-- Alerts with no runbook, paging for everything so that no one reads anything.
-- Internal tooling hosted inside the infrastructure it is supposed to observe.
+- "Lambat, tambahkan satu baris log" — di production, setelah incident dimulai.
+- Satu counter sukses/gagal tanpa dimensi: tidak ada endpoint, tenant, region, atau version untuk di-slice.
+- Baris log prosa tak terstruktur yang tidak bisa difilter, dihitung, atau di-join.
+- Alert tanpa runbook, me-page untuk segala hal sehingga tak ada yang membaca apa pun.
+- Tooling internal yang di-host di dalam infrastruktur yang seharusnya ia amati.
 
-## Code example
+## Contoh kode
 
-Wrong — invisible failure:
+Salah — kegagalan tak terlihat:
 
 ```python
 try:
     charge(order)
 except PaymentError:
-    pass                       # or print("error") — no metric, no context, no trace
+    pass                       # atau print("error") — tanpa metric, tanpa konteks, tanpa trace
 ```
 
-Right — visible failure, still loud:
+Benar — kegagalan yang terlihat, tetap keras:
 
 ```python
 try:
     charge(order)
 except PaymentError as e:
-    log.error("charge_failed", order_id=order.id, code=e.code)   # structured, searchable
-    metrics.increment("payments.failed", tags={"code": e.code})   # counted, sliceable
-    trace.set_error(e)                                           # correlated request-wide
-    raise                                                        # observable AND failing
+    log.error("charge_failed", order_id=order.id, code=e.code)   # terstruktur, mudah dicari
+    metrics.increment("payments.failed", tags={"code": e.code})   # terhitung, bisa di-slice
+    trace.set_error(e)                                           # terkorelasi sepanjang request
+    raise                                                        # observable DAN gagal
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Observability is enforced by pipeline and process, not by good intentions:
+Observability ditegakkan oleh pipeline dan proses, bukan oleh niat baik:
 
-- **Scaffold-time defaults**: every new service starts with golden-signal dashboards (error ratio, latency percentiles, saturation) and error alerts from the project template.
-- **CI checks**: a route or handler that emits no standard error metric and structured error log does not pass review — "no unobserved endpoint".
-- **Structured logging with a schema**: a shared library and lint rules reject ad-hoc print-style logging in production code.
-- **Trace propagation middleware**: trace IDs are mandatory across service boundaries, so one slow request can be followed end to end.
-- **Out-of-band hosting**: status pages, incident tooling, and monitoring run on separate infrastructure and credentials from everything they watch.
-- **Runbook requirement**: an alert without a runbook link is deleted before it is allowed to page anyone.
+- **Default bawaan scaffold**: setiap service baru dimulai dengan dashboard golden-signal (error ratio, persentil latency, saturation) dan alert error dari template proyek.
+- **Check di CI**: route atau handler yang tidak memancarkan metric error standar dan log error terstruktur tidak lolos review — "tidak boleh ada endpoint yang tak terobservasi".
+- **Logging terstruktur dengan schema**: library bersama dan lint rule menolak logging ala print ad-hoc di kode production.
+- **Middleware propagasi trace**: trace ID wajib melintasi batas antar-service, sehingga satu request yang lambat bisa diikuti ujung ke ujung.
+- **Hosting out-of-band**: halaman status, tooling incident, dan monitoring berjalan di infrastruktur dan credentials terpisah dari semua yang mereka awasi.
+- **Syarat runbook**: alert tanpa link runbook dihapus sebelum dibiarkan me-page siapa pun.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On 2021-10-04, Facebook's route withdrawal made the platform unreachable worldwide — and the same failure domain contained the tools engineers use to observe and operate the network. Internal systems, DNS, and out-of-band management were themselves unreachable; diagnosis and remote recovery were blocked, and restoration required engineers physically present at the data centers. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — when you cannot observe, you cannot even recover. The general lesson predates and outlives this incident: recovery paths must survive the failures they exist to fix. (verification: perlu for link details — read the postmortem before quoting specifics.)
+Pada 2021-10-04, penarikan route oleh Facebook membuat platformnya tak bisa dijangkau di seluruh dunia — dan failure domain yang sama memuat tool yang dipakai para engineer untuk mengobservasi dan mengoperasikan jaringan itu. Sistem internal, DNS, dan manajemen out-of-band sendiri ikut tak bisa dijangkau; diagnosis dan recovery jarak jauh terblokir, dan pemulihannya menuntut kehadiran fisik engineer di data center. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — ketika tak bisa mengobservasi, tak bisa pula me-recovery. Pelajaran umumnya lebih tua dan lebih awet dari incident ini: path recovery harus selamat dari kegagalan yang memang mereka ada untuk perbaiki. (verification: perlu untuk detail link — baca postmortem-nya sebelum mengutip hal spesifik.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Observability vs. cost**: full-resolution telemetry is expensive; sample traces and aggregate logs, but never sample away the signal that carries alerts.
-- **Observability vs. privacy**: telemetry is a data breach surface — PII and secrets are redacted at the emitter, not downstream.
-- **Weigh against YAGNI**: instrument the failure modes and golden signals you actually have; resist inventing metrics for hypothetical questions.
+- **Observability vs. biaya**: telemetry resolusi penuh itu mahal; lakukan sampling terhadap trace dan agregasikan log, tapi jangan pernah men-sampling sampai hilang sinyal yang membawa alert.
+- **Observability vs. privasi**: telemetry adalah permukaan data breach — PII dan secrets di-redaksi di emitter, bukan di hilir (downstream).
+- **Ditimbang terhadap YAGNI**: instrumentasikan failure mode dan golden signals yang benar-benar ada; tahan diri untuk tidak mengarang metric demi pertanyaan hipotetis.
 
-## Related principles
+## Prinsip terkait
 
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — the error must be raised before it can be observed.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — keep the observation tools outside the blast radius they must survive.
-- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — degradation must be a visible state, not an invisible one.
-- [Secrets Hygiene](/docs/principles/security/secrets-hygiene) — telemetry must never become the leak.
+- [Fail-Visible](/id/docs/principles/reliability/fail-visible) — error harus di-raise lebih dulu sebelum bisa diobservasi.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — jaga tool observasi tetap berada di luar blast radius yang harus mereka lewati dengan selamat.
+- [Graceful Degradation](/id/docs/principles/reliability/graceful-degradation) — degradation harus menjadi state yang terlihat, bukan yang tak terlihat.
+- [Secrets Hygiene](/id/docs/principles/security/secrets-hygiene) — telemetry tidak boleh pernah menjadi titik bocornya.
 
-## References
+## Referensi
 
-- Google SRE Book — https://sre.google/sre-book/ (monitoring distributed systems; the four golden signals; postmortem culture).
+- Google SRE Book — https://sre.google/sre-book/ (monitoring sistem terdistribusi; empat golden signals; budaya postmortem).
 - Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/

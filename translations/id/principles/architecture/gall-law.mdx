@@ -2,7 +2,7 @@
 title: Gall's Law
 id: gall-law
 name: Gall's Law
-summary: TERJEMAHAN DRAF — A complex system that works evolved from a simple system that worked — design for growth, not for the final vision.
+summary: Sistem kompleks yang bekerja berevolusi dari sistem sederhana yang pernah bekerja — rancang untuk pertumbuhan, bukan untuk visi akhir.
 category: architecture
 type: law
 severity: important
@@ -15,104 +15,105 @@ tags:
   - "evolution"
   - "systems"
 aliases: []
-sources: []
+sources:
+  - 'John Gall, Systemantics: How Systems Really Work and How They Fail'
 status: draft
 verification: perlu
 source_hash: "03377707577109b1"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/architecture/gall-law.mdx */}
-{/* source_hash EN: 03377707577109b1 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/architecture/gall-law.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Ship the simplest system that works end-to-end, then grow it under real usage. Never plan a greenfield build as a single big-bang delivery of the final architecture — plan it as a sequence of working systems. When a design cannot be reached incrementally, treat that as a design flaw, not a scheduling problem.
+Kirim sistem paling sederhana yang bekerja end-to-end, lalu tumbuhkan di bawah penggunaan nyata. Jangan pernah merencanakan pembangunan greenfield sebagai satu pengiriman big-bang tunggal atas arsitektur final — rencanakan sebagai urutan sistem-sistem yang bekerja. Ketika sebuah desain tidak bisa dicapai secara inkremental, perlakukan itu sebagai cacat desain, bukan masalah penjadwalan.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Complex systems that work are invariably evolved from simple systems that worked; complex systems designed from scratch cannot be debugged into working, because you cannot debug something that has never run. The design task is therefore not to specify the final system but to specify the next small working system and the growth path between the steps. Ambition is allowed; big-bang delivery of ambition is not.
+Sistem kompleks yang bekerja tanpa kecuali berevolusi dari sistem sederhana yang pernah bekerja; sistem kompleks yang dirancang dari nol tidak bisa di-debug hingga bekerja, karena tidak mungkin men-debug sesuatu yang belum pernah berjalan. Tugas perancangan karenanya bukan menetapkan sistem final, melainkan menetapkan sistem kecil yang bekerja berikutnya beserta jalur pertumbuhan di antara langkah-langkahnya. Ambisi diperbolehkan; pengiriman ambisi secara big-bang tidak.
 
-## When to use
+## Kapan pakai
 
-- Greenfield products and platforms where requirements are still hypotheses.
-- Migrations and rewrites — plan them as staged, strangler-style steps with running value at each stage.
-- Architecture roadmaps: each phase must work, not merely assemble toward the end state.
-- Anything where real usage patterns are unknown until users arrive.
+- Produk dan platform greenfield tempat requirement masih berupa hipotesis.
+- Migration dan penulisan ulang — rencanakan sebagai langkah bertahap bergaya strangler dengan nilai yang berjalan di setiap tahap.
+- Roadmap arsitektur: setiap fase harus bekerja, bukan sekadar merakit menuju keadaan akhir.
+- Apa pun tempat pola penggunaan nyata tak diketahui sampai para pengguna datang.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Re-implementing a proven, fully specified system — the final design is genuinely known; treat it as engineering, not exploration.
-- Contractual or regulated deliverables that fix scope up front; deliver the simple core plus the mandatory control planes, not speculative features.
-- Small utilities that are already the simple system — no evolution needed.
-- Not an excuse to skip hard-to-reverse thinking: data models, security boundaries, and service seams deserve up-front care even while everything else stays simple.
+- Mengimplementasikan ulang sebuah sistem yang sudah terbukti dan terspesifikasi penuh — desain finalnya memang diketahui; perlakukan sebagai engineering, bukan eksplorasi.
+- Deliverable kontraktual atau teregulasi yang menetapkan scope di muka; kirim inti yang sederhana plus control plane wajibnya, bukan fitur spekulatif.
+- Utility kecil yang memang sudah menjadi sistem sederhananya — tak perlu evolusi.
+- Bukan alasan untuk melewatkan pemikiran yang sulit dibalik: data model, security boundary, dan service seam pantas dirawat sejak awal meski sisanya tetap sederhana.
 
 ## Anti-pattern
 
-- A 200-page spec, a one-year build, and a launch date where the system runs for the first time.
-- Building "the platform" before the first product that would run on it.
-- Abstractions for imagined future scale — multi-region, multi-tenant, plugin systems with no plugins.
-- Freezing a failed first version because "we already designed it" instead of evolving it.
+- Spesifikasi 200 halaman, pembangunan satu tahun, dan tanggal rilis tempat sistem berjalan untuk pertama kalinya.
+- Membangun "platform" sebelum produk pertama yang akan berjalan di atasnya.
+- Abstraction untuk skala masa depan yang dibayangkan — multi-region, multi-tenant, sistem plugin tanpa plugin.
+- Membekukan versi pertama yang gagal karena "sudah kita rancang" alih-alih mengevolusikannya.
 
-## Code example
+## Contoh kode
 
-Wrong — the enterprise scaffold that must be completed before anything works:
+Salah — kerangka enterprise yang harus tuntas sebelum ada apa pun yang bekerja:
 
 ```ts
-// 14 packages, 0 served requests: EventBus, TenantResolver, RegionRouter...
+// 14 package, 0 request terlayani: EventBus, TenantResolver, RegionRouter...
 export class EnterprisePlatform {
-  async start() { /* still wiring — no behavior exists to test against */ }
+  async start() { /* masih menyambung kabel — belum ada perilaku untuk diuji */ }
 }
 ```
 
-Right — one vertical slice that works, plus a stated growth path:
+Benar — satu vertical slice yang bekerja, plus jalur pertumbuhan yang dinyatakan:
 
 ```ts
-// day 1: a request goes through; the team learns from real traffic
+// hari 1: sebuah request lewat; tim belajar dari trafik nyata
 export async function signup(req: Request) {
   const user = await db.users.insert(parseSignup(req));
   await mailer.send(welcome(user));
 }
-// Growth path: extract the mailer behind a port when a second sender appears;
-// shard db.users when measured load demands it — not before.
+// Jalur pertumbuhan: ekstrak mailer di balik port saat sender kedua muncul;
+// shard db.users saat beban terukur menuntutnya — tidak sebelum itu.
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by process gates, not by intent:
+Prinsip ini ditegakkan oleh process gate, bukan oleh niat:
 
-- **Milestone gates**: no increment counts as done without a demo running end-to-end in a production-like environment.
-- **WIP limits**: cap concurrent unfinished layers — an ever-growing unfinished platform is the signature failure this law warns about.
-- **RFC discipline**: every proposal must answer "what is the smallest version that runs?" and "what will we learn from it?".
-- **Metrics before scale**: dashboards and load data are prerequisites for approving the next complexity step.
+- **Milestone gate**: tak ada increment yang dihitung selesai tanpa demo yang berjalan end-to-end di lingkungan mirip production.
+- **Batas WIP**: batasi jumlah layer tak selesai yang berjalan serentak — platform tak selesai yang terus membesar adalah kegagalan khas yang diperingatkan hukum ini.
+- **Disiplin RFC**: setiap proposal harus menjawab "apa versi terkecil yang berjalan?" dan "apa yang akan kita pelajari darinya?".
+- **Metrik sebelum skala**: dashboard dan data beban adalah prasyarat untuk menyetujui langkah kompleksitas berikutnya.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-A company funded a one-year, 200-page-spec "enterprise platform": shared auth, workflow engine, reporting framework, and only then the first business module. Integration testing started at month ten and found the layers did not fit, while requirements had drifted for a year without feedback. The project was cancelled before serving a single customer. A rival internal team shipped a crude single-purpose service in six weeks, learned from real users, and quietly absorbed the business need. (ilustratif — composite of a common failure mode; verification: perlu)
+Sebuah perusahaan mendanai "platform enterprise" spesifikasi-200-halaman berdurasi satu tahun: auth bersama, workflow engine, kerangka reporting, dan baru kemudian module bisnis pertama. Integration testing dimulai di bulan kesepuluh dan menemukan layer-layer itu tidak saling cocok, sementara requirement sudah bergeser selama setahun tanpa umpan balik. Proyek itu dibatalkan sebelum melayani satu pelanggan pun. Satu tim internal pesaing mengirim layanan satu-fungsi yang kasar dalam enam minggu, belajar dari pengguna nyata, dan diam-diam menyerap kebutuhan bisnis itu. (ilustratif — komposit dari mode kegagalan yang umum; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Evolution vs. up-front design**: some decisions (data model, security boundaries, service seams) are expensive to reverse — invest in those early even while everything else stays simple; see Chesterton's Fence for what already exists.
-- **Growth path vs. YAGNI**: YAGNI says do not build the future; this law says plan the path to it. The compromise: build only the current working system, but avoid decisions that block the next one.
-- **Simple-first vs. safety obligations**: "start simple" never starts unsafe — auth, backups, and least-authority must exist in version one, simple but present.
+- **Evolusi vs. desain di muka**: sebagian keputusan (data model, security boundary, service seam) mahal untuk dibalik — investasikan lebih awal pada hal-hal itu meski sisanya tetap sederhana; lihat Chesterton's Fence untuk apa yang sudah ada.
+- **Jalur pertumbuhan vs. YAGNI**: YAGNI berkata jangan membangun masa depan; hukum ini berkata rancankan jalurnya. Komprominya: bangun hanya sistem yang bekerja saat ini, tetapi hindari keputusan yang memblokir sistem berikutnya.
+- **Sederhana-dulu vs. kewajiban keselamatan**: "mulailah sederhana" tak pernah berarti mulai tak aman — auth, backup, dan least-authority harus ada di versi satu, sederhana tetapi ada.
 
-## Related principles
+## Prinsip terkait
 
-- [Conway's Law](/docs/principles/architecture/conways-law) — the org must be able to evolve with the system, or it will not.
-- [KISS](/docs/principles/design/kiss) — the starting system should be simple, not merely small.
-- [YAGNI](/docs/principles/design/yagni) — the counterweight to speculative platform layers.
-- [Expand-Contract](/docs/principles/data/expand-contract) — the safe step size for schema evolution.
-- [Observability-First](/docs/principles/reliability/observability-first) — you cannot evolve what you cannot see.
-- [Chesterton's Fence](/docs/principles/design/chesterton-fence) — before removing inherited behavior, learn why it exists.
+- [Conway's Law](/id/docs/principles/architecture/conways-law) — organisasi harus mampu berevolusi bersama sistemnya, jika tidak ia tidak akan berevolusi.
+- [KISS](/id/docs/principles/design/kiss) — sistem awalnya harus sederhana, bukan sekadar kecil.
+- [YAGNI](/id/docs/principles/design/yagni) — pemberat melawan layer platform spekulatif.
+- [Expand-Contract](/id/docs/principles/data/expand-contract) — ukuran langkah aman untuk evolusi schema.
+- [Observability-First](/id/docs/principles/reliability/observability-first) — tak bisa mengevolusikan apa yang tak terlihat.
+- [Chesterton's Fence](/id/docs/principles/design/chesterton-fence) — sebelum menghapus perilaku warisan, pelajari mengapa ia ada.
 
-## References
+## Referensi
 
-- John Gall, *Systemantics: How Systems Really Work and How They Fail* — origin of the law (verification: perlu — confirm edition and exact wording before quoting).
-- Google SRE Book — incremental rollout as the operational cousin of evolutionary design: https://sre.google/sre-book/ (verification: perlu for chapter-level claims).
+- John Gall, *Systemantics: How Systems Really Work and How They Fail* — asal-usul hukum ini (verification: perlu — konfirmasi edisi dan kata-kata persisnya sebelum mengutip).
+- Google SRE Book — incremental rollout sebagai sepupu operasional dari desain evolusioner: https://sre.google/sre-book/ (verification: perlu untuk klaim level-bab).

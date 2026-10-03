@@ -2,7 +2,7 @@
 title: Versioned Contracts
 id: versioned-contracts
 name: Versioned Contracts
-summary: TERJEMAHAN DRAF — Public contracts change only through versions with deprecation windows — never mutate the meaning of an existing one.
+summary: Contract publik hanya berubah melalui versi dengan deprecation window — jangan pernah mengubah makna versi yang sudah ada.
 category: api
 type: principle
 severity: important
@@ -14,106 +14,108 @@ tags:
   - "versioning"
   - "deprecation"
   - "compatibility"
-aliases: []
-sources: []
+aliases:
+  - "Version Your Interfaces"
+sources:
+  - 'https://semver.org'
 status: draft
 verification: perlu
 source_hash: "33e6cdda024716e4"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/api/versioned-contracts.mdx */}
-{/* source_hash EN: 33e6cdda024716e4 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/api/versioned-contracts.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Change any published contract only through a new version, and keep the old one working through an announced deprecation window. Never alter the meaning of an existing version — not a field's type, not an error code, not a default. Before removing anything, measure who still uses it, and sunset on evidence, not on hope.
+Ubah contract yang sudah dipublikasikan hanya melalui versi baru, dan jaga versi lama tetap bekerja selama deprecation window yang diumumkan. Jangan pernah mengubah makna sebuah versi yang sudah ada — bukan type sebuah field, bukan kode error, bukan default. Sebelum menghapus apa pun, ukur siapa yang masih memakainya, dan lakukan sunset berdasarkan bukti, bukan harapan.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Once a contract is public, its meaning is frozen: changes ship as new versions (semver majors for libraries, API versions for services, expand-contract steps for databases), while the old version is deprecated, monitored, and eventually removed on a published schedule. Silently mutating semantics under the same version number is the cardinal sin — it breaks consumers who did everything right. Versioning is how you keep the freedom to change without claiming the right to surprise.
+Setelah sebuah contract menjadi publik, maknanya membeku: perubahan dikirim sebagai versi baru (major semver untuk library, versi API untuk service, langkah expand-contract untuk database), sementara versi lama di-deprecate, dipantau, dan akhirnya dihapus menurut jadwal yang dipublikasikan. Mengubah semantik secara diam-diam di bawah nomor versi yang sama adalah dosa besar — itu merusak consumer yang sudah melakukan semuanya dengan benar. Versioning adalah cara mempertahankan kebebasan berubah tanpa mengklaim hak untuk mengejutkan.
 
-## When to use
+## Kapan pakai
 
-- Public API surfaces and shared libraries with consumers you do not control.
-- Team-facing internal APIs where consumers deploy independently.
-- Database schema changes read by other services — paired with expand-contract.
-- Any removal, rename, type change, or behavioral change to something already shipped.
+- Permukaan API publik dan shared library dengan consumer yang berada di luar kendali.
+- API internal lintas tim tempat consumer deploy secara independen.
+- Perubahan schema database yang dibaca service lain — berpasangan dengan expand-contract.
+- Setiap removal, rename, perubahan type, atau perubahan perilaku atas sesuatu yang sudah terkirim.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Pre-1.0 experimentation where consumers knowingly accept churn — that is semver's own 0.x convention.
-- Single-consumer internal tooling deployed in lockstep with its caller.
-- Security emergencies: still versioned, but the window collapses to "announce loudly, fix now" — weigh the harm against the breakage instead of waiting out a calendar.
+- Eksperimen pra-1.0 tempat consumer dengan sadar menerima churn — itu konvensi 0.x milik semver sendiri.
+- Tooling internal ber-consumer tunggal yang dideploy serentak dengan pemanggilnya.
+- Darurat keamanan: tetap berversi, tetapi window-nya menyusut menjadi "umumkan dengan lantang, perbaiki sekarang" — timbangkan bahayanya terhadap kerusakan, alih-alih menunggu kalender berjalan.
 
 ## Anti-pattern
 
-- A response field silently changes type from string to number inside the same version.
-- A "minor" release renames a column or tightens validation that used to pass.
-- Deprecation by exception — it throws now, so callers "know".
-- Removing a field or package because "nobody should be using that" — Hyrum's Law guarantees somebody is.
-- Deprecating without usage metrics: the sunset date is a guess, and the guess is somebody's outage.
+- Sebuah field response diam-diam berganti type dari string ke number di dalam versi yang sama.
+- Sebuah rilis "minor" mengganti nama kolom atau memperketat validasi yang dulu lolos.
+- Deprecation lewat exception — sekarang melempar error, jadi pemanggil "tahu".
+- Menghapus sebuah field atau package karena "seharusnya tidak ada yang memakai" — Hyrum's Law menjamin ada seseorang.
+- Mendeprecate tanpa metrik usage: tanggal sunset adalah tebakan, dan tebakan itu adalah outage milik seseorang.
 
-## Code example
+## Contoh kode
 
-Wrong — same version, new meaning:
+Salah — versi sama, makna baru:
 
 ```ts
-// GET /v1/plans — price used to be "19.99" (decimal string); now 1999 (cents)
+// GET /v1/plans — price dulu "19.99" (string desimal); kini 1999 (cents)
 app.get('/v1/plans', (req, res) => {
-  res.json(plans.map(p => ({ ...p, price: p.priceCents }))); // silent type flip
+  res.json(plans.map(p => ({ ...p, price: p.priceCents }))); // pembalikan type yang diam-diam
 });
 ```
 
-Right — additive change, old meaning carried through a deprecation window:
+Benar — perubahan additive, makna lama dibawa melalui deprecation window:
 
 ```ts
 app.get('/v1/plans', (req, res) => {
   res.json(plans.map(p => ({
     ...p,
-    price: (p.priceCents / 100).toFixed(2), // v1 meaning preserved — unchanged
-    price_cents: p.priceCents,              // additive; old field gets a deprecation header
+    price: (p.priceCents / 100).toFixed(2), // makna v1 dipertahankan — tidak berubah
+    price_cents: p.priceCents,              // additive; field lama diberi deprecation header
   })));
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by CI gates and counters, not by release notes:
+Prinsip ini ditegakkan oleh CI gate dan counter, bukan oleh release notes:
 
-- **Semver linters and API diff gates**: semantic-release or API diff tools fail the build when a breaking shape change ships without a version bump.
-- **OpenAPI diff in CI**: every PR's contract delta is classified (breaking / additive / compatible), and breaking changes require a new version marker.
-- **Deprecation headers and metrics**: announce via response headers, track per-field and per-endpoint usage, and gate removal on the measured consumer count reaching zero.
-- **Consumer-driven contract tests** (Pact): old consumers keep passing until the sunset actually executes.
-- **Database**: expand-contract migrations — add new, dual-write, migrate readers, and only then remove old.
+- **Semver linter dan API diff gate**: semantic-release atau tool API diff menggagalkan build ketika perubahan shape yang breaking dikirim tanpa kenaikan versi.
+- **OpenAPI diff di CI**: delta contract setiap PR diklasifikasikan (breaking / additive / compatible), dan perubahan breaking menuntut penanda versi baru.
+- **Header dan metrik deprecation**: umumkan lewat response header, lacak usage per field dan per endpoint, dan gerbangkan removal pada hitungan consumer terukur yang mencapai nol.
+- **Consumer-driven contract tests** (Pact): consumer lama tetap lolos sampai sunset benar-benar dieksekusi.
+- **Database**: migration expand-contract — tambahkan yang baru, dual-write, migrasikan reader, dan baru kemudian hapus yang lama.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-An API team changed one response field's type from decimal string to number — a "cleanup", unversioned, in a routine release. Because JSON happily carries both, nothing failed loudly: integrators with strict parsers broke in their own runtimes, while others silently mis-rounded prices. One customer found it in billing reconciliation weeks later, and the incident review had no deprecation metrics to even measure who was affected. A version bump with a window would have reduced, not prevented, the breakage — integrators still had to change code, but on a schedule they chose. The removal-without-warning cousin is left-pad 2016: a package vanished with no version, no window, and thousands of builds broke — https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL). (ilustratif for the type-flip scenario; verification: perlu)
+Sebuah tim API mengubah type satu field response dari string desimal menjadi number — sebuah "pembersihan", tanpa versi, dalam rilis rutin. Karena JSON dengan senang hati membawa keduanya, tidak ada yang gagal dengan lantang: integrator dengan parser ketat putus di runtime mereka sendiri, sementara yang lain salah membulatkan harga secara diam-diam. Seorang pelanggan menemukannya dalam reconciliation penagihan berminggu-minggu kemudian, dan incident review tak punya metrik deprecation bahkan hanya untuk mengukur siapa yang terdampak. Kenaikan versi dengan window akan mengurangi, bukan mencegah, kerusakan itu — integrator tetap harus mengubah kode, tetapi menurut jadwal yang mereka pilih sendiri. Sepupu dari penghapusan-tanpa-peringatan ini adalah left-pad 2016: sebuah package lenyap tanpa versi, tanpa window, dan ribuan build putus — https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL). (ilustratif untuk skenario type-flip; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Compatibility vs. velocity**: versioning every change is ceremony; the compromise is additive-by-default — backward-compatible additions need no new major, only meaning changes do.
-- **Versioned vs. leaked behavior**: Hyrum's Law guarantees even versioned surfaces leak observable details (timing, pagination order); version what you can, monitor what you cannot.
-- **Windows vs. urgency**: long deprecation windows protect slow consumers but double the surface you maintain; size the window on usage metrics, not politeness.
+- **Kompatibilitas vs. velocity**: memberi versi pada setiap perubahan adalah seremoni; komprominya adalah additive-by-default — penambahan yang backward-compatible tak butuh major baru, hanya perubahan makna yang butuh.
+- **Berversi vs. perilaku yang bocor**: Hyrum's Law menjamin bahwa bahkan permukaan yang berversi membocorkan detail observable (timing, urutan pagination); beri versi pada yang bisa, pantau yang tidak bisa.
+- **Window vs. urgensi**: deprecation window yang panjang melindungi consumer yang lambat tetapi menggandakan permukaan yang harus dipelihara; ukurlah window berdasarkan metrik usage, bukan kesantunan.
 
-## Related principles
+## Prinsip terkait
 
-- [Hyrum's Law](/docs/principles/api/hyrum-law) — why the old version's behavior is depended on even where undocumented.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — you cannot version what was never declared.
-- [Expand-Contract](/docs/principles/data/expand-contract) — the database-schema version of this principle.
-- [Soft-Delete](/docs/principles/data/soft-delete) — deprecation is soft-delete for contracts: remove only with evidence.
-- [Robustness Principle](/docs/principles/api/postel-robustness) — retiring a tolerated deviation must itself go through a version.
-- [Supply-Chain Vetting](/docs/principles/security/supply-chain-vetting) — pin and review what you depend on before someone else's version change becomes your outage.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — mengapa perilaku versi lama tetap diandalkan bahkan di tempat yang tak terdokumentasi.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — Anda tak bisa memberi versi pada apa yang tak pernah dideklarasikan.
+- [Expand-Contract](/id/docs/principles/data/expand-contract) — versi prinsip ini untuk schema database.
+- [Soft-Delete](/id/docs/principles/data/soft-delete) — deprecation adalah soft-delete untuk contract: hapus hanya dengan bukti.
+- [Robustness Principle](/id/docs/principles/api/postel-robustness) — memensiunkan deviasi yang ditoleransi pun harus melewati versi.
+- [Supply-Chain Vetting](/id/docs/principles/security/supply-chain-vetting) — pin dan review apa yang Anda andalkan, sebelum perubahan versi orang lain menjadi outage Anda.
 
-## References
+## Referensi
 
 - Semantic Versioning 2.0.0: https://semver.org (verified URL).
 - The Register, npm left-pad aftermath, March 2016: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).

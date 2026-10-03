@@ -1,4 +1,12 @@
 {
   "title": "Keandalan",
-  "pages": ["idempotency", "blast-radius", "fail-visible"]
+  "pages": [
+    "index",
+    "idempotency",
+    "blast-radius",
+    "graceful-degradation",
+    "retry-budget",
+    "observability-first",
+    "fail-visible"
+  ]
 }

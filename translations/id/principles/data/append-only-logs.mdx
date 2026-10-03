@@ -2,7 +2,7 @@
 title: Append-Only Logs
 id: append-only-logs
 name: Append-Only Logs
-summary: TERJEMAHAN DRAF — Record facts as appended events, never edited history — an append-only log is evidence and undo in one.
+summary: Catat fakta sebagai event yang di-append, tidak pernah history yang diedit — append-only log adalah bukti dan undo sekaligus.
 category: data
 type: principle
 severity: important
@@ -15,102 +15,106 @@ tags:
   - "audit-log"
   - "events"
   - "immutability"
-aliases: []
-sources: []
+aliases:
+  - "Event Sourcing Lite"
+  - "Write-Ahead Log"
+sources:
+  - 'Pat Helland, "Immutability Changes Everything", CIDR 2015'
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
 status: draft
 verification: perlu
 source_hash: "61cc39f28820810c"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/data/append-only-logs.mdx */}
-{/* source_hash EN: 61cc39f28820810c */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/data/append-only-logs.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Record state changes as appended, immutable events — with timestamp and actor — instead of editing rows in place. Never UPDATE or DELETE history: corrections are new events that supersede old ones, and physical removal happens only through an explicit, governed purge. Protect audit logs at the permission level so that no role, including yours, can quietly rewrite them.
+Catat perubahan state sebagai event immutable yang di-append — dengan timestamp dan actor — alih-alih mengedit baris di tempatnya. Jangan pernah UPDATE atau DELETE history: koreksi adalah event baru yang menggantikan yang lama, dan penghapusan fisik hanya boleh terjadi melalui purge yang eksplisit dan tata kelolanya diatur. Lindungi audit log di level permission sehingga tidak ada role, termasuk milik sendiri, yang bisa diam-diam menulis ulang isinya.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-An append-only log records facts as events that are never edited or removed — the write-ahead log of databases and the event log of event sourcing, applied to business and audit data. Because history cannot be rewritten, the log is simultaneously evidence (who did what, in order) and recovery (state rebuilt by replaying events). Corrections are compensating events, not edits: the log shows the mistake and the fix, which is exactly what an investigation needs.
+Append-only log mencatat fakta sebagai event yang tidak pernah diedit atau dihapus — write-ahead log milik database dan event log milik event sourcing, diterapkan pada data bisnis dan audit. Karena history tidak bisa ditulis ulang, log itu sekaligus menjadi bukti (siapa melakukan apa, dalam urutan apa) dan recovery (state dibangun ulang dengan me-replay event). Koreksi adalah event compensating, bukan edit: log menampilkan kesalahan beserta perbaikannya — tepat yang dibutuhkan sebuah investigasi.
 
-## When to use
+## Kapan pakai
 
-- Audit trails: permission changes, payments, admin actions, access to sensitive data.
-- State that must be reconstructible: event-sourced aggregates, materialized views rebuilt by replay.
-- Integration between systems — the log is the durable interface; consumers read at their own pace and position.
-- Multi-step workflows whose debugging requires the timeline, not just the current state.
+- Audit trail: perubahan permission, pembayaran, aksi admin, akses ke data sensitif.
+- State yang harus bisa direkonstruksi: aggregate event-sourced, materialized view yang dibangun ulang lewat replay.
+- Integrasi antar sistem — log adalah interface yang durable; consumer membaca dengan kecepatan dan posisinya sendiri.
+- Workflow multi-langkah yang debugging-nya membutuhkan timeline, bukan hanya state saat ini.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- High-churn mutable state where event history would dwarf the state — keep the counter, log the anomalies.
-- Simple CRUD where the current row is the whole truth; an event log adds machinery without adding answers.
-- Data whose retention is legally bounded — append-only must pair with a governed purge path, or the log itself becomes the compliance problem.
-- Hot-path reads: consumers query projections built from the log, never the raw log itself.
+- State mutable ber-churn tinggi yang history event-nya akan jauh mengalahkan ukuran state-nya — simpan saja counternya, catat anomali di log.
+- CRUD sederhana yang baris saat ini adalah seluruh kebenarannya; event log menambah mesin tanpa menambah jawaban.
+- Data yang retensinya dibatasi hukum — append-only harus berpasangan dengan purge path yang tata kelolanya diatur, atau log itu sendiri menjadi masalah compliance.
+- Read di hot path: consumer meng-query projection yang dibangun dari log, tidak pernah log mentahnya.
 
 ## Anti-pattern
 
-- An audit table writable by the same application role, with UPDATE and DELETE granted alongside INSERT.
-- "Fixing" history with an UPDATE — a rename that rewrites the actor column now lies about who did what.
-- Events with client-supplied timestamps and no ordering guarantee.
-- Treating the log as storage: querying it on every request instead of maintaining a projection.
+- Tabel audit yang bisa ditulis oleh role aplikasi yang sama, dengan UPDATE dan DELETE diberikan berdampingan dengan INSERT.
+- "Memperbaiki" history dengan UPDATE — rename yang menulis ulang kolom actor kini berbohong tentang siapa melakukan apa.
+- Event dengan timestamp buatan client tanpa jaminan pengurutan.
+- Memperlakukan log sebagai storage: meng-query-nya di setiap request alih-alih memelihara projection.
 
-## Code example
+## Contoh kode
 
-Wrong — history edited to taste:
+Salah — history diedit sesuka hati:
 
 ```sql
--- "Fix" a wrong audit entry by editing it — history now lies
+-- "Perbaiki" entri audit yang salah dengan mengeditnya — history kini berbohong
 UPDATE audit_log SET action = 'refund:corrected', amount = 4200 WHERE id = 991;
-DELETE FROM audit_log WHERE id = 992;   -- "that one was noise"
+DELETE FROM audit_log WHERE id = 992;   -- "yang satu itu noise"
 ```
 
-Right — corrections are new events; permissions enforce it:
+Benar — koreksi adalah event baru; permission yang menegakkannya:
 
 ```sql
--- Nothing before is ever edited or removed; the correction references the mistake
+-- Apa pun sebelumnya tidak pernah diedit atau dihapus; koreksinya merujuk pada kesalahannya
 INSERT INTO audit_log (id, ts, actor, action, amount, supersedes)
 VALUES (next_id(), now(), 'ops@corp', 'refund:corrected', 4200, 991);
 
--- DBA side, once: the database, not the code, is what actually enforces this
+-- Sisi DBA, sekali saja: database-lah, bukan kode, yang benar-benar menegakkan ini
 -- REVOKE UPDATE, DELETE ON audit_log FROM app_role;
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Immutability is a property of the store, not a promise of the code:
+Immutability adalah properti dari store, bukan janji dari kode:
 
-- **Database permissions**: application roles hold INSERT and SELECT on the log, never UPDATE or DELETE — revoke them and the point is enforced structurally (see Least Authority).
-- **Write-once storage tiers** where available: object-lock buckets and WORM-like storage make rewriting impossible rather than forbidden.
-- **Tamper evidence**: hash chaining or periodic anchoring of log digests makes tampering detectable, not just preventable.
-- **Projections for reads**: consumers query derived views maintained from the log; the raw log is never on a hot path.
-- **Governed purge**: removal from the log is itself a logged, approved event with its own audit trail — deletion must be visible in history.
+- **Permission database**: role aplikasi memegang INSERT dan SELECT pada log, tidak pernah UPDATE atau DELETE — revoke keduanya dan poin ini ditegakkan secara struktural (lihat Least Authority).
+- **Storage tier write-once** jika tersedia: bucket object-lock dan storage ala WORM membuat penulisan ulang mustahil, bukan sekadar dilarang.
+- **Tamper evidence**: hash chaining atau anchoring berkala atas digest log membuat tampering bisa dideteksi, bukan hanya bisa dicegah.
+- **Projection untuk read**: consumer meng-query derived view yang dipelihara dari log; log mentah tidak pernah berada di hot path.
+- **Purge dengan tata kelola**: penghapusan dari log adalah event tersendiri yang tercatat dan disetujui, dengan audit trail-nya sendiri — penghapusan harus terlihat di dalam history.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-(ilustratif) An investigation into a suspicious funds transfer stalls because the audit table allowed UPDATE. A well-meaning cleanup script had "normalized" old entries years earlier; entries added later were corrected in place during a data-quality sprint. By the time investigators arrive, the table cannot distinguish a legitimate correction from tampering, and the reconstruction falls back to interviews and memory instead of data. Revoking UPDATE would have reduced the question "what happened?" from testimony to a query. (verification: perlu — the composite is constructed; real investigations blocked by mutable audit trails exist, belum digali — verify specific sources before citing any of them.)
+(ilustratif) Investigasi atas transfer dana yang mencurigakan macet karena tabel audit mengizinkan UPDATE. Sebuah skrip cleanup berniat baik sudah "menormalisasi" entri lama bertahun-tahun sebelumnya; entri yang ditambahkan belakangan dikoreksi di tempatnya selama sprint kualitas data. Saat para investigator datang, tabel itu tak bisa membedakan koreksi yang sah dari tampering, dan rekonstruksi jatuh kembali ke wawancara dan ingatan alih-alih data. Me-revoke UPDATE akan mengurangi pertanyaan "apa yang terjadi?" dari kesaksian menjadi sebuah query. (verification: perlu — komposit ini dikonstruksi; investigasi nyata yang terblokir oleh audit trail mutable memang ada, belum digali — verifikasi sumber spesifik sebelum mengutip salah satunya.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Append-Only vs. privacy and retention**: immutable logs of personal data collide with erasure duties — log the facts you must keep, hash or drop the PII you must not (weigh against Soft Delete).
-- **Append-Only vs. queryability**: the log answers "what happened", a projection answers "what is" — you must maintain both, and reconcile them.
-- **Weigh against KISS**: full event sourcing is an architecture; an append-only audit of critical actions is a table with revoked UPDATE — start there and stop until proven insufficient.
+- **Append-Only vs. privasi dan retention**: log immutable atas data pribadi berbenturan dengan kewajiban penghapusan — catat fakta yang memang harus disimpan, hash atau buang PII yang tidak boleh disimpan (ditimbang terhadap Soft Delete).
+- **Append-Only vs. queryability**: log menjawab "apa yang terjadi", projection menjawab "apa yang sekarang" — keduanya harus dipelihara, lalu direkonsiliasi.
+- **Ditimbang terhadap KISS**: event sourcing penuh adalah sebuah arsitektur; audit append-only atas aksi kritis adalah tabel dengan UPDATE yang di-revoke — mulai dari sana dan berhentilah sampai terbukti kurang.
 
-## Related principles
+## Prinsip terkait
 
-- [Soft Delete](/docs/principles/data/soft-delete) — deletion as an event rather than an edit of history.
-- [Tested Backups](/docs/principles/data/tested-backups) — a replayable log is only real if replay has been rehearsed.
-- [Least Authority](/docs/principles/security/least-authority) — the REVOKE is the principle, applied to history.
-- [Idempotency](/docs/principles/reliability/idempotency) — stable event IDs make replay safe as well as possible.
+- [Soft Delete](/id/docs/principles/data/soft-delete) — penghapusan sebagai event, bukan edit atas history.
+- [Tested Backups](/id/docs/principles/data/tested-backups) — log yang bisa di-replay hanya nyata jika replay-nya sudah dilatih.
+- [Least Authority](/id/docs/principles/security/least-authority) — REVOKE adalah prinsip ini, diterapkan pada history.
+- [Idempotency](/id/docs/principles/reliability/idempotency) — event ID yang stabil membuat replay aman sekaligus mungkin.
 
-## References
+## Referensi
 
-- Pat Helland, *Immutability Changes Everything*, CIDR 2015 — the case for immutable, append-only records (verification: perlu — confirm the exact paper and venue before quoting).
-- Kleppmann, *Designing Data-Intensive Applications*, 2017 — write-ahead logs, log-structured storage, and event sourcing (verification: perlu).
+- Pat Helland, *Immutability Changes Everything*, CIDR 2015 — argumen untuk record immutable dan append-only (verification: perlu — konfirmasi paper dan venue persisnya sebelum mengutip).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — write-ahead log, log-structured storage, dan event sourcing (verification: perlu).

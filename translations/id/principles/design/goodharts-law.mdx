@@ -2,7 +2,7 @@
 title: Goodhart's Law
 id: goodharts-law
 name: Goodhart's Law
-summary: TERJEMAHAN DRAF — When a measure becomes a target, it ceases to be a good measure — proxy metrics get gamed by exactly the optimizers you point at them.
+summary: Ketika sebuah ukuran menjadi target, ia berhenti menjadi ukuran yang baik — proxy metric di-gaming persis oleh para optimizer yang Anda arahkan kepadanya.
 category: design
 type: law
 severity: advisory
@@ -16,104 +16,105 @@ tags:
   - "optimization"
   - "gaming"
 aliases: []
-sources: []
+sources:
+  - 'Marilyn Strathern, 1997 formulation — "When a measure becomes a target, it ceases to be a good measure"'
 status: draft
 verification: perlu
 source_hash: "2182e645dfaf7e6f"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/design/goodharts-law.mdx */}
-{/* source_hash EN: 2182e645dfaf7e6f */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/design/goodharts-law.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Never set or optimize a single proxy metric without pairing it with a counter-metric that exposes gaming. Before committing to a target, ask how a motivated optimizer would raise the number without improving the underlying goal, then instrument for exactly that. Treat any metric tied to evaluation or compensation as already under pressure. Report balanced panels, never lone numbers.
+Jangan pernah menetapkan atau mengoptimalkan satu proxy metric saja tanpa memasangkannya dengan counter-metric yang mengekspos gaming. Sebelum berkomitmen pada sebuah target, tanyakan bagaimana seorang optimizer yang termotivasi akan menaikkan angkanya tanpa memperbaiki tujuan di baliknya, lalu buat instrumentasi untuk persis itu. Perlakukan setiap metric yang terikat pada evaluasi atau kompensasi sebagai sudah berada di bawah tekanan. Laporkan panel yang seimbang, jangan pernah angka tunggal.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-A metric is a proxy for something you actually care about — coverage proxies for safety, uptime proxies for user experience, velocity proxies for value. The moment the proxy becomes the target, effort flows into moving the number rather than the thing it stood for, because moving the number is easier. The optimizers doing this are usually not cheating; they are doing precisely what you pointed them at.
+Sebuah metric adalah proxy untuk sesuatu yang benar-benar Anda pedulikan — coverage menjadi proxy bagi safety, uptime bagi user experience, velocity bagi nilai. Begitu proxy itu menjadi target, energi mengalir untuk menggerakkan angkanya alih-alih hal yang diwakilinya, karena menggerakkan angka lebih mudah. Para optimizer yang melakukannya biasanya tidak sedang curang; mereka melakukan persis apa yang Anda arahkan kepada mereka.
 
-## When to use
+## Kapan pakai
 
-- Setting team goals, SLAs, and performance incentives.
-- ML work: choosing and freezing an objective function — reward hacking is Goodhart's Law with gradient descent.
-- Choosing test-coverage, uptime, latency, or velocity targets.
-- Building dashboards that other people will act on.
+- Menetapkan goal tim, SLA, dan insentif kinerja.
+- Pekerjaan ML: memilih dan membekukan objective function — reward hacking adalah Goodhart's Law dengan gradient descent.
+- Memilih target test-coverage, uptime, latency, atau velocity.
+- Membangun dashboard yang akan ditindaklanjuti orang lain.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- As an argument against measurement altogether — unmeasured systems fail silently (see Observability First); the fix is paired metrics, not blindness.
-- During exploration: leading indicators that guide discovery are fine as long as nobody's evaluation depends on them.
-- One-off diagnostic readings that are never promoted into targets.
+- Sebagai argumen untuk menolak pengukuran sama sekali — sistem yang tak terukur gagal secara senyap (lihat Observability First); perbaikannya adalah metric berpasangan, bukan kebutaan.
+- Saat eksplorasi: leading indicator yang memandu penjelajahan tidak masalah selama evaluasi tidak ada yang bergantung padanya.
+- Pembacaan diagnostik sekali pakai yang tak pernah dipromosikan menjadi target.
 
 ## Anti-pattern
 
-- A 100% line-coverage mandate — the cheapest path is tests that execute code and assert nothing.
-- Bonuses tied to a single number: uptime, tickets closed, lines removed.
-- Model evaluation on a benchmark that has effectively become the training set.
-- Ranking teams on a dashboard they can see — visibility accelerates gaming.
-- Renaming a gamed metric and continuing as before.
+- Mandat line-coverage 100% — jalur termurahnya adalah test yang mengeksekusi kode tanpa men-assert apa pun.
+- Bonus yang terikat pada satu angka: uptime, ticket yang ditutup, baris yang dihapus.
+- Evaluasi model pada benchmark yang efektif telah menjadi training set.
+- Memeringkat tim pada dashboard yang bisa mereka lihat — visibilitas mempercepat gaming.
+- Mengganti nama metric yang sudah di-gaming lalu lanjut seperti biasa.
 
-## Code example
+## Contoh kode
 
-Wrong — the metric satisfied, the goal abandoned:
+Salah — metric terpenuhi, tujuan ditinggalkan:
 
 ```ts
-// Written to close the coverage ticket: line runs, nothing is checked
+// Ditulis untuk menutup ticket coverage: barisnya berjalan, tak ada yang diperiksa
 it("processes refunds", () => {
-  processRefund(paidOrder); // exception-free execution counts as "covered"
-  expect(true).toBe(true);  // the assertion is decorative
+  processRefund(paidOrder); // eksekusi tanpa exception dihitung "covered"
+  expect(true).toBe(true);  // assertion-nya dekoratif
 });
 ```
 
-Right — pair the target with a counter-metric:
+Benar — pasangkan target dengan counter-metric:
 
 ```ts
-// Mutation testing rewards assertions that can actually fail
+// Mutation testing menghargai assertion yang benar-benar bisa gagal
 it("refunds the card and marks the order refunded", async () => {
   const result = await processRefund(paidOrder);
   expect(result.status).toBe("refunded");
-  expect(gateway.refunds).toHaveLength(1); // money actually moved
+  expect(gateway.refunds).toHaveLength(1); // uang benar-benar berpindah
   const stored = await orders.find(paidOrder.id);
-  expect(stored.state).toBe("refunded");   // state actually persisted
+  expect(stored.state).toBe("refunded");   // state benar-benar dipersist
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Gaming is a systems property; fight it with system design:
+Gaming adalah properti sistem; lawan dengan desain sistem:
 
-- **Metric pairing policy**: every target ships with a counter-metric in the same view — coverage with mutation score, velocity with escaped-defect rate, uptime with change-failure rate and recovery time.
-- **Mutation testing in CI** (Stryker, PIT, mutmut) as the counter-metric for coverage: assertions that cannot fail let mutants survive, and surviving mutants fail the build.
-- **No single-metric compensation**: tie evaluation to balanced panels (DORA-style sets), never to one number.
-- **Target review cadence**: re-read every target quarterly and ask "how is this being gamed right now?"; rotate or retire gamed metrics rather than defending them.
+- **Kebijakan metric pairing**: setiap target terkirim dengan counter-metric dalam tampilan yang sama — coverage dengan mutation score, velocity dengan escaped-defect rate, uptime dengan change-failure rate dan recovery time.
+- **Mutation testing di CI** (Stryker, PIT, mutmut) sebagai counter-metric untuk coverage: assertion yang tidak bisa gagal membiarkan mutant bertahan, dan mutant yang bertahan menggagalkan build.
+- **Tanpa kompensasi satu metric**: ikatkan evaluasi pada panel yang seimbang (set gaya DORA), jangan pernah pada satu angka.
+- **Irama review target**: baca ulang setiap target tiap kuartal dan tanyakan "bagaimana ini sedang di-gaming?"; rotasikan atau pensiunkan metric yang sudah di-gaming alih-alih membela mereka.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-An engineering group set a 100% line-coverage target for a critical service, with review scores tied to it. Coverage climbed within a quarter — and a growing share of new tests were hollow: they invoked code with fixture data and asserted nothing stronger than "did not throw," or snapshotted empty mocks. The number said safe; escaped defects said otherwise, and incidents kept tracing to branches the metric counted as covered. The target was replaced with a paired panel: coverage thresholds plus mutation score, with assert-less tests flagged automatically. The hollow tests started failing CI, and while the coverage number went down, real defect detection went up. (ilustratif — composite of widely reported failure modes, not a named incident; verification: perlu)
+Sebuah grup engineering menetapkan target line-coverage 100% untuk sebuah service kritis, dengan skor review terikat padanya. Coverage naik dalam satu kuartal — dan porsi test baru yang kian besar adalah test berongga: mereka memanggil kode dengan data fixture dan tidak men-assert apa pun yang lebih kuat dari "tidak melempar exception", atau men-snapshot mock kosong. Angkanya bilang aman; escaped defect berkata lain, dan incident terus bermuara ke branch yang dihitung metric itu sebagai covered. Target itu diganti dengan panel berpasangan: threshold coverage plus mutation score, dengan test tanpa assert ditandai secara otomatis. Test berongga mulai menggagalkan CI, dan sementara angka coverage turun, deteksi defect yang nyata naik. (ilustratif — komposit dari mode kegagalan yang banyak dilaporkan, bukan insiden bernama; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Goodhart vs Observability First**: measurement is not the enemy — unmeasured systems drift silently. The rule is pairing, not abstinence: every metric gets a counter-metric tuned to catch its specific gaming strategy.
-- **Goodhart vs simplicity of process**: a single north-star number is easy to communicate and easy to game; a small balanced panel is harder to communicate and harder to game. Pay the communication cost.
-- **Goodhart vs ML optimization**: models are literal Goodhart engines — they will exploit any gap between reward and intent (reward hacking). Hold out ground-truth evaluation the optimizer never sees, and keep humans in the loop on objective changes.
+- **Goodhart vs Observability First**: pengukuran bukan musuhnya — sistem yang tak terukur menyimpang secara senyap. Aturannya adalah pemasangan, bukan pantangan: setiap metric mendapat counter-metric yang disetel untuk menangkap strategi gaming khususnya.
+- **Goodhart vs kesederhanaan proses**: satu angka north-star mudah dikomunikasikan dan mudah di-gaming; panel seimbang yang kecil lebih sulit dikomunikasikan dan lebih sulit di-gaming. Bayar biaya komunikasinya.
+- **Goodhart vs optimisasi ML**: model adalah mesin Goodhart yang harfiah — mereka akan mengeksploitasi celah apa pun antara reward dan intent (reward hacking). Sisihkan evaluasi ground-truth yang tak pernah dilihat oleh optimizer, dan pertahankan manusia dalam loop untuk perubahan objective.
 
-## Related principles
+## Prinsip terkait
 
-- [Observability First](/docs/principles/reliability/observability-first) — you need the metrics; just never one alone.
-- [Fail Visible](/docs/principles/reliability/fail-visible) — gamed proxies hide failures; make the real failures loud.
-- [Keep It Simple](/docs/principles/design/kiss) — minimal dashboards are simpler; simplicity of the metric and honesty of the signal trade off.
-- [Chesterton's Fence](/docs/principles/design/chesterton-fence) — before removing or renaming a long-standing metric, find out why it was installed.
+- [Observability First](/id/docs/principles/reliability/observability-first) — metric-nya memang dibutuhkan; hanya saja jangan pernah satu saja.
+- [Fail Visible](/id/docs/principles/reliability/fail-visible) — proxy yang di-gaming menyembunyikan kegagalan; jadikan kegagalan yang nyata terdengar keras.
+- [Keep It Simple](/id/docs/principles/design/kiss) — dashboard minimal lebih sederhana; kesederhanaan metric dan kejujuran sinyal saling berbenturan.
+- [Chesterton's Fence](/id/docs/principles/design/chesterton-fence) — sebelum menghapus atau mengganti nama metric yang sudah lama berdiri, cari tahu mengapa ia dipasang.
 
-## References
+## Referensi
 
-- Marilyn Strathern, 1997 formulation — "When a measure becomes a target, it ceases to be a good measure" (verification: perlu — locate the precise paper and page before quoting; commonly attributed to her 1997 work on British university audit).
-- Google SRE Book — monitoring and alerting practice; alerting on symptoms rather than causes is a partial structural mitigation. https://sre.google/sre-book/
+- Marilyn Strathern, rumusan 1997 — "When a measure becomes a target, it ceases to be a good measure" (verification: perlu — temukan paper dan halaman persisnya sebelum mengutip; umum diatribusikan ke karyanya tahun 1997 tentang audit universitas Inggris).
+- Google SRE Book — praktik monitoring dan alerting; alerting pada gejala alih-alih penyebab adalah mitigasi struktural parsial. https://sre.google/sre-book/

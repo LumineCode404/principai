@@ -2,7 +2,7 @@
 title: Expand-Contract
 id: expand-contract
 name: Expand-Contract
-summary: TERJEMAHAN DRAF — Change schemas in compatible phases — add the new, migrate the data, then remove the old only when nothing reads it.
+summary: Ubah schema dalam fase yang kompatibel — tambahkan yang baru, migrasikan datanya, lalu hapus yang lama hanya ketika tak ada yang membacanya.
 category: data
 type: practice
 severity: important
@@ -14,103 +14,107 @@ tags:
   - "migration"
   - "schema"
   - "compatibility"
-aliases: []
-sources: []
+aliases:
+  - "Expand-Contract Migrations"
+  - "Parallel Change"
+sources:
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
+  - 'Google SRE Workbook, https://sre.google/workbook/'
 status: draft
 verification: perlu
 source_hash: "8a1be40ed581c6c7"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/data/expand-contract.mdx */}
-{/* source_hash EN: 8a1be40ed581c6c7 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/data/expand-contract.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Never deliver a schema or interface change in one breaking step. Add the new structure alongside the old, migrate data and readers gradually, and remove the old path only when usage telemetry proves nothing reads it — every intermediate state must survive with mixed versions running. If a migration would drop, rename, or repurpose something that other code may still read, stop and verify the consumers first.
+Jangan pernah menyampaikan perubahan schema atau interface dalam satu langkah breaking. Tambahkan struktur baru di samping yang lama, migrasikan data dan reader secara bertahap, dan hapus path lama hanya ketika usage telemetry membuktikan tak ada yang membacanya — setiap state antara harus tetap hidup dengan versi campuran yang berjalan. Jika sebuah migration akan me-drop, me-rename, atau mengubah peran sesuatu yang mungkin masih dibaca kode lain, berhenti dan verifikasi consumer-nya lebih dulu.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Expand-contract (parallel change) splits a breaking change into three compatible phases: expand (add the new structure without removing the old), migrate (backfill, dual-write, and switch readers over), and contract (remove the old only when usage telemetry shows zero readers). Every intermediate deploy must be safe to leave running for hours, because rollouts are gradual and rollback goes to old code, not forward.
+Expand-contract (parallel change) memecah sebuah perubahan breaking menjadi tiga fase yang kompatibel: expand (tambahkan struktur baru tanpa menghapus yang lama), migrate (backfill, dual-write, dan alihkan reader), dan contract (hapus yang lama hanya ketika usage telemetry menunjukkan nol reader). Setiap deploy antara harus aman dibiarkan berjalan berjam-jam, karena rollout itu bertahap dan rollback menuju kode lama, bukan maju.
 
-## When to use
+## Kapan pakai
 
-- Schema changes on tables with live traffic: add column, backfill, switch, then drop.
-- Renaming or repurposing API fields — old and new fields served side by side across contract versions.
-- Storage and message-format migrations with in-flight producers and consumers.
-- Any system where deploy is not atomic and multiple app versions run simultaneously — which is the normal case.
+- Perubahan schema pada tabel dengan trafik live: tambah kolom, backfill, alihkan, lalu drop.
+- Rename atau perubahan peran field API — field lama dan baru disajikan berdampingan lintas versi contract.
+- Migration storage dan format pesan dengan producer dan consumer yang sedang berjalan (in-flight).
+- Sistem apa pun yang deploy-nya tidak atomik dan beberapa versi aplikasi berjalan bersamaan — yang merupakan kondisi normal.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Pre-launch systems with no consumers and no data — migrate in one step and keep history trivial.
-- Tables small enough to rebuild atomically inside one maintenance-window transaction with downtime already scheduled.
-- When the old path is a security liability (leaking a secret, exposing private data) — plan a fast, explicit removal with compensations instead of a slow migration.
+- Sistem pra-rilis tanpa consumer dan tanpa data — migrasikan satu langkah dan biarkan history-nya sederhana.
+- Tabel yang cukup kecil untuk dibangun ulang secara atomik di dalam satu transaksi maintenance window, dengan downtime yang memang sudah dijadwalkan.
+- Ketika path lama justru menjadi beban security (membocorkan secret, mengekspos data privat) — rancang penghapusan yang cepat dan eksplisit disertai kompensasi, alih-alih migration yang lambat.
 
 ## Anti-pattern
 
-- One migration, one deploy: DROP the old column and ADD the new one in the same release the app starts using it.
-- Adding a NOT NULL column with a default to a hot table in the same deploy that writes it.
-- Dual-write with no reconciliation job — the two paths drift silently and nobody notices.
-- "Nothing reads the old field" verified by asking the loudest team, not by checking traffic.
+- Satu migration, satu deploy: DROP kolom lama dan ADD kolom baru di release yang sama dengan saat aplikasi mulai memakainya.
+- Menambahkan kolom NOT NULL dengan default ke tabel panas di deploy yang sama yang menulisnya.
+- Dual-write tanpa reconciliation job — kedua path drift diam-diam dan tak ada yang menyadarinya.
+- "Tidak ada yang membaca field lama" diverifikasi dengan bertanya ke tim paling lantang, bukan dengan memeriksa trafik.
 
-## Code example
+## Contoh kode
 
-Wrong — one step, atomic in the worst sense:
+Salah — satu langkah, atomik dalam arti yang terburuk:
 
 ```sql
--- Old code (still running during rollout) SELECTs legacy_total everywhere
+-- Kode lama (masih berjalan selama rollout) me-SELECT legacy_total di mana-mana
 ALTER TABLE orders DROP COLUMN legacy_total, ADD COLUMN total_cents BIGINT;
 ```
 
-Right — three compatible phases:
+Benar — tiga fase yang kompatibel:
 
 ```sql
--- Phase 1 (expand): additive only, nullable, no exclusive lock drama
+-- Fase 1 (expand): hanya additive, nullable, tanpa drama exclusive lock
 ALTER TABLE orders ADD COLUMN total_cents BIGINT;
 
--- Phase 2 (migrate): backfill in batches; app dual-writes both and reconciles
+-- Fase 2 (migrate): backfill per batch; aplikasi dual-write keduanya dan merekonsiliasi
 UPDATE orders SET total_cents = legacy_total * 100
  WHERE total_cents IS NULL AND id % 64 = 0;
 
--- Phase 3 (contract): only after usage logs show zero reads of legacy_total
+-- Fase 3 (contract): hanya setelah log usage menunjukkan nol pembacaan legacy_total
 ALTER TABLE orders DROP COLUMN legacy_total;
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-The phases are enforced by tooling that refuses to let humans compress them:
+Fase-fasenya ditegakkan oleh tooling yang menolak membiarkan manusia memampatkannya:
 
-- **Migration linters in CI**: destructive DDL (DROP COLUMN, RENAME, type narrowing) cannot ship in the same release as the additive change; the split is mandatory.
-- **Lock guards**: migrations run under lock and statement timeouts; a migration that would take a long exclusive lock on a hot table is rejected.
-- **Usage telemetry before contract**: read counts per field and per consumer on dashboards; the drop is only allowed after zero for a full rollout cycle.
-- **Reconciliation job**: while dual-writing, a scheduled diff between old and new paths alerts on drift — drift is a bug, not a tuning knob.
-- **Decoupled deploy order**: migrations and app releases are separate pipelines with separate rollback plans.
+- **Migration linter di CI**: DDL destruktif (DROP COLUMN, RENAME, penyempitan tipe) tidak boleh ship di release yang sama dengan perubahan additifnya; pemisahannya wajib.
+- **Penjaga lock**: migration berjalan di bawah timeout lock dan statement; migration yang akan mengambil exclusive lock lama di tabel panas ditolak.
+- **Usage telemetry sebelum contract**: jumlah pembacaan per field dan per consumer ditampilkan di dashboard; drop hanya diizinkan setelah nol selama satu siklus rollout penuh.
+- **Reconciliation job**: selama dual-write, diff terjadwal antara path lama dan baru memberi alert saat drift — drift adalah bug, bukan kenop tuning.
+- **Urutan deploy terpisah**: migration dan release aplikasi adalah pipeline terpisah dengan rencana rollback terpisah.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-(ilustratif) A team ships the "cleanup" half of a rename migration on a Friday afternoon. Some app servers run the previous release for another hour; each one hits its first SELECT of the dropped column and fails every request it touches, and the rollback requires re-adding the column and re-running the backfill. The postmortem's first line: "we thought the deploy had finished." (verification: perlu — real drop-column incidents exist in public write-ups; belum digali — verify specific sources before citing any of them.)
+(ilustratif) Sebuah tim mengirim bagian "cleanup" dari migration rename pada Jumat sore. Beberapa server aplikasi masih menjalankan release sebelumnya selama satu jam berikutnya; masing-masing menabrak SELECT pertamanya pada kolom yang sudah di-drop dan gagal di setiap request yang tersentuh, dan rollback-nya menuntut penambahan ulang kolom serta pengulangan backfill. Baris pertama postmortem-nya: "kami mengira deploy sudah selesai." (verification: perlu — insiden drop kolom nyata ada di tulisan publik; belum digali — verifikasi sumber spesifik sebelum mengutip salah satunya.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Expand-Contract vs. speed**: three phases cost planning and coordination; a one-step migration is only acceptable when every reader is under your control and the table is cold.
-- **Expand-Contract vs. clarity**: dual paths double schema and code surface; the contract phase is a commitment, not an option — schedule it, or the expansion becomes permanent debt.
-- **Weigh against YAGNI / KISS**: for changes that are trivially backward compatible (additive, nullable, unused elsewhere), a straight migration is the simpler correct choice.
+- **Expand-Contract vs. kecepatan**: tiga fase berbiaya perencanaan dan koordinasi; migration satu langkah hanya dapat diterima ketika setiap reader berada di bawah kendali dan tabelnya cold.
+- **Expand-Contract vs. kejelasan**: path ganda menggandakan permukaan schema dan kode; fase contract adalah komitmen, bukan opsi — jadwalkan, atau ekspansinya menjadi utang permanen.
+- **Ditimbang terhadap YAGNI / KISS**: untuk perubahan yang backward compatible secara trivial (additive, nullable, tak dipakai di tempat lain), migration lurus adalah pilihan benar yang lebih sederhana.
 
-## Related principles
+## Prinsip terkait
 
-- [Hyrum's Law](/docs/principles/api/hyrum-law) — someone, somewhere, reads the old field; assume it and verify with telemetry.
-- [Versioned Contracts](/docs/principles/api/versioned-contracts) — the API-facing form of the same phase discipline.
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — dual-write without reconciliation drifts silently in the direction of corruption.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — a bad migration phase should cost one batch, not the table.
+- [Hyrum's Law](/id/docs/principles/api/hyrum-law) — seseorang, di suatu tempat, membaca field lama itu; anggap begitu dan verifikasi dengan telemetry.
+- [Versioned Contracts](/id/docs/principles/api/versioned-contracts) — wujud disiplin fase yang sama di sisi API.
+- [Fail-Visible](/id/docs/principles/reliability/fail-visible) — dual-write tanpa reconciliation drift diam-diam menuju arah korupsi.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — fase migration yang buruk seharusnya berbiaya satu batch, bukan satu tabel.
 
-## References
+## Referensi
 
-- Kleppmann, *Designing Data-Intensive Applications*, 2017 — schema evolution and encoding compatibility (verification: perlu — check the exact chapters before citing page numbers).
-- Google SRE Workbook — https://sre.google/workbook/ (making production changes safely; verify chapter pointers).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — evolusi schema dan kompatibilitas encoding (verification: perlu — periksa bab persisnya sebelum mengutip nomor halaman).
+- Google SRE Workbook — https://sre.google/workbook/ (melakukan perubahan production dengan aman; verifikasi penunjuk babnya).

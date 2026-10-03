@@ -2,7 +2,7 @@
 title: Conway's Law
 id: conways-law
 name: Conway's Law
-summary: TERJEMAHAN DRAF — Your architecture will mirror your team's communication structure — design the org, or it designs the system for you.
+summary: Arsitektur akan mencerminkan struktur komunikasi tim — rancang organisasinya, atau organisasi itu yang merancang sistem untuk Anda.
 category: architecture
 type: law
 severity: advisory
@@ -15,101 +15,102 @@ tags:
   - "communication"
   - "boundaries"
 aliases: []
-sources: []
+sources:
+  - 'Melvin Conway, "How Do Committees Invent?", 1967, http://www.melconway.com/Home/Committees_Paper.html'
 status: draft
 verification: perlu
 source_hash: "73a77aa98b3630f9"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/architecture/conways-law.mdx */}
-{/* source_hash EN: 73a77aa98b3630f9 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/architecture/conways-law.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Treat team structure and communication paths as first-class inputs to every architecture decision. When proposing service boundaries, first map who owns what and who actually talks to whom — the design will converge to that map whether you plan it or not. If the target architecture requires collaboration patterns the org does not have, either change the org or change the target.
+Perlakukan struktur tim dan jalur komunikasi sebagai input kelas satu untuk setiap keputusan arsitektur. Saat mengusulkan service boundary, petakan lebih dulu siapa memiliki apa dan siapa yang benar-benar bicara dengan siapa — desain akan berkonvergensi ke peta itu, direncanakan atau tidak. Jika arsitektur target membutuhkan pola kolaborasi yang tidak dimiliki organisasi, ubah organisasinya atau ubah targetnya.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-Organizations design systems that mirror their communication structures: the interfaces between modules will look like the lines between the people who built them. Conway stated it in 1967 as an observation about design committees — a design organization's outputs reflect its internal communication patterns. The engineering consequence is that org design is architecture design; if you cannot change the software, look at the communication paths that produced it.
+Organisasi merancang sistem yang mencerminkan struktur komunikasinya: interface antar module akan tampak seperti garis-garis di antara orang-orang yang membangunnya. Conway menyatakannya pada 1967 sebagai observasi tentang komite perancang — output organisasi perancang mencerminkan pola komunikasi internalnya. Konsekuensi rekayasanya: desain organisasi adalah desain arsitektur; jika perangkat lunaknya tak bisa diubah, periksa jalur komunikasi yang menghasilkannya.
 
-## When to use
+## Kapan pakai
 
-- Decomposing a monolith or defining service boundaries.
-- Planning team topologies and ownership before, or together with, the architecture.
-- Explaining why "the same broken shared thing" keeps reappearing after every rewrite.
-- Mergers and reorgs: expect the architecture to drift toward the new org chart.
+- Mendekomposisi sebuah monolith atau mendefinisikan service boundary.
+- Merencanakan team topology dan kepemilikan sebelum, atau bersamaan dengan, arsitektur.
+- Menjelaskan mengapa "barang bersama rusak yang itu-itu lagi" terus muncul kembali setelah setiap penulisan ulang.
+- Merger dan reorg: bersiaplah arsitektur bergeser menuju bagan organisasi yang baru.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Small teams where communication is already cheap — do not split one team into microservices to imitate a target org.
-- Domains where the correct boundary genuinely cuts across existing team lines — pick the domain, then negotiate the org move (the "inverse Conway maneuver"), knowing it is slow.
-- Compliance-mandated separation of duties: that org shape is a requirement, not a design smell to engineer around.
+- Tim kecil tempat komunikasi sudah murah — jangan memecah satu tim menjadi microservices demi meniru organisasi target.
+- Domain tempat boundary yang benar sungguh-sungguh memotong garis tim yang sudah ada — pilih domainnya, lalu negosiasikan pergeseran organisasinya ("inverse Conway maneuver"), dengan sadar bahwa itu lambat.
+- Pemisahan tugas yang diwajibkan compliance: bentuk organisasi semacam itu adalah requirement, bukan design smell yang harus diakali.
 
 ## Anti-pattern
 
-- One "shared" service that four teams bolt their modules into, each breaking the others' assumptions.
-- Architecture designed by a central committee with no delivery power — the shipped system follows the delivery teams' lines instead.
-- Services split by technical layer (a frontend team, a database team) rather than by domain change.
-- A "platform team" that owns everything other teams touch, becoming a serialization point for every feature.
+- Satu service "bersama" tempat empat tim memasang module-nya masing-masing, saling merusak asumsi satu sama lain.
+- Arsitektur yang dirancang komite pusat tanpa daya delivery — sistem yang terkirim mengikuti garis tim-tim yang mengerjakakan.
+- Service dipecah berdasarkan layer teknis (tim frontend, tim database) alih-alih berdasarkan perubahan domain.
+- Sebuah "platform team" yang memiliki semua yang disentuh tim lain, menjadi titik serialisasi bagi setiap fitur.
 
-## Code example
+## Contoh kode
 
-Wrong — one shared service mirrors a broken communication pattern:
+Salah — satu service bersama mencerminkan pola komunikasi yang rusak:
 
 ```text
 services/shared-core/
-  billing.ts    # edited by the Payments team
-  search.ts     # edited by the Search team
-  reports.ts    # edited by whoever needed a chart that week
-# one deployable, four review queues: every release waits on everyone
+  billing.ts    # diedit oleh tim Payments
+  search.ts     # diedit oleh tim Search
+  reports.ts    # diedit oleh siapa pun yang butuh grafik minggu itu
+# satu deployable, empat antrean review: setiap rilis menunggu semua orang
 ```
 
-Right — ownership boundaries make the org chart explicit and cheap:
+Benar — boundary kepemilikan membuat bagan organisasi menjadi eksplisit dan murah:
 
 ```yaml
-# CODEOWNERS — the org chart becomes the boundary
+# CODEOWNERS — bagan organisasi menjadi boundary-nya
 /billing/**   @org/payments
 /search/**    @org/search
 /reports/**   @org/analytics
-# each team ships its own service; cross-team talk goes through contracts
+# tiap tim mengirim service-nya sendiri; pembicaraan lintas tim lewat contract
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by ownership mechanics, not by org charts on slides:
+Prinsip ini ditegakkan oleh mekanika kepemilikan, bukan oleh bagan organisasi di slide:
 
-- **CODEOWNERS**: required reviews per path — a PR touching two teams' modules is an automatic signal to extract a boundary.
-- **Import boundary rules in CI** (dependency-cruiser, eslint-plugin-boundaries) that match the ownership map, not just folder aesthetics.
-- **Service catalog metadata**: every service records its owning team; orphaned services fail audits.
-- **Contract review process**: cross-team interfaces (APIs, events, shared schemas) require both owners' sign-off before merge.
+- **CODEOWNERS**: review wajib per path — PR yang menyentuh module dua tim adalah sinyal otomatis untuk mengekstrak sebuah boundary.
+- **Aturan import boundary di CI** (dependency-cruiser, eslint-plugin-boundaries) yang cocok dengan peta kepemilikan, bukan sekadar estetika folder.
+- **Metadata service catalog**: setiap service mencatat tim pemiliknya; service tanpa pemilik gagal audit.
+- **Proses review contract**: interface lintas tim (API, event, schema bersama) menuntut persetujuan kedua pemiliknya sebelum merge.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-Four teams — payments, search, reports, and mobile — shared one "shared-core" service "to avoid duplication". Each bolted its own module in: payment batch jobs next to search indexing next to report queries, with no owner of the whole. Deploys became four-way negotiation, and each team's changes broke the others' assumptions because the modules had no contracts between them, only proximity. Splitting the service along the four existing team lines reduced the coordination tax; it did not eliminate cross-team dependencies — those moved into explicit, versioned contracts. (ilustratif — composite of a common failure mode; verification: perlu)
+Empat tim — payments, search, reports, dan mobile — berbagi satu service "shared-core" "untuk menghindari duplikasi". Masing-masing memasukkan module miliknya sendiri: batch job payment bersebelahan dengan indexing search bersebelahan dengan query report, tanpa pemilik untuk keseluruhannya. Deploy menjadi negosiasi empat arah, dan perubahan tiap tim merusak asumsi tim lain karena module-module itu tak punya contract di antara mereka, hanya kedekatan. Memecah service itu sepanjang empat garis tim yang sudah ada mengurangi pajak koordinasi; itu tidak menghilangkan dependency lintas tim — dependency itu pindah ke contract yang eksplisit dan berversi. (ilustratif — komposit dari mode kegagalan yang umum; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Domain purity vs. org reality**: the technically right boundary that cuts across teams will erode back toward the team lines anyway. Either move the people or accept the seam; pretending the org does not exist does not survive a deadline.
-- **Reuse vs. autonomy**: one shared service saves code but couples every team's release calendar; duplicated small code with clear owners often ships faster.
-- **Conway vs. stability**: constantly reorganizing teams means constantly drifting architecture — pair each reorg with migration budget, or the system pays a tax the org never sees.
+- **Kemurnian domain vs. realitas organisasi**: boundary yang benar secara teknis namun memotong tim akan terkikis kembali ke garis tim juga. Pindahkan orangnya atau terima sambungannya; berpura-pura organisasi tidak ada tidak akan selamat dari tenggat.
+- **Reuse vs. otonomi**: satu service bersama menghemat kode tetapi mengawinkan kalender rilis semua tim; kode kecil yang terduplikasi dengan pemilik yang jelas sering kali terkirim lebih cepat.
+- **Conway vs. stabilitas**: terus-menerus mereorganisasi tim berarti terus-menerus menggeser arsitektur — pasangkan setiap reorg dengan anggaran migration, atau sistem yang membayar pajak yang tak pernah dilihat organisasi.
 
-## Related principles
+## Prinsip terkait
 
-- [Gall's Law](/docs/principles/architecture/gall-law) — the org and the system must co-evolve; neither is designed once.
-- [Single Responsibility](/docs/principles/architecture/single-responsibility) — one owner, one reason to change.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — cross-team seams need declared schemas, not proximity.
-- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how teams change a shared interface without breaking each other.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — ownership boundaries also limit how far a failure spreads.
+- [Gall's Law](/id/docs/principles/architecture/gall-law) — organisasi dan sistem harus berevolusi bersama; keduanya tak dirancang sekali saja.
+- [Single Responsibility](/id/docs/principles/architecture/single-responsibility) — satu pemilik, satu alasan untuk berubah.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — sambungan lintas tim butuh schema yang dideklarasikan, bukan kedekatan.
+- [Versioned Contracts](/id/docs/principles/api/versioned-contracts) — bagaimana tim mengubah interface bersama tanpa saling merusak.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — boundary kepemilikan juga membatasi seberapa jauh sebuah kegagalan menyebar.
 
-## References
+## Referensi
 
 - Melvin Conway, "How Do Committees Invent?", 1967: http://www.melconway.com/Home/Committees_Paper.html (verified URL).
-- The "inverse Conway maneuver" — deliberately reshaping teams toward a target architecture — is discussed in Skelton and Pais, *Team Topologies* (verification: perlu).
+- "Inverse Conway maneuver" — membentuk ulang tim secara sengaja menuju arsitektur target — dibahas dalam Skelton dan Pais, *Team Topologies* (verification: perlu).

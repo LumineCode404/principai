@@ -1,4 +1,4 @@
 {
   "title": "Prinsip",
-  "pages": ["index", "security", "reliability", "data"]
+  "pages": ["index", "security", "reliability", "data", "design", "api", "architecture"]
 }

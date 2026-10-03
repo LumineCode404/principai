@@ -9,9 +9,8 @@ import { z } from 'zod';
  * derived trees: structure stays 1:1, meaning flows one way, drift is tracked
  * with source_hash (sha256-16 of the EN file) in the derived frontmatter.
  *
- * The ID tree contains stubs for untranslated principles (sync output) —
- * only fully translated files are exposed to the website via the `files`
- * allowlist below. The ZH tree is complete.
+ * Both translation trees cover all 32 principles (translation_status: draft
+ * until human review); concepts/profiles/evals remain English-only by design.
  */
 
 const schema = z.object({
@@ -44,25 +43,11 @@ const en = defineDocs({
   docs: { schema },
 });
 
+// All 32 principles are fully translated (stubs were replaced); the whole
+// tree compiles — concepts/profiles/evals stay English-only by design.
 const id = defineDocs({
   dir: 'translations/id',
-  docs: {
-    schema,
-    // Site scope: only fully translated principles (stubs stay repo-only).
-    files: [
-      'index.mdx',
-      'principles/index.mdx',
-      'principles/security/least-authority.mdx',
-      'principles/security/fail-safe-defaults.mdx',
-      'principles/security/input-validation.mdx',
-      'principles/security/complete-mediation.mdx',
-      'principles/security/defense-in-depth.mdx',
-      'principles/reliability/idempotency.mdx',
-      'principles/reliability/blast-radius.mdx',
-      'principles/reliability/fail-visible.mdx',
-      'principles/data/tested-backups.mdx',
-    ],
-  },
+  docs: { schema },
 });
 
 const zh = defineDocs({

@@ -2,7 +2,7 @@
 title: Hyrum's Law
 id: hyrum-law
 name: Hyrum's Law
-summary: TERJEMAHAN DRAF — With enough users, every observable behavior of your system will be depended on by somebody — including the ones you never promised.
+summary: Dengan cukup banyak pengguna, setiap perilaku observable dari sistem akan diandalkan oleh seseorang — termasuk yang tak pernah dijanjikan.
 category: api
 type: law
 severity: important
@@ -15,102 +15,104 @@ tags:
   - "compatibility"
   - "observable-behavior"
   - "dependencies"
-aliases: []
-sources: []
+aliases:
+  - "Law of Implicit Interfaces"
+sources:
+  - 'https://www.hyrumslaw.com'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "b074e646fc72db90"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/api/hyrum-law.mdx */}
-{/* source_hash EN: b074e646fc72db90 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/api/hyrum-law.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Treat everything a consumer can observe — field order, error text, timing, package existence — as part of your contract. Before changing any observable behavior, find out who depends on it, communicate through a version and a deprecation window, and measure usage until the last consumer has migrated. Never dismiss a break with "it was undocumented".
+Perlakukan segala hal yang bisa diamati consumer — urutan field, teks error, timing, keberadaan sebuah package — sebagai bagian dari contract. Sebelum mengubah perilaku observable apa pun, cari tahu siapa yang bergantung padanya, komunikasikan lewat versi dan deprecation window, dan ukur usage sampai consumer terakhir bermigrasi. Jangan pernah mengesampingkan sebuah break dengan alasan "itu tidak terdokumentasi".
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-When the number of consumers of an interface is large enough, every observable behavior will be depended on by somebody, regardless of what the contract promises. The real interface is what consumers actually use: response shapes, error messages, rate-limit timing, the presence of a field nobody documented. Changing such behavior — even fixing it — is a breaking change and must be priced, communicated, and versioned as one.
+Ketika jumlah consumer sebuah interface cukup besar, setiap perilaku observable akan diandalkan oleh seseorang, terlepas dari apa yang dijanjikan contract-nya. Interface yang sesungguhnya adalah apa yang benar-benar dipakai consumer: bentuk response, pesan error, timing rate-limit, keberadaan sebuah field yang tak terdokumentasi siapa pun. Mengubah perilaku seperti itu — bahkan memperbaikinya — adalah breaking change, dan harus dihitung harganya, dikomunikasikan, dan diberi versi sebagai satu.
 
-## When to use
+## Kapan pakai
 
-- Any public or shared API, library, or event stream with consumers you do not control.
-- Evaluating "harmless" bug fixes that alter observable output.
-- Planning deprecations, removals, or major version bumps.
-- Reviewing database or storage shapes that other teams read directly.
+- Semua API, library, atau event stream publik atau bersama dengan consumer yang berada di luar kendali.
+- Mengevaluasi perbaikan bug "tak berbahaya" yang mengubah output observable.
+- Merencanakan deprecation, removal, atau kenaikan major version.
+- Me-review bentuk database atau storage yang dibaca langsung oleh tim lain.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- As a veto over security or correctness fixes — when the behavior is harmful, ship the fix and manage the window, loudly.
-- Internal code with a single consumer you also own, deployed in lockstep.
-- Pre-launch code with no real consumers yet — the law has no subjects until someone depends on the behavior.
+- Sebagai veto atas perbaikan keamanan atau kebenaran — ketika perilakunya berbahaya, kirim perbaikannya dan kelola window-nya, dengan lantang.
+- Kode internal ber-consumer tunggal yang juga dimiliki sendiri dan dideploy serentak (lockstep).
+- Kode pra-rilis yang belum punya consumer nyata — hukum ini tak punya subjek sampai seseorang bergantung pada perilakunya.
 
 ## Anti-pattern
 
-- "It's not in the docs, so we can change it" — with a large consumer base, that is never true.
-- Consumers parsing error message strings, or timing requests to infer internal state — and producers obliging forever.
-- Returning ORM rows straight from an endpoint: every internal column becomes someone's contract.
-- Removing a dependency or field because "nobody uses it" — without usage metrics to prove it.
+- "Itu tidak ada di docs, jadi bisa diubah" — dengan basis consumer yang besar, itu tidak pernah benar.
+- Consumer mem-parse string pesan error, atau mengukur timing request untuk menyimpulkan state internal — dan producer mengikuti selamanya.
+- Mengembalikan baris ORM langsung dari sebuah endpoint: setiap kolom internal menjadi contract seseorang.
+- Menghapus sebuah dependency atau field karena "tidak ada yang memakainya" — tanpa metrik usage untuk membuktikannya.
 
-## Code example
+## Contoh kode
 
-Wrong — the storage shape leaks; the ORM's columns become the contract:
+Salah — bentuk storage bocor; kolom ORM menjadi contract:
 
 ```ts
 app.get('/users/:id', async (req, res) => {
   const row = await db.users.find({ id: req.params.id });
-  res.json(row); // createdAt, internal flags, future columns: all observed, all depended on
+  res.json(row); // createdAt, flag internal, kolom masa depan: semua teramati, semua diandalkan
 });
 ```
 
-Right — the contract is chosen, typed, and validated:
+Benar — contract dipilih, di-type, dan divalidasi:
 
 ```ts
 const UserDTO = z.object({ id: z.string(), name: z.string() }).strict();
 app.get('/users/:id', async (req, res) => {
   const row = await db.users.find({ id: req.params.id });
-  res.json(UserDTO.parse({ id: row.id, name: row.display_name })); // pick, don't leak
+  res.json(UserDTO.parse({ id: row.id, name: row.display_name })); // pilih, jangan bocorkan
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by machinery, not by careful consumers:
+Prinsip ini ditegakkan oleh mesin, bukan oleh consumer yang cermat:
 
-- **Consumer-driven contract tests** (Pact) in CI on both producer and consumer sides: the verified contract is what consumers actually use, not what the docs claim.
-- **Explicit DTOs and serializers**: internal shapes never cross the boundary unfiltered.
-- **API diff gates**: OpenAPI diffing in CI classifies changes and blocks breaking ones that lack a version bump.
-- **Deprecation metrics**: per-field and per-endpoint usage tracking; removal is allowed only when the counter reaches zero — or an explicit, communicated sunset date passes.
+- **Consumer-driven contract tests** (Pact) di CI pada sisi producer maupun consumer: contract yang terverifikasi adalah yang benar-benar dipakai consumer, bukan yang diklaim docs.
+- **DTO dan serializer eksplisit**: bentuk internal tidak pernah menyeberangi boundary tanpa filter.
+- **API diff gate**: OpenAPI diffing di CI mengklasifikasikan perubahan dan memblokir yang breaking tanpa kenaikan versi.
+- **Metrik deprecation**: pelacakan usage per field dan per endpoint; removal hanya diizinkan ketika counter mencapai nol — atau ketika sunset date yang eksplisit dan dikomunikasikan telah terlewat.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-In March 2016, a developer unpublished his own packages from npm after a naming dispute; among them was left-pad, a tiny string-padding utility. Fresh installs and CI pipelines across the JavaScript ecosystem failed — thousands of dependent builds, including major frameworks' toolchains. Nobody ever contracted for the continued existence of that package; the ecosystem's build pipelines depended on it all the same. Exact-version pinning and registry-level removal policies would have reduced the blast radius, not prevented it — the dependency formed with or without a contract. Coverage: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).
+Pada Maret 2016, seorang developer meng-unpublish package miliknya sendiri dari npm setelah sengketa penamaan; salah satunya adalah left-pad, utility pengisi string yang mungil. Instalasi baru dan pipeline CI di seluruh ekosistem JavaScript gagal — ribuan build yang bergantung, termasuk toolchain framework-framework besar. Tidak pernah ada yang membuat perjanjian tentang keberadaan berkelanjutan package itu; pipeline build ekosistem mengandalkannya juga. Exact-version pinning dan kebijakan penghapusan di level registry akan mengurangi blast radius-nya, bukan mencegahnya — dependency itu terbentuk dengan atau tanpa contract. Liputan: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Stability vs. progress**: this law prices every fix; the honest response is versioned change with a deprecation window, not freezing (see Versioned Contracts).
-- **Hyrum vs. minimal surfaces**: the fewer observable details you expose — DTOs over raw rows, opaque IDs over sequential ones — the less there is to depend on. Design as if everything visible will become permanent.
-- **Empathy vs. entitlement**: some dependencies are consumer abuse (parsing error strings); you may still break them, but deliberately, with notice and a migration path — not out of surprise.
+- **Stabilitas vs. kemajuan**: hukum ini memberi harga pada setiap perbaikan; respons yang jujur adalah perubahan berversi dengan deprecation window, bukan pembekuan (lihat Versioned Contracts).
+- **Hyrum vs. permukaan minimal**: semakin sedikit detail observable yang diekspos — DTO alih-alih baris mentah, ID opaque alih-alih berurutan — semakin sedikit yang bisa diandalkan. Rancanglah seolah semua yang terlihat akan menjadi permanen.
+- **Empati vs. rasa berhak**: sebagian dependency adalah penyalahgunaan oleh consumer (mem-parse string error); Anda tetap boleh memutusnya, tetapi secara sengaja, dengan pemberitahuan dan jalur migrasi — bukan karena kaget.
 
-## Related principles
+## Prinsip terkait
 
-- [Versioned Contracts](/docs/principles/api/versioned-contracts) — the sanctioned way to change what consumers depend on.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — shrink the implicit surface by declaring the explicit one.
-- [Robustness Principle](/docs/principles/api/postel-robustness) — liberal acceptance multiplies the observable behaviors consumers attach to.
-- [Supply-Chain Vetting](/docs/principles/security/supply-chain-vetting) — left-pad is also a supply-chain story: know what you transitively depend on.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — the scope of what a break can take down.
-- [Expand-Contract](/docs/principles/data/expand-contract) — the Hyrum-aware procedure for schema changes.
+- [Versioned Contracts](/id/docs/principles/api/versioned-contracts) — cara yang disahkan untuk mengubah apa yang diandalkan consumer.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — perkecil permukaan implisit dengan mendeklarasikan yang eksplisit.
+- [Robustness Principle](/id/docs/principles/api/postel-robustness) — penerimaan yang liberal memperbanyak perilaku observable yang dilekati consumer.
+- [Supply-Chain Vetting](/id/docs/principles/security/supply-chain-vetting) — left-pad juga kisah supply chain: ketahui apa yang Anda andalkan secara transitif.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — cakupan apa saja yang bisa dirobohkan oleh sebuah break.
+- [Expand-Contract](/id/docs/principles/data/expand-contract) — prosedur yang sadar-Hyrum untuk perubahan schema.
 
-## References
+## Referensi
 
 - Hyrum's Law: https://www.hyrumslaw.com (verified URL).
 - The Register, npm left-pad aftermath, March 2016: https://www.theregister.com/2016/03/23/npm_left_pad_chaos/ (verified URL).

@@ -8,7 +8,7 @@ The library exists in English, Indonesian, and Chinese. This page records how th
 ## Chosen model
 
 - **The EN repo is the single source of truth.** The website and the library live in one repository; `content/docs` is the English canon. Every meaning-bearing change starts there.
-- **The ID and ZH trees are derived.** `translations/id` and `translations/zh` mirror the EN principle tree with `source_hash` drift detection. The ZH archive is complete (all principles translated, each page carrying a voice summary); the ID archive is partial and publishes only fully translated files — coverage is stated on its index pages, never implied.
+- **The ID and ZH trees are derived.** `translations/id` and `translations/zh` mirror the EN principle tree with `source_hash` drift detection. Both archives cover all principles (ZH pages each carrying a voice summary; ID translation status is draft until human review). Coverage is stated on each language's index pages, never implied.
 - **One direction only.** Meaning flows from EN outward. There is no two-way merge — see Conflicts and single-repo edits for the one narrow exception, which is not about meaning.
 - **The repo itself is English-only.** README, AGENTS, contribution rules, CLI output, and the registry are English; the translated trees are web content derived from the canon.
 
@@ -26,7 +26,7 @@ Costs we accept openly:
 - **Translation lag.** The derived trees lag EN between syncs. That is normal and made visible by staleness marking, not hidden.
 - **Reviewer bottleneck.** One human reviewer grants `reviewed` status. The pipeline queues behind that person; we do not pretend otherwise.
 - **Glossary discipline.** Untranslated terms must stay consistent across every file. The [Glossary](/docs/glossary) is mandatory reading for translator and checker alike.
-- **Uneven coverage.** ZH is complete, ID is partial, and the website says exactly that on each language's index page. Honesty over symmetry.
+- **Uneven review state.** ZH and ID both cover all principles, but both are `draft` until the human reviewer grants `reviewed` — the website says exactly that on each language's index page. Honesty over symmetry.
 
 ## Propagation
 

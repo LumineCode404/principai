@@ -2,7 +2,7 @@
 title: Dependency Inversion
 id: dependency-inversion
 name: Dependency Inversion
-summary: TERJEMAHAN DRAF — High-level policy depends on abstractions, not on concrete details — so infrastructure can change without rewriting the core.
+summary: Policy di level tinggi bergantung pada abstraction, bukan pada detail konkret — sehingga infrastructure bisa berubah tanpa menulis ulang core.
 category: architecture
 type: principle
 severity: advisory
@@ -14,52 +14,55 @@ tags:
   - "abstraction"
   - "coupling"
   - "interfaces"
-aliases: []
-sources: []
+aliases:
+  - "DIP"
+  - "Depend on Abstractions"
+sources:
+  - 'Robert C. Martin, SOLID writings (Dependency Inversion Principle)'
 status: draft
 verification: perlu
 source_hash: "05498d2ad598f503"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/architecture/dependency-inversion.mdx */}
-{/* source_hash EN: 05498d2ad598f503 */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/architecture/dependency-inversion.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Make business logic depend on interfaces it owns, and push concrete SDKs, drivers, and clients to the outer layers. Never import a vendor package directly from domain code — define the port first, then adapt the vendor to it. When tests need live vendor credentials to exercise core logic, treat that as the signal to invert the dependency.
+Buat business logic bergantung pada interface yang dimilikinya sendiri, dan dorong SDK, driver, serta client konkret ke lapisan terluar. Jangan pernah meng-import package vendor langsung dari domain code — definisikan port-nya lebih dulu, lalu adaptasikan vendor ke port itu. Ketika test butuh credentials vendor yang live untuk menjalankan core logic, perlakukan itu sebagai sinyal untuk meng-invert dependency tersebut.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-High-level policy — billing rules, booking logic, whatever the business pays for — must not depend on low-level details such as a payment SDK, a database driver, or an HTTP client. Both sides depend on an abstraction, and crucially the abstraction belongs to the high-level side: it speaks the domain's language, not the vendor's. Details then plug into the core, so swapping or faking infrastructure stops being a rewrite.
+Policy di level tinggi — aturan billing, logic booking, apa pun yang dibayar bisnis untuk itu — tidak boleh bergantung pada detail level rendah seperti payment SDK, database driver, atau HTTP client. Kedua sisi bergantung pada sebuah abstraction, dan yang krusial: abstraction itu dimiliki pihak level tinggi — ia berbicara dalam bahasa domain, bukan bahasa vendor. Detail kemudian menancap ke core, sehingga menukar atau mem-fake infrastructure berhenti menjadi penulisan ulang.
 
-## When to use
+## Kapan pakai
 
-- Core domain logic that must be testable without network, disk, or vendor accounts.
-- Infrastructure with a realistic chance of replacement: payment providers, storage backends, mail relays, message brokers.
-- Library design: consumers code against your surface, not your internals.
-- Multiple deployment targets — cloud versus on-prem, different regional providers.
+- Core domain logic yang harus bisa dites tanpa jaringan, disk, atau akun vendor.
+- Infrastructure dengan peluang penggantian yang realistis: payment provider, storage backend, mail relay, message broker.
+- Perancangan library: konsumen menulis kode melawan surface-nya, bukan bagian internalnya.
+- Target deployment yang beragam — cloud versus on-prem, provider regional yang berbeda-beda.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Wrappers built "just in case" around a single SDK with no second implementation in sight — speculative abstraction.
-- Thin infrastructure code whose entire job is talking to one vendor — an adapter that only renames the vendor's API adds friction, not freedom.
-- Short-lived scripts and prototypes where the rewrite cost is near zero.
-- Wrapping a technology whose full power is the point, such as a search engine's query language — the abstraction will leak.
+- Wrapper yang dibangun "just in case" di sekeliling satu SDK tanpa implementasi kedua yang terlihat — abstraction spekulatif.
+- Kode infrastructure tipis yang tugas utamanya memang berbicara dengan satu vendor — adapter yang hanya mengganti nama API vendor menambah gesekan, bukan kebebasan.
+- Skrip dan prototype berumur pendek yang biaya penulisan ulangnya mendekati nol.
+- Membungkus teknologi yang justru kekuatan penuhnya adalah inti persoalannya, seperti query language sebuah search engine — abstraction-nya akan bocor.
 
 ## Anti-pattern
 
-- `BillingService` importing the payment SDK directly: policy welded to a vendor.
-- An "abstraction" that is a 1:1 mirror of the vendor SDK, including its error model.
-- Interfaces defined inside the vendor wrapper package — the domain now depends on the detail it was escaping.
-- Test suites that require live third-party credentials because there is no seam to fake.
+- `BillingService` meng-import payment SDK secara langsung: policy yang dilas ke satu vendor.
+- "Abstraction" yang merupakan cermin 1:1 dari SDK vendor, termasuk error model-nya.
+- Interface yang didefinisikan di dalam package wrapper vendor — domain kini bergantung pada detail yang sedang ia hindari.
+- Test suite yang mensyaratkan credentials pihak ketiga yang live karena tidak ada seam untuk di-fake.
 
-## Code example
+## Contoh kode
 
-Wrong — the domain imports the vendor; every provider change is core surgery:
+Salah — domain meng-import vendor; setiap perubahan provider adalah operasi di jantung core:
 
 ```ts
 // billing/billing-service.ts
@@ -68,17 +71,17 @@ export class BillingService {
   async charge(cart: Cart) {
     const s = new Stripe(process.env.STRIPE_KEY!);
     const charge = await s.charges.create({ amount: cart.totalCents });
-    return charge.id; // the domain now knows Stripe's response shape
+    return charge.id; // domain kini tahu bentuk response Stripe
   }
 }
 ```
 
-Right — the domain owns the port; the vendor is a replaceable detail:
+Benar — domain memiliki port-nya; vendor menjadi detail yang bisa diganti:
 
 ```ts
-// billing/payment-gateway.ts — the domain's language, the domain's file
+// billing/payment-gateway.ts — bahasa domain, file domain
 export interface PaymentGateway { charge(cart: Cart): Promise<Receipt>; }
-// infra/stripe-gateway.ts — the only file that knows Stripe exists
+// infra/stripe-gateway.ts — satu-satunya file yang tahu Stripe ada
 export const stripeGateway = (key: string): PaymentGateway => ({
   async charge(cart) {
     const s = new Stripe(key);
@@ -87,37 +90,37 @@ export const stripeGateway = (key: string): PaymentGateway => ({
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by the build, not by intentions:
+Prinsip ini ditegakkan oleh build, bukan oleh niat:
 
-- **Import boundary rules in CI** (dependency-cruiser, eslint-plugin-boundaries): domain folders may not import infrastructure or vendor packages — the violation fails the build.
-- **Architecture tests**: ts-arch or ArchUnit-style rules asserting that ports live in the domain layer and implementations outside it.
-- **Test seam proof**: core logic unit tests run against an in-memory fake gateway, with no network and no vendor credentials — if they cannot, the dependency is not inverted.
-- **Review checklist**: does any file under domain or core import an SDK? If yes, stop and define the port first.
+- **Aturan import boundary di CI** (dependency-cruiser, eslint-plugin-boundaries): folder domain tidak boleh meng-import infrastructure atau package vendor — pelanggarannya menggagalkan build.
+- **Architecture test**: aturan bergaya ts-arch atau ArchUnit yang menegaskan bahwa port hidup di lapisan domain dan implementasinya di luarnya.
+- **Bukti seam test**: unit test core logic berjalan melawan fake gateway in-memory, tanpa jaringan dan tanpa credentials vendor — jika tidak bisa, dependency itu belum ter-invert.
+- **Checklist review**: adakah file di bawah domain atau core yang meng-import SDK? Jika ya, berhenti dan definisikan port-nya lebih dulu.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-A subscription product hard-wired its billing core to one payment provider's SDK — charges, refunds, retries, and even error handling were written in the vendor's terms. When contract renegotiation made switching providers necessary, the "integration" turned into a multi-month rewrite: the vendor's concepts had become load-bearing inside core business rules. A domain-owned gateway port with per-provider adapters would have reduced the switch from a rewrite to an adapter project plus a careful data migration. (ilustratif — composite of a common failure mode; verification: perlu)
+Sebuah produk subscription meng-hard-wire core billing-nya ke SDK satu payment provider — charge, refund, retry, sampai error handling pun ditulis dalam istilah vendor. Ketika negosiasi ulang kontrak membuat penggantian provider menjadi keharusan, "integrasi" itu berubah menjadi penulisan ulang berbulan-bulan: konsep vendor telah menjadi penyangga di dalam aturan bisnis inti. Sebuah port gateway milik domain dengan adapter per provider akan mengurangi pergantian itu dari penulisan ulang menjadi proyek adapter plus sebuah data migration yang cermat. (ilustratif — komposit dari mode kegagalan yang umum; verification: perlu)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Dependency Inversion vs. YAGNI**: every port and adapter is indirection someone must read. Introduce the seam when a second implementation is plausible or testing demands isolation — not for every import by default.
-- **Dependency Inversion vs. KISS**: a pass-through wrapper around one SDK adds a layer with no new capability; weigh the cost of swapping later against the cost of understanding now.
-- **Ports everywhere vs. Least Astonishment**: too many single-implementation interfaces turn the codebase into a maze. Keep ports few, small, and named in domain language.
+- **Dependency Inversion vs. YAGNI**: setiap port dan adapter adalah indirection yang harus dibaca seseorang. Perkenalkan seam saat implementasi kedua masuk akal atau saat testing menuntut isolasi — bukan untuk setiap import secara default.
+- **Dependency Inversion vs. KISS**: wrapper pass-through di sekeliling satu SDK menambah lapisan tanpa kemampuan baru; timbang biaya menukar nanti melawan biaya memahami sekarang.
+- **Port di mana-mana vs. Least Astonishment**: terlalu banyak interface berimplementasi tunggal menjadikan codebase sebuah labirin. Jaga port tetap sedikit, kecil, dan dinamai dalam bahasa domain.
 
-## Related principles
+## Prinsip terkait
 
-- [Single Responsibility](/docs/principles/architecture/single-responsibility) — inversion works best when the port itself has one reason to change.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — a port is a contract: declare it and validate what crosses it.
-- [Gall's Law](/docs/principles/architecture/gall-law) — extract the abstraction when the second need appears, not before.
-- [YAGNI](/docs/principles/design/yagni) — the counterweight against speculative ports.
-- [KISS](/docs/principles/design/kiss) — indirection is a cost; pay it only where it buys decoupling.
+- [Single Responsibility](/id/docs/principles/architecture/single-responsibility) — inversion bekerja paling baik ketika port-nya sendiri hanya punya satu alasan untuk berubah.
+- [Explicit Contracts](/id/docs/principles/api/explicit-contracts) — sebuah port adalah contract: deklarasikan dan validasi apa pun yang menyeberanginya.
+- [Gall's Law](/id/docs/principles/architecture/gall-law) — ekstrak abstraction saat kebutuhan kedua muncul, bukan sebelumnya.
+- [YAGNI](/id/docs/principles/design/yagni) — pemberat melawan port spekulatif.
+- [KISS](/id/docs/principles/design/kiss) — indirection adalah biaya; bayar hanya di tempat ia membeli decoupling.
 
-## References
+## Referensi
 
-- Robert C. Martin, SOLID writings — the Dependency Inversion Principle as the "D" (verification: perlu — locate the specific essay before citing precisely).
+- Robert C. Martin, SOLID writings — Dependency Inversion Principle sebagai huruf "D" (verification: perlu — temukan esainya yang spesifik sebelum mengutip secara presisi).

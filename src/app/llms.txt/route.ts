@@ -96,7 +96,7 @@ function buildLlmsTxt(): string {
     `- [${SITE}/zh/docs](${SITE}/zh/docs): Chinese — all ${zhPages.length} principles fully translated; every principle page carries a spoken summary (voice).`,
   );
   lines.push(
-    `- [${SITE}/id/docs](${SITE}/id/docs): Indonesian — ${idPages.length} principles fully translated; coverage stated honestly on the index page.`,
+    `- [${SITE}/id/docs](${SITE}/id/docs): Indonesian — all ${idPages.length} principles fully translated.`,
   );
   lines.push("");
   lines.push("## Principles");

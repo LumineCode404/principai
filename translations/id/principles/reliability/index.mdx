@@ -1,0 +1,17 @@
+---
+title: "Keandalan · Reliability"
+description: Kegagalan yang kecil, terlihat, dan bisa dipulihkan — karena kegagalan bukan soal jika, tapi soal seberapa besar.
+---
+
+Keandalan bukan ketiadaan kegagalan — melainkan ukuran, keterlihatan, dan kemampuan pulih dari kegagalan. Prinsip di kategori ini mengasumsikan segala sesuatu akan salah: re-run akan terjadi, komponen akan mengalami degradation, dan operator pukul 3 pagi tahu lebih sedikit daripada Anda sekarang.
+
+<Cards>
+  <Card title="Idempotency" description="Menjalankan operasi yang sama dua kali harus memberikan hasil yang sama seperti sekali — re-run yang tak sengaja menjadi kejadian biasa, bukan bencana." href="/id/docs/principles/reliability/idempotency" />
+  <Card title="Blast Radius" description="Batasi kerusakan maksimum yang bisa ditimbulkan satu aksi apa pun — pembatasan ukuran batch, konfirmasi per langkah, dan staged rollout mengubah bencana menjadi insiden biasa." href="/id/docs/principles/reliability/blast-radius" />
+  <Card title="Fail Visible" description="Gagal dengan keras dan seketika — kegagalan senyap mengubah bug kecil menjadi state terkorupsi yang baru ditemukan berminggu-minggu kemudian." href="/id/docs/principles/reliability/fail-visible" />
+  <Card title="Graceful Degradation" description="Saat sebuah komponen mengalami degradation, buang yang opsional dan pertahankan yang esensial — layanan parsial lebih baik daripada outage total." href="/id/docs/principles/reliability/graceful-degradation" />
+  <Card title="Observability First" description="Apa yang tak terlihat tak bisa dioperasikan — log, metric, dan trace harus ada sebelum incident, bukan setelahnya." href="/id/docs/principles/reliability/observability-first" />
+  <Card title="Retry Budget" description="Retry memperbesar outage — pakai exponential backoff dengan jitter dan budget keras atas total volume retry." href="/id/docs/principles/reliability/retry-budget" />
+</Cards>
+
+Idempotency, blast radius, dan tested backups membentuk inti [destructive-ops profile](/docs/profiles/destructive-ops) — tiga kontrol yang mengubah bencana re-run menjadi bukan peristiwa.

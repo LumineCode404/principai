@@ -1,4 +1,14 @@
 {
   "title": "Keamanan",
-  "pages": ["least-authority", "fail-safe-defaults", "defense-in-depth", "input-validation", "complete-mediation"]
+  "pages": [
+    "index",
+    "least-authority",
+    "fail-safe-defaults",
+    "defense-in-depth",
+    "secure-by-default",
+    "input-validation",
+    "secrets-hygiene",
+    "supply-chain-vetting",
+    "complete-mediation"
+  ]
 }

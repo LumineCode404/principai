@@ -2,7 +2,7 @@
 title: Soft Delete
 id: soft-delete
 name: Soft Delete
-summary: TERJEMAHAN DRAF — Delete in two phases — mark now, purge after the recovery window — so one bad click is reversible.
+summary: Hapus dalam dua fase — tandai sekarang, purge setelah recovery window — agar satu klik yang keliru bisa dibatalkan.
 category: data
 type: practice
 severity: advisory
@@ -14,101 +14,104 @@ tags:
   - "deletion"
   - "recovery"
   - "audit"
-aliases: []
-sources: []
+aliases:
+  - "Mark Deleted"
+  - "Purge Later"
+sources:
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
 status: draft
 verification: perlu
 source_hash: "ef920c1e1985f4bc"
 translation_status: draft
 ---
 
-{/* Draf terjemahan dari EN: content/docs/principles/data/soft-delete.mdx */}
-{/* source_hash EN: ef920c1e1985f4bc */}
-{/* Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). */}
+{/* Terjemahan bahasa Indonesia dari content/docs/principles/data/soft-delete.mdx */}
+{/* Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). */}
+{/* translation_status hanya menjadi reviewed setelah persetujuan manusia. */}
 
 <AIInstruction>
-Never issue a physical delete for business data in one step. Mark rows deleted with an audit trail (who, when, why), filter them out of queries by default, and purge for real only after a defined recovery window — with purge jobs that are themselves observable. When asked to delete something, confirm which of the two phases is actually wanted, and route irreversible purges through a human.
+Jangan pernah menjalankan physical delete atas data bisnis dalam satu langkah. Tandai baris sebagai deleted disertai audit trail (siapa, kapan, mengapa), saring baris itu keluar dari query secara default, dan lakukan purge sungguhan hanya setelah recovery window yang terdefinisi — dengan purge job yang juga observable. Ketika diminta menghapus sesuatu, konfirmasikan fase mana dari keduanya yang benar-benar dimaksud, dan arahkan purge yang tak bisa dibatalkan melalui manusia.
 </AIInstruction>
 
 <Severity level="advisory" />
 
-## Definition
+## Definisi
 
-Soft delete splits deletion into two phases: an immediate, reversible logical delete (set a deleted_at timestamp, hide from queries) and a delayed, irreversible purge after a retention window. The recovery window converts one bad click, one buggy script, or one confused customer moment into an undo instead of an incident. Deletion stops being a single irreversible verb; it becomes a state transition with an audit trail, followed much later by a real removal.
+Soft delete memecah penghapusan menjadi dua fase: logical delete yang seketika dan bisa dibatalkan (set timestamp deleted_at, sembunyikan dari query) dan purge tertunda yang tak bisa dibatalkan setelah retention window. Recovery window mengubah satu klik yang keliru, satu skrip yang buggy, atau satu momen customer yang kebingungan menjadi sebuah undo, alih-alih sebuah incident. Penghapusan berhenti menjadi satu kata kerja yang tak bisa dibatalkan; ia menjadi transisi state dengan audit trail, disusul jauh kemudian oleh penghapusan yang sesungguhnya.
 
-## When to use
+## Kapan pakai
 
-- User-generated content: accounts, posts, messages, files — anything a user can "delete" from a UI.
-- Admin and moderation actions, where honest mistakes and abuse investigations overlap.
-- Reference data with foreign-key dependents — hard-delete cascades are where schemas go to die.
-- Anywhere the business needs an audit of deletions: who deleted what, when, and why.
+- Konten buatan user: akun, post, pesan, file — apa pun yang bisa di-"delete" user dari sebuah UI.
+- Aksi admin dan moderasi, tempat kesalahan yang jujur dan investigasi penyalahgunaan saling tumpang tindih.
+- Data referensi dengan dependensi foreign key — cascade hard-delete adalah tempat schema pergi untuk mati.
+- Di mana pun bisnis membutuhkan audit atas penghapusan: siapa menghapus apa, kapan, dan mengapa.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- When law or contract defines a hard deletion deadline — the recovery window is capped by that deadline, not by comfort; right-to-erasure requests are the classic case.
-- Security-sensitive values — a soft-deleted API key is still a credential; revoke and destroy immediately.
-- High-volume ephemeral rows (sessions, cache entries) where two-phase machinery costs more than the data; use TTL expiry.
-- Data you should never have kept: soft-deleting PII you had no right to retain is retention, not deletion.
+- Ketika hukum atau kontrak menetapkan deadline penghapusan permanen — recovery window dibatasi oleh deadline itu, bukan oleh kenyamanan; permintaan right-to-erasure adalah kasus klasiknya.
+- Nilai yang sensitif terhadap security — API key yang di-soft-delete tetap sebuah credential; revoke dan hancurkan seketika.
+- Baris ephemeral bervolume tinggi (session, cache entry) yang mesin dua fasenya lebih mahal daripada datanya; pakai TTL expiry.
+- Data yang memang tidak seharusnya disimpan: me-soft-delete PII yang tidak berhak disimpan adalah retention, bukan deletion.
 
 ## Anti-pattern
 
-- The "Delete account" button wired directly to a hard DELETE with cascades.
-- Soft delete without default query filtering — deleted rows resurface in every report until someone notices.
-- Unique indexes that ignore the deleted state, so a deleted row blocks re-registration; use a partial unique index instead.
-- Purge jobs nobody owns; the "temporary" deleted_at column quietly becomes permanent storage and a compliance liability.
+- Tombol "Delete account" yang tersambung langsung ke DELETE keras dengan cascade.
+- Soft delete tanpa filtering query default — baris yang dihapus muncul kembali di setiap laporan sampai ada yang menyadarinya.
+- Unique index yang mengabaikan state deleted, sehingga baris terhapus memblokir registrasi ulang; gunakan partial unique index.
+- Purge job tanpa pemilik; kolom deleted_at yang "sementara" itu diam-diam menjadi storage permanen dan liability compliance.
 
-## Code example
+## Contoh kode
 
-Wrong — irreversible, instant:
+Salah — tak bisa dibatalkan, seketika:
 
 ```python
 def delete_account(user):
-    db.run("DELETE FROM users WHERE id = ?", user.id)        # gone, instantly, for real
-    db.run("DELETE FROM orders WHERE user_id = ?", user.id)  # cascade by hand, pray
+    db.run("DELETE FROM users WHERE id = ?", user.id)        # lenyap, seketika, sungguhan
+    db.run("DELETE FROM orders WHERE user_id = ?", user.id)  # cascade manual, berdoalah
 ```
 
-Right — mark with audit, purge later:
+Benar — tandai dengan audit, purge belakangan:
 
 ```python
 def delete_account(user, actor):
-    # Phase 1: reversible mark + audit, applied instantly
+    # Fase 1: mark yang bisa dibatalkan + audit, diterapkan seketika
     db.run("UPDATE users SET deleted_at = now(), deleted_by = ? WHERE id = ?",
            actor.id, user.id)
-# Phase 2 (scheduled, after the 30-day window): purge in batches, with metrics per run
+# Fase 2 (terjadwal, setelah window 30 hari): purge per batch, dengan metric per run
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-The two phases are enforced by the database and the query layer, not by memory:
+Kedua fase ditegakkan oleh database dan query layer, bukan oleh ingatan:
 
-- **Query-layer default filter**: the ORM excludes deleted rows unless a query explicitly opts in; soft-deleted data is invisible to normal code paths.
-- **Permission split**: application roles hold no hard-DELETE on soft-delete tables; only the purge job's dedicated role does, and only for rows past the window (see Least Authority).
-- **Partial unique indexes**: uniqueness applies among live rows only, so deletion never blocks re-registration.
-- **Purge as a first-class job**: batched, dry-runnable, metric-emitting, with alerts — deletion of deletions is still deletion (see Blast Radius).
-- **Audit fields mandatory**: deleted_by, deleted_at, and reason are required columns; a deletion without provenance is a bug.
+- **Filter default di query layer**: ORM mengecualikan baris yang dihapus kecuali query secara eksplisit memintanya; data yang di-soft-delete tak terlihat oleh code path normal.
+- **Pemisahan permission**: role aplikasi tidak memegang hard-DELETE di tabel soft-delete; hanya role khusus milik purge job yang memegangnya, dan hanya untuk baris yang sudah melewati window (lihat Least Authority).
+- **Partial unique index**: keunikan hanya berlaku di antara baris yang hidup, sehingga penghapusan tidak pernah memblokir registrasi ulang.
+- **Purge sebagai job kelas satu**: batched, bisa di-dry-run, memancarkan metric, dengan alert — penghapusan atas penghapusan tetaplah penghapusan (lihat Blast Radius).
+- **Field audit wajib**: deleted_by, deleted_at, dan reason adalah kolom yang diwajibkan; penghapusan tanpa provenance adalah bug.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-(ilustratif) A customer, mid-way through a frustrating support ticket, deletes their account in another tab. The request is legitimate, the confirmation dialog is clicked through, and the workspace with all its files is hard-deleted before the agent reading the ticket ever sees it. With a 30-day soft-delete window, the account is restored in minutes and the support conversation continues; without one, the answer is "have you checked whether your data was important." (verification: perlu — the composite story is constructed; trash/undo windows are a common real product pattern, but this specific sequence is illustrative, belum digali.)
+(ilustratif) Seorang customer, di tengah tiket support yang menjengkelkan, menghapus akunnya di tab lain. Request itu sah, dialog konfirmasi diklik hingga selesai, dan workspace beserta seluruh filenya ter-hard-delete sebelum agen yang membaca tiket itu sempat melihatnya. Dengan soft-delete window 30 hari, akun di-restore dalam hitungan menit dan percakapan support berlanjut; tanpa itu, jawabannya adalah "sudahkah diperiksa apakah datanya penting." (verification: perlu — cerita komposit ini dikonstruksi; window trash/undo adalah pola produk nyata yang umum, tetapi urutan kejadian spesifik ini ilustratif, belum digali.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Soft Delete vs. compliance**: retention windows must shrink to legal deadlines; when a regulation says gone, gone wins — track the tightest applicable deadline per data class.
-- **Soft Delete vs. storage and liability**: deleted data that is never purged is a liability wearing a feature's clothes; the purge is part of the principle, not an optional extra.
-- **Weigh against Blast Radius / user expectation**: a visible trash can and an explicit undo are honest UX; a hidden forever-deleted_at flag surprises users and engineers alike.
+- **Soft Delete vs. compliance**: retention window harus menyusut mengikuti deadline hukum; ketika sebuah regulasi bilang hilang, hilang yang menang — lacak deadline paling ketat yang berlaku per kelas data.
+- **Soft Delete vs. storage dan liability**: data yang dihapus tapi tak pernah di-purge adalah liability yang mengenakan pakaian fitur; purge adalah bagian dari prinsip ini, bukan tambahan opsional.
+- **Ditimbang terhadap Blast Radius / ekspektasi user**: trash can yang terlihat dan undo yang eksplisit adalah UX yang jujur; flag deleted_at permanen yang tersembunyi mengejutkan user dan engineer sama-sama.
 
-## Related principles
+## Prinsip terkait
 
-- [Blast Radius](/docs/principles/reliability/blast-radius) — the recovery window is a blast-radius cap in the time dimension.
-- [Append-Only Logs](/docs/principles/data/append-only-logs) — deletion as an event in history rather than an edit of it.
-- [Tested Backups](/docs/principles/data/tested-backups) — the last resort when the window has already closed.
-- [Least Authority](/docs/principles/security/least-authority) — only the purge role may destroy, and only past the window.
+- [Blast Radius](/id/docs/principles/reliability/blast-radius) — recovery window adalah cap blast radius dalam dimensi waktu.
+- [Append-Only Logs](/id/docs/principles/data/append-only-logs) — penghapusan sebagai event di dalam history, bukan edit atasnya.
+- [Tested Backups](/id/docs/principles/data/tested-backups) — jalan terakhir ketika window-nya sudah tertutup.
+- [Least Authority](/id/docs/principles/security/least-authority) — hanya role purge yang boleh menghancurkan, dan hanya setelah melewati window.
 
-## References
+## Referensi
 
-- Kleppmann, *Designing Data-Intensive Applications*, 2017 — log-structured storage and retention (verification: perlu — confirm framing before quoting).
-- Privacy erasure regimes (e.g. the EU GDPR right to erasure) cap how long "deleted" may linger — check the exact obligations with counsel before writing retention policy (verification: perlu).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — log-structured storage dan retention (verification: perlu — konfirmasi pembingkaiannya sebelum mengutip).
+- Rezim penghapusan privasi (mis. hak penghapusan GDPR di UE) membatasi berapa lama "deleted" boleh menggantung — periksa kewajiban persisnya dengan penasihat hukum sebelum menulis kebijakan retention (verification: perlu).

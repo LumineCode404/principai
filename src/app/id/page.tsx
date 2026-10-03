@@ -8,10 +8,12 @@ import { registryStats } from "@/data/registry";
 import { Reveal, Stagger, Item, Lift, HeroSpotlight } from "@/components/motion";
 
 const categories = [
-  { name: "Keamanan", desc: "Scoping otoritas, validasi input, gagal tertutup.", href: "/id/docs/principles/security", ready: "5 dari 8" },
-  { name: "Keandalan", desc: "Kegagalan yang kecil, terlihat, dan pulih.", href: "/id/docs/principles/reliability", ready: "3 dari 6" },
-  { name: "Data", desc: "Backup yang teruji, delete yang reversibel.", href: "/id/docs/principles/data", ready: "1 dari 4" },
-  { name: "Arsip lengkap (EN)", desc: "Semua 32 prinsip dalam bahasa Inggris.", href: "/docs/principles", ready: "32" },
+  { name: "Keamanan", desc: "Scoping otoritas, validasi input, gagal tertutup.", href: "/id/docs/principles/security", ready: "8 dari 8" },
+  { name: "Keandalan", desc: "Kegagalan yang kecil, terlihat, dan pulih.", href: "/id/docs/principles/reliability", ready: "6 dari 6" },
+  { name: "Data", desc: "Backup yang teruji, delete yang reversibel.", href: "/id/docs/principles/data", ready: "4 dari 4" },
+  { name: "Desain", desc: "Simplicity, duplikasi, dan hukum metrik.", href: "/id/docs/principles/design", ready: "6 dari 6" },
+  { name: "API", desc: "Contract eksplisit dan janji kepada orang asing.", href: "/id/docs/principles/api", ready: "4 dari 4" },
+  { name: "Arsitektur", desc: "Gaya yang membentuk sistem, bukan cetak biru.", href: "/id/docs/principles/architecture", ready: "4 dari 4" },
 ];
 
 export default function HomeId() {
@@ -66,9 +68,9 @@ export default function HomeId() {
             <div className="hero-up" style={{ ["--d" as never]: "0.2s"} }>
               <p className="mt-6 text-lg leading-relaxed text-[#8B89A0]">
                 Prinsip rekayasa perangkat lunak dalam format yang ramah AI agent — satu
-                prinsip satu file, staged loading, severity bertingkat. Terjemahan bahasa
-                Indonesia berjalan bertahap; yang selesai langsung tayang. Prinsip menasihati,
-                kontrol teknis yang menegakkan.
+                prinsip satu file, staged loading, severity bertingkat. Semua 32 prinsip
+                sudah diterjemahkan ke bahasa Indonesia (status draf, menunggu tinjauan
+                manusia). Prinsip menasihati, kontrol teknis yang menegakkan.
               </p>
             </div>
             <div className="hero-up" style={{ ["--d" as never]: "0.28s"} }>
@@ -128,9 +130,10 @@ export default function HomeId() {
           </Reveal>
           <Reveal delay={0.05}>
             <p className="mt-5 max-w-3xl text-lg leading-relaxed text-[#8B89A0]">
-              Kategori di bawah sudah <em>sudah digali</em>. Kartu menunjukkan berapa prinsip
-              yang sudah diterjemahkan penuh — sisanya menunggu di arsip bahasa Inggris, dan
-              terjemahan berlanjut dari waktu ke waktu. Daftar ini bukan janji cakupan.
+              Kategori di bawah sudah <em>sudah digali</em>. Semua 32 prinsip sudah
+              diterjemahkan penuh ke bahasa Indonesia; koreksi lanjutan mengikuti arsip
+              bahasa Inggris sebagai sumber kebenaran tunggal. Daftar ini bukan janji
+              cakupan.
             </p>
           </Reveal>
           <Stagger className="mt-10 grid gap-4 sm:grid-cols-2">

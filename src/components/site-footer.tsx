@@ -9,7 +9,6 @@ export function SiteFooter() {
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
         <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-center">
           <div className="flex items-center gap-3">
-            { }
             <img
               src="/images/logo-icon-96.png"
               alt="PRINCIPAI owl logo"
@@ -59,6 +58,12 @@ export function SiteFooter() {
             >
               CLI
             </Link>
+            <a
+              href="/llms.txt"
+              className="font-mono text-[13px] text-[#8B89A0] transition-colors hover:text-white"
+            >
+              llms.txt
+            </a>
           </nav>
         </div>
 

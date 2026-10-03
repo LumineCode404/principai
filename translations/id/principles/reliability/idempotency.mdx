@@ -2,7 +2,7 @@
 title: Idempotency
 id: idempotency
 name: Idempotency
-summary: TERJEMAHAN DRAF — Running the same operation twice must produce the same result as once — accidental re-runs become boring instead of fatal.
+summary: Menjalankan operasi yang sama dua kali harus memberikan hasil yang sama seperti sekali — re-run yang tak sengaja menjadi kejadian biasa, bukan bencana.
 category: reliability
 type: principle
 severity: critical
@@ -17,104 +17,107 @@ tags:
   - "retries"
   - "safety"
   - "state"
-aliases: []
-sources: []
+aliases:
+  - "Idempotent Operations"
+sources:
+  - 'Waldo et al., "A Note on Distributed Computing", 1994'
+  - 'Kleppmann, "Designing Data-Intensive Applications", 2017'
 status: draft
 verification: perlu
 source_hash: "79feaa36bede30d9"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/reliability/idempotency.mdx -->
-<!-- source_hash EN: 79feaa36bede30d9 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/reliability/idempotency.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Make every mutating operation safe to execute more than once. Attach a stable idempotency key to each write that moves money, sends side effects, or changes state, and check it before executing. If an operation cannot be made idempotent, stop and ask a human before wiring it into a retry path, a queue consumer, or a script that may run twice.
+Buat setiap operasi mutating aman untuk dijalankan lebih dari sekali. Pasang idempotency key yang stabil pada setiap write yang memindahkan uang, mengirim side effect, atau mengubah state, dan periksa key itu sebelum eksekusi. Jika sebuah operasi tidak bisa dibuat idempotent, berhenti dan minta persetujuan manusia sebelum menghubungkannya ke retry path, queue consumer, atau skrip yang mungkin berjalan dua kali.
 </AIInstruction>
 
 <Severity level="critical" />
 
-## Definition
+## Definisi
 
-An operation is idempotent when executing it N times leaves the system in the same state as executing it once. In distributed systems this is not a nicety: timeouts are ambiguous (the request may have committed), delivery guarantees are at-least-once, and humans re-run scripts. Idempotency converts "did my request land?" from a data-integrity crisis into a boring re-send.
+Operasi disebut idempotent ketika menjalankannya N kali meninggalkan sistem pada state yang sama seperti menjalankannya sekali. Di sistem terdistribusi ini bukan kemewahan: timeout itu ambigu (request-nya mungkin sudah committed), jaminan pengiriman adalah at-least-once, dan manusia menjalankan ulang skrip. Idempotency mengubah pertanyaan "apakah request saya sampai?" dari krisis integritas data menjadi sekadar re-send yang biasa.
 
-## When to use
+## Kapan pakai
 
-- Anything a client may retry: payments, order creation, provisioning, message sending.
-- Queue consumers — at-least-once delivery is the honest default of most brokers.
-- Cron jobs, backfills, and cleanup scripts that humans re-run after partial failures.
-- ML pipelines: feature backfills, restartable training steps, dataset materialization.
+- Apa pun yang mungkin di-retry oleh client: pembayaran, pembuatan order, provisioning, pengiriman pesan.
+- Queue consumer — at-least-once delivery adalah default jujur dari sebagian besar broker.
+- Cron job, backfill, dan skrip cleanup yang dijalankan ulang oleh manusia setelah kegagalan parsial.
+- Pipeline ML: feature backfill, training step yang bisa direstart, materialisasi dataset.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Pure reads — already safe; dedupe machinery around them is unearned complexity.
-- Genuinely single-use state (a voucher being consumed) — model it as an explicit state transition, not a "safe retry".
-- Cheap, re-derivable writes (cache refresh) where a duplicate is harmless by construction.
+- Read murni — sudah aman; mesin dedupe di sekelilingnya hanyalah kompleksitas yang tak diperlukan.
+- State yang memang sekali pakai (voucher yang dikonsumsi) — modelkan sebagai transisi state yang eksplisit, bukan "retry yang aman".
+- Write murah yang bisa diturunkan ulang (cache refresh) di mana duplikatnya tidak berbahaya secara konstruksi.
 
 ## Anti-pattern
 
-- A charge call with no idempotency key, wrapped in a retry loop.
-- A crash between the payment call and the "mark processed" update — re-delivery re-charges.
-- A backfill script that starts with DELETE and trusts the operator to run it exactly once.
-- Treating a timeout as "definitely failed" and repeating a non-idempotent call.
+- Panggilan charge tanpa idempotency key, dibungkus retry loop.
+- Crash di antara panggilan pembayaran dan update "tandai sudah diproses" — re-delivery men-charge ulang.
+- Skrip backfill yang dimulai dengan DELETE dan mempercayai operator menjalankannya tepat sekali.
+- Memperlakukan timeout sebagai "pasti gagal" lalu mengulang panggilan yang non-idempotent.
 
-## Code example
+## Contoh kode
 
-Wrong — the retry itself is the bug:
+Salah — retry-nya sendirilah bug-nya:
 
 ```python
 def handle_event(event):
-    # No idempotency key: a timeout plus one client retry charges twice
+    # Tanpa idempotency key: satu timeout plus satu retry dari client berarti charge dua kali
     charge = gateway.charge(event.amount, event.token)
     db.run("UPDATE orders SET status = 'paid' WHERE id = ?", event.order_id)
 ```
 
-Right — the event's identity is the key:
+Benar — identitas event-nya menjadi key-nya:
 
 ```python
 def handle_event(event):
     key = f"order:{event.order_id}:charge"
     if db.one("SELECT 1 FROM processed_events WHERE key = ?", key):
-        return                                # re-delivery is normal, not an error
-    # Provider dedupes on the key across the ambiguous timeout window
+        return                                # re-delivery itu normal, bukan error
+    # Provider melakukan dedupe atas key ini sepanjang window timeout yang ambigu
     gateway.charge(event.amount, event.token, idempotency_key=key)
-    # Unique index on key is the real guard against concurrent duplicates
+    # Unique index pada key adalah penjaga sesungguhnya terhadap duplikat konkuren
     db.run("INSERT INTO processed_events (key) VALUES (?)", key)
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced at the storage and protocol layers, not by careful code:
+Prinsip ini ditegakkan di layer storage dan protocol, bukan oleh kode yang hati-hati:
 
-- **Idempotency keys at the API edge**: the gateway rejects unsafe-method calls without an Idempotency-Key header and replays the stored first response for duplicates.
-- **Unique constraints as the last line of defense**: a natural key (event ID, order ID) with a unique index; INSERT with conflict handling instead of check-then-write races.
-- **Consumer-side dedupe**: dedupe on message identity before any side effect runs, regardless of broker guarantees.
-- **Run markers for scripts**: every mutating job records a completed marker; re-running a completed job is a logged no-op.
-- **Replay tests in CI**: re-deliver every message in a fixture set a second time and diff the final state — the diff must be empty.
+- **Idempotency key di tepi API**: gateway menolak panggilan unsafe-method tanpa header Idempotency-Key dan memutar ulang respons pertama yang tersimpan untuk duplikat.
+- **Unique constraint sebagai lini pertahanan terakhir**: natural key (event ID, order ID) dengan unique index; INSERT dengan penanganan konflik, bukan race check-then-write.
+- **Dedupe di sisi consumer**: dedupe atas identitas pesan sebelum side effect apa pun berjalan, apa pun jaminan broker-nya.
+- **Run marker untuk skrip**: setiap job mutating mencatat marker completed; menjalankan ulang job yang selesai adalah no-op yang tercatat di log.
+- **Replay test di CI**: kirim ulang setiap pesan dalam fixture set untuk kedua kalinya lalu bandingkan state akhirnya — diff-nya harus kosong.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-(ilustratif) A checkout service calls its payment provider with no idempotency key. Under load, the provider call times out for sixty seconds; the client retry policy fires three times per request; every retry lands once the provider recovers. Customers are double- and triple-charged, support tickets and manual reconciliation follow, and finance loses days. One stable key per order would have reduced the whole event to a cached first response. (verification: perlu — real double-charge incidents exist in public postmortems; belum digali — read the specific sources before citing any of them.)
+(ilustratif) Sebuah service checkout memanggil payment provider-nya tanpa idempotency key. Saat beban tinggi, panggilan ke provider timeout selama enam puluh detik; retry policy di client terpicu tiga kali per request; setiap retry mendarat begitu provider pulih. Pelanggan ter-charge dua dan tiga kali, tiket support dan rekonsiliasi manual menyusul, dan tim finance kehilangan berhari-hari. Satu key stabil per order akan mengurangi seluruh kejadian itu menjadi respons pertama yang ter-cache. (verification: perlu — insiden double-charge nyata ada di postmortem publik; belum digali — baca sumber spesifiknya sebelum mengutip salah satunya.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Safety vs. latency**: key lookups and dedupe tables add milliseconds to every write; they remove entire classes of incident. Pay the milliseconds.
-- **Idempotency vs. Retry Budget**: retries are only legitimate on idempotent operations; sequence the two principles — make the operation safe, then budget the retries.
-- **Idempotency vs. intent**: keys scoped too broadly (per customer instead of per order) silently block legitimate repeat purchases. Scope keys to the operation's natural identity, not to the actor.
+- **Keamanan vs. latensi**: key lookup dan tabel dedupe menambah milidetik ke setiap write; keduanya menghapus kelas insiden secara keseluruhan. Bayar milidetiknya.
+- **Idempotency vs. Retry Budget**: retry hanya sah pada operasi idempotent; urutkan kedua prinsip ini — buat operasinya aman dulu, baru atur budget retry-nya.
+- **Idempotency vs. intent**: key yang scope-nya terlalu luas (per customer alih-alih per order) diam-diam memblokir pembelian ulang yang sah. Batasi scope key ke identitas natural operasinya, bukan ke aktornya.
 
-## Related principles
+## Prinsip terkait
 
-- [Retry Budget](/docs/principles/reliability/retry-budget) — retries amplify load; only affordable where idempotency holds.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — bounds one bad action; idempotency bounds one repeated action.
-- [Append-Only Logs](/docs/principles/data/append-only-logs) — stable event IDs make replay and dedupe natural.
-- [Fail-Visible](/docs/principles/reliability/fail-visible) — a dedupe miss must surface loudly, not corrupt silently.
+- [Retry Budget](/docs/principles/reliability/retry-budget) — retry memperbesar beban; hanya terjangkau di tempat idempotency berlaku.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — membatasi satu aksi buruk; idempotency membatasi satu aksi yang berulang.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — event ID yang stabil membuat replay dan dedupe jadi alami.
+- [Fail-Visible](/docs/principles/reliability/fail-visible) — dedupe yang meleset harus muncul dengan keras, bukan merusak secara diam-diam.
 
-## References
+## Referensi
 
-- Waldo et al., *A Note on Distributed Computing*, 1994 — partial failure means you cannot know whether the callee executed; idempotency makes that ambiguity survivable (verification: perlu — confirm framing before quoting).
-- Kleppmann, *Designing Data-Intensive Applications*, 2017 — idempotence as the foundation of effectively-once processing (verification: perlu).
+- Waldo et al., *A Note on Distributed Computing*, 1994 — partial failure berarti kita tidak bisa tahu apakah pihak yang dipanggil sudah mengeksekusi; idempotency membuat ambiguitas itu bisa ditanggung (verification: perlu — konfirmasi pembingkaiannya sebelum mengutip).
+- Kleppmann, *Designing Data-Intensive Applications*, 2017 — idempotence sebagai fondasi pemrosesan effectively-once (verification: perlu).

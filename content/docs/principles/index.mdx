@@ -1,0 +1,21 @@
+---
+title: Principles
+description: The archive — every principle is one file with a strict frontmatter contract, organized by category.
+---
+
+Every principle is one markdown file: a summary sized for INDEX loading, a fixed section order, [severity](/docs/concepts/severity), `applies_to`, tags, and aliases. The categories below are marked *sudah digali* — dug, with files on disk. Categories not listed here are tracked in the [taxonomy](/docs/taxonomy) as *belum digali* or *tidak yakin*; the list below is not a promise of coverage.
+
+This is the archive. What loads into an agent is a different concern — handled by [profiles](/docs/profiles) and the [`principai copy`](/docs/cli/reference) command.
+
+<Cards>
+  <Card title="Security" description="Scoping authority, validating input, and failing closed — so a small bug cannot escalate into a deleted database." href="/docs/principles/security" />
+  <Card title="Reliability" description="Idempotency, blast radius, tested backups, observability — keeping failures small, visible, and recoverable." href="/docs/principles/reliability" />
+  <Card title="Data" description="Backups that restore, schemas that migrate in phases, deletes that are reversible, history that is evidence." href="/docs/principles/data" />
+  <Card title="Architecture" description="How systems and organizations shape each other — boundaries, dependencies, and growth from simple beginnings." href="/docs/principles/architecture" />
+  <Card title="API" description="Contracts across boundaries — explicit, versioned, and honest about what users will actually depend on." href="/docs/principles/api" />
+  <Card title="Design" description="Simplicity, judgment about duplication and speculation, and the laws that govern measures and surprises." href="/docs/principles/design" />
+</Cards>
+
+## How to load these
+
+Browse by category, or start from a [profile](/docs/profiles) — a curated must-follow and consider set for a kind of work. The [destructive-ops profile](/docs/profiles/destructive-ops) is the canonical example, built from the cleanup-script failure chain.

@@ -2,7 +2,7 @@
 title: Complete Mediation
 id: complete-mediation
 name: Complete Mediation
-summary: TERJEMAHAN DRAF — Authorize every access through every path — a cached permission or a forgotten side door is still a door.
+summary: Otorisasi setiap akses di setiap jalur — permission yang di-cache atau pintu samping yang terlupakan tetaplah pintu.
 category: security
 type: principle
 severity: important
@@ -14,112 +14,115 @@ tags:
   - "authorization"
   - "access-control"
   - "caching"
-aliases: []
-sources: []
+aliases:
+  - "Check Every Access"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
 status: draft
 verification: perlu
 source_hash: "e76a30c10164db56"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/security/complete-mediation.mdx -->
-<!-- source_hash EN: e76a30c10164db56 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/security/complete-mediation.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Authorize every access on every path — every request, every background job, every side door. Never trust a permission decided earlier: not at login, not at session start, not because the object was reachable in a previous request. If you find a path that skips the check, treat it as a vulnerability and report it.
+Otorisasi setiap akses di setiap jalur — setiap request, setiap background job, setiap pintu samping. Jangan pernah percaya permission yang diputuskan lebih awal: bukan saat login, bukan saat session dimulai, bukan karena objek itu terjangkau pada request sebelumnya. Jika menemukan jalur yang melewati check, perlakukan itu sebagai vulnerability dan laporkan.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Every access to every protected object must pass through an authorization check — not at login, not at page load, but at the moment of access, on the path that performs it. Cached authority decisions are snapshots of the past: roles change, ownership changes, tokens get revoked, and the check skipped "because we already checked" is skipped at exactly the wrong time. Saltzer and Schroeder named this complete mediation, and it is the principle most often violated by convenience: decorators on some endpoints, an assumed check "further up", a worker that reads the same data without the gate.
+Setiap akses ke setiap objek terlindungi harus melewati check authorization — bukan saat login, bukan saat halaman dimuat, tetapi pada saat akses terjadi, di jalur yang melakukannya. Keputusan otoritas yang di-cache adalah potret masa lalu: role berubah, kepemilikan berubah, token dicabut, dan check yang dilewati "karena sudah pernah dicek" justru dilewati di waktu yang paling salah. Saltzer dan Schroeder menamainya complete mediation, dan inilah prinsip yang paling sering dilanggar demi kenyamanan: decorator di sebagian endpoint, check yang diasumsikan ada "di lapisan atas", worker yang membaca data yang sama tanpa gerbang.
 
-## When to use
+## Kapan pakai
 
-- APIs with per-object access rules: document, project, and workspace scoped resources.
-- Long-lived sessions and tokens: web apps, mobile apps, agents.
-- Async and background paths: workers, schedulers, webhooks — the doors people forget.
-- Any system where roles, memberships, or ownership can change while sessions are alive.
+- API dengan aturan akses per objek: resource ter-scope per document, project, dan workspace.
+- Session dan token berumur panjang: web app, mobile app, agent.
+- Jalur async dan background: worker, scheduler, webhook — pintu-pintu yang orang lupakan.
+- Sistem apa pun yang role, keanggotaan, atau kepemilikannya bisa berubah selama session masih hidup.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Fully public resources where authorization is a no-op — an empty check is noise; mark the route explicitly public instead.
-- Immutable, non-sensitive metadata that cannot change ownership — document the assumption, revisit it when the object model changes.
-- Short-lived caches backed by real invalidation on revocation — that is mediation with engineering, not an exception; keep it only as long as the invalidation actually works.
+- Resource yang sepenuhnya publik di mana authorization adalah no-op — check kosong hanyalah derau; tandai route secara eksplisit sebagai publik.
+- Metadata immutable dan non-sensitif yang kepemilikannya tidak bisa berubah — dokumentasikan asumsinya, tinjau ulang saat object model berubah.
+- Cache berumur pendek yang ditopang invalidasi nyata saat pencabutan — itu mediasi dengan rekayasa, bukan pengecualian; pertahankan hanya selama invalidasinya benar-benar bekerja.
 
 ## Anti-pattern
 
-- "Is logged in" treated as an authorization model — authentication reused as permission.
-- The admin check done in the menu rendering code; the endpoint itself assumes only admins know the URL.
-- A permission decision cached at session start and never revisited.
-- A new admin endpoint added "temporarily" without the middleware, because it was an internal demo.
-- A worker processing jobs by reading documents straight from the database, "because the API already checked when the job was created".
+- "Sudah login" diperlakukan sebagai model authorization — authentication dipakai ulang sebagai permission.
+- Check admin dilakukan di kode perenderan menu; endpoint-nya sendiri berasumsi hanya admin yang tahu URL-nya.
+- Keputusan permission di-cache saat session dimulai dan tidak pernah ditinjau ulang.
+- Endpoint admin baru ditambahkan "sementara" tanpa middleware, karena itu demo internal.
+- Worker memproses job dengan membaca dokumen langsung dari database, "karena API sudah mengecek saat job dibuat".
 
-## Code example
+## Contoh kode
 
-Wrong — check once, trust forever:
+Salah — check sekali, percaya selamanya:
 
 ```python
-# Role resolved ONCE at login and stored in the session
+# Role diselesaikan SEKALI saat login dan disimpan di session
 @app.post("/login")
 def login(user):
-    session["role"] = db.get_role(user.id)      # snapshot of the past
+    session["role"] = db.get_role(user.id)      # potret masa lalu
 
 @app.delete("/documents/{doc_id}")
 def delete_document(doc_id):
-    if session["role"] != "admin":              # hours stale, checked anyway
+    if session["role"] != "admin":              # basi berjam-jam, tetap dipakai
         abort(403)
-    db.delete(doc_id)                           # authority from this morning
+    db.delete(doc_id)                           # otoritas dari tadi pagi
 ```
 
-Right — check at the moment of access, on the path that performs it:
+Benar — check pada saat akses, di jalur yang melakukannya:
 
 ```python
-# Authority resolved per access, against the current role and THIS object
+# Otoritas diselesaikan per akses, terhadap role saat ini dan objek INI
 @app.delete("/documents/{doc_id}")
-@require_permission("document:delete", doc_id)  # fresh role + this doc
+@require_permission("document:delete", doc_id)  # role segar + dokumen ini
 def delete_document(doc_id):
     db.delete(doc_id)
 
-# The decorator resolves the CURRENT role (cached only with invalidation
-# on revocation) and ownership of THIS document — every request, every path.
+# Decorator menyelesaikan role SAAT INI (di-cache hanya dengan invalidasi
+# saat pencabutan) dan kepemilikan dokumen INI — setiap request, setiap jalur.
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Mediation must be structural so new code cannot opt out:
+Mediasi harus struktural agar kode baru tidak bisa memilih keluar:
 
-- **A single authorization point**: framework-level guards that every route must declare — a route without an explicit policy fails startup, deny by default at the routing layer.
-- **Object-level, not just route-level checks**: policies evaluated against the specific resource, kept in one place by ABAC/RBAC libraries or a policy engine.
-- **Revocation that propagates**: role changes and token revocations invalidate or expire cached decisions; short session lifetimes and token introspection bound staleness by design, not by hope.
-- **Coverage tests and route inventory audits**: a test that fails when any route or worker touches a protected model without passing the policy point.
-- **What prevents vs. detects**: guards and startup failures prevent unmediated paths from shipping; audits and coverage tests detect the ones that slipped — mediation decays quietly, so keep the detection half funded.
+- **Satu titik authorization**: guard level framework yang wajib dideklarasikan setiap route — route tanpa policy eksplisit menggagalkan startup, deny by default di lapisan routing.
+- **Check level objek, bukan hanya level route**: policy dievaluasi terhadap resource spesifik, dijaga di satu tempat oleh library ABAC/RBAC atau policy engine.
+- **Pencabutan yang merambat**: perubahan role dan pencabutan token meng-invalidasi atau mengedaluwarsakan keputusan ter-cache; umur session pendek dan token introspection membatasi kebasihan secara desain, bukan berdasarkan harapan.
+- **Coverage test dan audit inventaris route**: test yang gagal ketika ada route atau worker menyentuh model terlindungi tanpa melewati titik policy.
+- **Yang mencegah vs. yang mendeteksi**: guard dan kegagalan startup mencegah jalur tak termediasi ikut ter-deploy; audit dan coverage test mendeteksi yang lolos — mediasi melapuk secara senyap, jadi jaga setengah deteksinya tetap didanai.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-Scenario (ilustratif): an application resolves the user's role once, at session start, and caches it for the session's lifetime. The user's admin role is revoked mid-session — an offboarding, a security response — but every request still carries yesterday's answer: for hours, until the session expires, the ex-admin can create, read, and delete with authority that was already withdrawn. There is no single bug to fix; the design asked "is this user an admin" at the wrong time and trusted the answer forever. Mediating every access — resolving authority at the moment of use, with revocation invalidating cached decisions — would have reduced the exposure from hours of full access to seconds. (Ilustratif; verification: perlu — no public postmortem is cited here.)
+Skenario (ilustratif): sebuah aplikasi menyelesaikan role user sekali, saat session dimulai, lalu meng-cache-nya seumur session. Role admin user itu dicabut di tengah session — offboarding, respons keamanan — tetapi setiap request masih membawa jawaban kemarin: berjam-jam lamanya, sampai session kedaluwarsa, mantan admin itu bisa membuat, membaca, dan menghapus dengan otoritas yang sudah ditarik. Tidak ada satu bug tunggal untuk diperbaiki; desainnya bertanya "apakah user ini admin" di waktu yang salah dan memercayai jawaban itu selamanya. Memediasi setiap akses — menyelesaikan otoritas pada saat digunakan, dengan pencabutan yang meng-invalidasi keputusan ter-cache — akan mengurangi paparan itu dari berjam-jam akses penuh menjadi hitungan detik. (Ilustratif; verification: perlu — tidak ada postmortem publik yang dikutip di sini.)
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Per-access checks vs. latency**: every access through the policy point costs a lookup; caches are the honest compromise — but a stale cache either over-grants, violating least authority, or under-grants, locking out real users against least astonishment. Set the staleness budget explicitly and wire revocation to invalidation.
-- **Fail-closed mediation vs. graceful degradation**: when the policy store is unreachable, failing closed protects the data but darkens the product, while failing open opens the doors — decide per path, and decide before the outage.
-- **One mediation point vs. single responsibility**: singular enforcement is the point, but one policy module owned by everyone owns nothing — distribute the policy definitions, keep the enforcement point singular.
+- **Check per akses vs. latency**: setiap akses melewati titik policy membayar satu lookup; cache adalah kompromi yang jujur — tetapi cache basi bisa memberi terlalu banyak, melanggar least authority, atau memberi terlalu sedikit, mengunci user asli di luar pintu melawan least astonishment. Tetapkan anggaran kebasihan secara eksplisit dan sambungkan pencabutan ke invalidasi.
+- **Mediasi fail-closed vs. graceful degradation**: ketika policy store tak terjangkau, fail-closed melindungi data tetapi menggelapkan produk, sementara fail-open membuka pintu — putuskan per jalur, dan putuskan sebelum outage terjadi.
+- **Satu titik mediasi vs. single responsibility**: penegakan tunggal memang intinya, tetapi satu modul policy yang dimiliki semua orang tidak dimiliki siapa pun — sebarkan definisi policy-nya, jaga titik penegakannya tetap tunggal.
 
-## Related principles
+## Prinsip terkait
 
-- [Least Authority](/docs/principles/security/least-authority) — what the answer of each check should be.
-- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — what mediation does when the checker itself fails.
-- [Input Validation](/docs/principles/security/input-validation) — the twin gate at the boundary: validate the data, mediate the authority.
-- [Single Responsibility](/docs/principles/architecture/single-responsibility) — keep the policy point singular without making it a dumping ground.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — permission requirements declared per route, not implied.
+- [Least Authority](/docs/principles/security/least-authority) — seperti apa jawaban setiap check seharusnya.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — apa yang dilakukan mediasi ketika si pemeriksa sendiri gagal.
+- [Input Validation](/docs/principles/security/input-validation) — gerbang kembar di boundary: validasi datanya, mediasi otoritasnya.
+- [Single Responsibility](/docs/principles/architecture/single-responsibility) — jaga titik policy tetap tunggal tanpa menjadikannya tempat pembuangan.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — persyaratan permission dideklarasikan per route, bukan diimplikasikan.
 
-## References
+## Referensi
 
-- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — complete mediation is one of the original design principles.
-- NIST SP 800-207, *Zero Trust Architecture*, 2020 — continuous, per-request evaluation instead of one-time perimeter trust: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — complete mediation adalah salah satu prinsip desain yang asli.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — evaluasi berkelanjutan per request alih-alih kepercayaan perimeter sekali di awal: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

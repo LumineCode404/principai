@@ -1,4 +1,10 @@
 {
   "title": "Data",
-  "pages": ["tested-backups", "expand-contract", "soft-delete", "append-only-logs"]
+  "pages": [
+    "index",
+    "tested-backups",
+    "expand-contract",
+    "soft-delete",
+    "append-only-logs"
+  ]
 }

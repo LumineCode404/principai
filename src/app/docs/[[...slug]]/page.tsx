@@ -2,6 +2,7 @@ import { DocsPage } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
 import { source } from "@/lib/source";
 import { getMDXComponents } from "@/mdx-components";
+import { PrincipleMeta } from "@/components/principle-meta";
 import type { Metadata } from "next";
 
 export function generateStaticParams() {
@@ -49,6 +50,16 @@ export default async function Page({
       <h1 className="mb-4 text-3xl font-bold tracking-tight text-fd-foreground sm:text-4xl">
         {page.data.title}
       </h1>
+      {page.data.category ? (
+        <PrincipleMeta
+          category={page.data.category}
+          type={page.data.type}
+          severity={page.data.severity}
+          status={page.data.status}
+          verification={page.data.verification}
+          tags={page.data.tags}
+        />
+      ) : null}
       <MDX components={getMDXComponents()} />
     </DocsPage>
   );

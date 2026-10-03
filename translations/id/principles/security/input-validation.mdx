@@ -2,7 +2,7 @@
 title: Input Validation
 id: input-validation
 name: Input Validation
-summary: TERJEMAHAN DRAF — Validate every input at the trust boundary before it touches state — reject early, completely, and unambiguously.
+summary: Validasi setiap input di trust boundary sebelum menyentuh state — tolak sedini mungkin, tuntas, dan tanpa ambigu.
 category: security
 type: principle
 severity: critical
@@ -16,111 +16,114 @@ tags:
   - "validation"
   - "boundaries"
   - "parsing"
-aliases: []
-sources: []
+aliases:
+  - "Validate at the Boundary"
+sources:
+  - 'Hunt & Thomas, "The Pragmatic Programmer", 1999'
+  - 'RFC 1122, "Requirements for Internet Hosts", 1989'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "4de461ecb1b707e6"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/security/input-validation.mdx -->
-<!-- source_hash EN: 4de461ecb1b707e6 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/security/input-validation.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Validate every input at the trust boundary — request bodies, headers, query strings, file contents, queue messages, model inputs — before it reaches storage, commands, or business logic. Never trust a caller, a partner service, or your own frontend to have already validated. If you cannot state precisely what valid looks like, stop and ask a human before writing the handler.
+Validasi setiap input di trust boundary — body request, header, query string, isi file, pesan queue, input model — sebelum ia mencapai storage, command, atau business logic. Jangan pernah percaya bahwa caller, service partner, atau frontend kita sendiri sudah memvalidasi. Jika kita tidak bisa menyatakan dengan tepat seperti apa bentuk data yang valid, berhenti dan tanyakan kepada manusia sebelum menulis handler-nya.
 </AIInstruction>
 
 <Severity level="critical" />
 
-## Definition
+## Definisi
 
-Every place data crosses from a less-trusted context into a more-trusted one is a trust boundary, and everything crossing it must be checked for type, shape, size, range, and encoding before it touches state. Validation is the doorman, not the cleanup crew: malformed input is rejected at the door, not repaired downstream where its meaning is unknown. The same goes for lengths and bounds — the check belongs at the boundary, not "eventually".
+Setiap tempat data menyeberang dari konteks yang kurang dipercaya ke konteks yang lebih dipercaya adalah trust boundary, dan semua yang menyeberang harus diperiksa type, shape, size, range, dan encoding-nya sebelum menyentuh state. Validasi adalah penjaga pintu, bukan tim pembersih: input yang malformed ditolak di pintu, bukan diperbaiki di downstream tempat maknanya tidak diketahui. Hal yang sama berlaku untuk panjang dan batas — check itu milik boundary, bukan "akhirnya".
 
-## When to use
+## Kapan pakai
 
-- API endpoints and webhooks — the canonical boundary.
-- Database layers that accept writes from more than one producer.
-- Queue and stream consumers: messages often outlive the code that produced them.
-- Imports, uploads, and ML pipelines: training data, files, third-party feeds.
-- Anything shell commands, queries, or file paths are built from.
+- Endpoint API dan webhook — boundary yang paling kanonik.
+- Layer database yang menerima tulisan dari lebih dari satu producer.
+- Consumer queue dan stream: pesan sering hidup lebih lama daripada kode yang memproduksinya.
+- Import, upload, dan pipeline ML: data training, file, feed pihak ketiga.
+- Apa pun yang dirangkai menjadi shell command, query, atau file path.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Inside a single module whose inputs were already validated at its public boundary — re-validating every internal call is noise.
-- Telemetry and logging pipelines that must never crash: capture what parses, count the rest as dropped.
-- Stores whose contract is to hold bytes opaquely — validation belongs to whoever interprets the blob later.
+- Di dalam satu modul yang inputnya sudah divalidasi di boundary publiknya — memvalidasi ulang setiap panggilan internal hanyalah derau.
+- Pipeline telemetry dan logging yang tidak boleh crash: tangkap yang bisa di-parse, hitung sisanya sebagai dropped.
+- Store yang kontraknya menyimpan byte secara buram — validasi menjadi milik siapa pun yang menafsirkan blob itu nanti.
 
 ## Anti-pattern
 
-- Validating only the fields the current UI sends; a new field arrives with no check.
-- Sanitizing by string replacement — strip quotes, escape dashes — instead of parsing into a known-good structure.
-- Trusting an internal service "because it is ours"; the boundary still exists.
-- Enforcing lengths in the frontend and assuming only the frontend calls the API.
-- Silently repairing malformed input: coercing, trimming, guessing — then continuing with a value nobody sent.
+- Memvalidasi hanya field yang dikirim UI saat ini; field baru datang tanpa check.
+- Sanitasi lewat penggantian string — buang kutip, escape tanda minus — alih-alih mem-parse menjadi struktur yang sudah diketahui baik.
+- Memercayai service internal "karena itu milik kita"; boundary-nya tetap ada.
+- Menegakkan panjang field di frontend dan berasumsi hanya frontend yang memanggil API.
+- Memperbaiki input malformed secara diam-diam: memaksa konversi, memangkas, menebak — lalu lanjut dengan nilai yang tidak pernah dikirim siapa pun.
 
-## Code example
+## Contoh kode
 
-Wrong — string-splicing a query from unvalidated input:
+Salah — merangkai query dari string input yang belum divalidasi:
 
 ```python
-# No boundary check: type, shape, and length are all assumptions
+# Tidak ada check boundary: type, shape, dan length semuanya asumsi
 def find_orders(request):
     user_id = request.args.get("user_id")
     status = request.args.get("status", "open")
     sql = f"SELECT * FROM orders WHERE user_id = {user_id} AND status = '{status}'"
-    return db.execute(sql)     # one crafted user_id reads the whole table
+    return db.execute(sql)     # satu user_id yang diracik membaca seluruh tabel
 ```
 
-Right — parse, validate, reject at the boundary:
+Benar — parse, validasi, tolak di boundary:
 
 ```python
 def find_orders(request):
     try:
-        user_id = parse_uuid(request.args["user_id"])       # exact type
+        user_id = parse_uuid(request.args["user_id"])       # type yang pasti
         status = request.args.get("status", "open")
-        if status not in {"open", "paid", "shipped"}:       # closed allowlist
+        if status not in {"open", "paid", "shipped"}:       # allowlist tertutup
             raise ValueError("bad status")
     except (KeyError, ValueError) as e:
-        return reject(400, str(e))     # rejected at the door, state untouched
+        return reject(400, str(e))     # ditolak di pintu, state tak tersentuh
     return db.query(Order).filter_by(user_id=user_id, status=status).all()
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Validation must be structural, not aspirational:
+Validasi harus struktural, bukan aspiratif:
 
-- **Schema-first APIs**: typed request schemas that reject unknown or malformed fields before handler code runs — validation as plumbing, not discipline.
-- **Parameterized access paths only**: parameterized queries, prepared statements, safe path-join helpers; CI bans string-built SQL and shell commands.
-- **Limits at the gateway**: request size caps, field length caps, and timeouts before expensive parsing begins.
-- **Fuzzing in CI**: malformed inputs generated against every endpoint; crashes and leaks fail the build.
-- **What prevents vs. detects**: schemas and parameterization prevent malformed data from ever reaching logic; fuzzing and logs detect the gaps after attempts — run both, never assume the first is complete.
+- **API schema-first**: schema request bertipe yang menolak field tak dikenal atau malformed sebelum kode handler berjalan — validasi sebagai perpipaan, bukan kedisiplinan.
+- **Hanya jalur akses berparameter**: query berparameter, prepared statement, helper path-join yang aman; CI melarang SQL dan shell command yang dirangkai dari string.
+- **Batas di gateway**: batas ukuran request, batas panjang field, dan timeout sebelum parsing yang mahal dimulai.
+- **Fuzzing di CI**: input malformed di-generate terhadap setiap endpoint; crash dan leak menggagalkan build.
+- **Yang mencegah vs. yang mendeteksi**: schema dan parameterisasi mencegah data malformed mencapai logic; fuzzing dan log mendeteksi celah setelah percobaan terjadi — jalankan keduanya, jangan pernah berasumsi yang pertama sudah lengkap.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-Heartbleed (CVE-2014-0160), disclosed in April 2014, was a missing bounds check exactly at a trust boundary: OpenSSL's TLS heartbeat extension took a claimed payload length from the peer and echoed back that many bytes without verifying the buffer actually held them. A crafted message claiming a large payload let attackers read server memory — session tokens, passwords, and in the worst case private keys — with no trace in the logs. The input was trusted precisely where it should have been measured. Rigorous boundary validation would not have prevented every future OpenSSL bug, but it would have reduced this one from "read arbitrary process memory remotely" to "reject a malformed heartbeat". Details: https://heartbleed.com/
+Heartbleed (CVE-2014-0160), diungkap pada April 2014, adalah hilangnya bounds check tepat di trust boundary: ekstensi heartbeat TLS di OpenSSL mengambil panjang payload yang diklaim oleh peer lalu memantulkan kembali byte sebanyak itu tanpa memverifikasi bahwa buffer benar-benar memuatnya. Pesan yang diracik dengan klaim payload besar membuat penyerang dapat membaca memori server — session token, password, dan pada kasus terburuk private key — tanpa jejak di log. Input itu dipercaya tepat di tempat ia seharusnya diukur. Validasi boundary yang ketat tidak akan mencegah setiap bug OpenSSL di masa depan, tetapi akan mengurangi bug yang satu ini dari "membaca memori proses secara remote" menjadi "menolak heartbeat yang malformed". Detail: https://heartbleed.com/
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Validation vs. Postel's robustness**: being liberal in what you accept buys interoperability and hides caller bugs; at a security boundary, strictness wins — be liberal only where you can afford to guess.
-- **Tightening validation vs. versioned contracts**: stricter rules reject clients the old contract allowed — tighten through a new version, not by ambushing existing ones.
-- **Early rejection vs. graceful degradation**: rejecting malformed input fast protects state, but a flood of bad traffic can become a user-visible storm — pair rejection with rate limiting and clear errors.
+- **Validasi vs. robustness Postel**: sikap longgar dalam menerima mendatangkan interoperabilitas dan menyembunyikan bug caller; di security boundary, keketatan yang menang — bersikap longgar hanya di tempat kita sanggup menanggung tebakannya.
+- **Memperketat validasi vs. versioned contracts**: aturan yang lebih ketat menolak client yang dulu diizinkan contract lama — perketat lewat versi baru, bukan dengan menyergap client yang sudah ada.
+- **Penolakan dini vs. graceful degradation**: menolak input malformed dengan cepat melindungi state, tetapi banjir traffic buruk bisa menjadi badai yang terlihat oleh user — pasangkan penolakan dengan rate limiting dan error yang jelas.
 
-## Related principles
+## Prinsip terkait
 
-- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — what happens with input you did not plan for.
-- [Defense in Depth](/docs/principles/security/defense-in-depth) — validation is the outer wall, not the only one.
-- [Complete Mediation](/docs/principles/security/complete-mediation) — the access-control twin: validate the data and the authority, every time.
-- [Postel's Robustness](/docs/principles/api/postel-robustness) — the tension, stated honestly.
-- [Versioned Contracts](/docs/principles/api/versioned-contracts) — how to tighten validation without ambushing clients.
-- [Explicit Contracts](/docs/principles/api/explicit-contracts) — validation rules belong in the contract, not in tribal memory.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — apa yang terjadi pada input yang tidak kita rencanakan.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — validasi adalah tembok terluar, bukan satu-satunya.
+- [Complete Mediation](/docs/principles/security/complete-mediation) — kembaran access-control: validasi datanya, mediasi otoritasnya, setiap kali.
+- [Postel's Robustness](/docs/principles/api/postel-robustness) — tensinya, dinyatakan secara jujur.
+- [Versioned Contracts](/docs/principles/api/versioned-contracts) — cara memperketat validasi tanpa menyergap client.
+- [Explicit Contracts](/docs/principles/api/explicit-contracts) — aturan validasi milik contract, bukan pengetahuan yang hanya hidup di kepala tim.
 
-## References
+## Referensi
 
-- Hunt & Thomas, *The Pragmatic Programmer*, 1999 — on crashing early rather than working with data you cannot trust.
-- RFC 1122, *Requirements for Internet Hosts — Communication Layers*, 1989 — the robustness principle and what it costs at trust boundaries: https://www.rfc-editor.org/rfc/rfc1122
+- Hunt & Thomas, *The Pragmatic Programmer*, 1999 — tentang crash lebih awal alih-alih bekerja dengan data yang tidak bisa dipercaya.
+- RFC 1122, *Requirements for Internet Hosts — Communication Layers*, 1989 — prinsip robustness dan harganya di trust boundary: https://www.rfc-editor.org/rfc/rfc1122

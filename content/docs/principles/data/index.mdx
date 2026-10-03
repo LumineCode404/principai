@@ -1,0 +1,15 @@
+---
+title: Data
+description: Backups that restore, schemas that migrate in phases, deletes that are reversible, history that is evidence.
+---
+
+Data outlives the code that writes it. The principles in this category treat data as the part of the system with the longest blast radius — schema changes break deploy orderings, deletes are forever, and history is the only witness after an incident.
+
+<Cards>
+  <Card title="Tested Backups" description="A backup without a tested restore is a hope, not a control — restore drills on schedule prove it works." href="/docs/principles/data/tested-backups" />
+  <Card title="Expand-Contract" description="Change schemas in compatible phases — add the new, migrate the data, then remove the old only when nothing reads it." href="/docs/principles/data/expand-contract" />
+  <Card title="Soft Delete" description="Delete in two phases — mark now, purge after the recovery window — so one bad click is reversible." href="/docs/principles/data/soft-delete" />
+  <Card title="Append-Only Logs" description="Record facts as appended events, never edited history — an append-only log is evidence and undo in one." href="/docs/principles/data/append-only-logs" />
+</Cards>
+
+The [database-service profile](/docs/profiles/database-service) is the curated load for services that own their databases — tested backups and expand-contract lead its must-follow set.

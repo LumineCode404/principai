@@ -2,7 +2,7 @@
 title: Fail-Safe Defaults
 id: fail-safe-defaults
 name: Fail-Safe Defaults
-summary: TERJEMAHAN DRAF — Deny by default and grant explicitly — permission must be earned per action, not assumed until revoked.
+summary: Tolak secara default dan berikan secara eksplisit — permission harus diperoleh per aksi, bukan diasumsikan ada sampai dicabut.
 category: security
 type: principle
 severity: critical
@@ -16,108 +16,111 @@ tags:
   - "access-control"
   - "defaults"
   - "authorization"
-aliases: []
-sources: []
+aliases:
+  - "Fail-Secure Defaults"
+  - "Deny by Default"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "731b3b8df9acb094"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/security/fail-safe-defaults.mdx -->
-<!-- source_hash EN: 731b3b8df9acb094 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/security/fail-safe-defaults.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Default every decision, flag, and permission to the denying or non-destructive state. Never let a destructive action run because a safety flag was forgotten or a check failed open. If a failure, timeout, or error leaves you uncertain whether something is allowed, deny and ask a human.
+Jadikan keadaan menolak atau non-destruktif sebagai default dari setiap keputusan, flag, dan permission. Jangan pernah biarkan aksi destruktif berjalan hanya karena flag pengaman terlupa atau sebuah check gagal terbuka (fail-open). Jika kegagalan, timeout, atau error membuat kita tidak yakin apakah sesuatu diizinkan, tolak dan minta persetujuan manusia.
 </AIInstruction>
 
 <Severity level="critical" />
 
-## Definition
+## Definisi
 
-When a system fails, is uncertain, or simply starts fresh, it must fall into a state that denies access and skips destructive action. Permission is a positive, explicit grant per action — never an assumption that persists until someone remembers to revoke it. This is Saltzer and Schroeder's fail-safe defaults: base access decisions on permission rather than exclusion, because the default situation is no permission at all.
+Ketika sebuah sistem gagal, tidak yakin, atau sekadar baru dimulai, ia harus jatuh ke keadaan yang menolak akses dan tidak melakukan aksi destruktif. Permission adalah grant yang positif dan eksplisit per aksi — bukan asumsi yang bertahan sampai seseorang ingat untuk mencabutnya. Inilah fail-safe defaults dari Saltzer dan Schroeder: dasarkan keputusan akses pada permission, bukan pada eksklusi, karena keadaan default-nya adalah tidak ada permission sama sekali.
 
-## When to use
+## Kapan pakai
 
-- Destructive operations: deletes, drops, force-pushes, purges, teardowns, bulk updates.
-- API and service access control: authentication and authorization on every path.
-- Scripts and automation run by tired humans, in the wrong window, on the wrong server.
-- New features and flags: ship disabled, enable deliberately, per environment.
+- Operasi destruktif: delete, drop, force-push, purge, teardown, bulk update.
+- Access control pada API dan service: authentication dan authorization di setiap jalur.
+- Script dan otomasi yang dijalankan manusia lelah, di jendela waktu yang salah, di server yang salah.
+- Fitur dan flag baru: rilis dalam keadaan nonaktif, aktifkan secara sengaja, per lingkungan.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Public, read-only content where denial would defeat the product's purpose — the anonymous grant is explicit and global, not a forgotten default.
-- Liveness endpoints that must keep answering during partial failure so the orchestrator does not kill every instance at once — a deliberate, documented fail-open.
-- Environments explicitly declared disposable, where denial protects nothing.
+- Konten publik read-only di mana penolakan justru menggagalkan tujuan produk — grant untuk anonim itu eksplisit dan global, bukan default yang terlupa.
+- Endpoint liveness yang harus tetap menjawab selama kegagalan parsial agar orchestrator tidak mematikan semua instance sekaligus — fail-open yang disengaja dan terdokumentasi.
+- Lingkungan yang dinyatakan eksplisit sebagai disposable, di mana penolakan tidak melindungi apa pun.
 
 ## Anti-pattern
 
-- A cleanup CLI where the destructive run is the default and the dry-run flag must be remembered every time.
-- An admin endpoint left accessible to any authenticated user because the role check was never written.
-- Firewall rules written as "allow everything, then deny the bad ports".
-- An auth-service timeout that lets the request through "to avoid blocking users".
-- A flag whose old meaning is forgotten, so it now enables a code path nobody intended to run.
+- CLI cleanup di mana eksekusi destruktif adalah default dan flag dry-run harus diingat setiap kali.
+- Endpoint admin yang dibiarkan dapat diakses semua user terautentikasi karena role check-nya tidak pernah ditulis.
+- Aturan firewall yang ditulis sebagai "izinkan semuanya, lalu tolak port yang buruk".
+- Timeout pada auth service yang meloloskan request "agar user tidak terblokir".
+- Flag yang makna lamanya sudah terlupa, sehingga kini mengaktifkan code path yang tidak pernah dimaksudkan untuk dijalankan siapa pun.
 
-## Code example
+## Contoh kode
 
-Wrong — safety is opt-in, destruction is the default:
+Salah — pengaman bersifat opt-in, destruksi adalah default:
 
 ```bash
-# The safe flag must be remembered on every single invocation.
+# Flag pengaman harus diingat pada setiap pemanggilan.
 ./bin/purge-old-records --older-than 30d
-# → connects to prod, deletes rows, no confirmation, no preview
-# The one time the operator is tired, the safe behavior simply does not happen.
+# → terhubung ke prod, menghapus baris, tanpa konfirmasi, tanpa preview
+# Pada satu-satunya kali operator sedang lelah, perilaku aman itu tidak terjadi.
 ```
 
-Right — destruction requires an explicit, per-run grant:
+Benar — destruksi membutuhkan grant eksplisit per eksekusi:
 
 ```python
-# Deleting is opt-in; the default path can only ever print.
+# Menghapus bersifat opt-in; jalur default hanya bisa mencetak.
 parser.add_argument("--older-than", required=True, help="age cutoff, e.g. 30d")
 parser.add_argument("--apply", action="store_true",
                     help="actually delete; without this flag the script only prints")
 args = parser.parse_args()
 plan = select_records_older_than(args.older_than)
 if not args.apply:
-    print_plan(plan)        # fail-safe default: show, never touch
+    print_plan(plan)        # fail-safe default: tampilkan, jangan sentuh
     sys.exit(0)
-delete(plan)                # explicit grant, valid for this run only
+delete(plan)                # grant eksplisit, hanya berlaku untuk eksekusi ini
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is not enforced by willpower. Enforce it with real controls:
+Prinsip ini tidak ditegakkan oleh tekad. Tegakkan dengan kontrol nyata:
 
-- **Deny-first middleware**: an authorization base policy applied to every route by construction; routes opt in to a permission, never out of the check.
-- **Flags that start disabled**: feature-flag platforms where new flags default to off, and dead code paths require explicit per-environment enablement.
-- **Fail-closed timeouts**: policy and auth lookups that time out deny the request; fail-open is an explicit, reviewed, documented exception.
-- **Two-step destruction**: irreversible operations require a separate confirmation step or a second actor, enforced by the tooling, not by memory.
-- **What prevents vs. detects**: default-deny middleware and disabled-by-default flags prevent the action even when the handler is buggy; audits of flags and grants only detect drift afterwards.
+- **Middleware deny-first**: kebijakan dasar authorization yang terpasang di setiap route secara konstruksi; route memilih masuk (opt in) ke sebuah permission, tidak pernah keluar dari check.
+- **Flag yang lahir nonaktif**: platform feature-flag di mana flag baru default-nya off, dan code path mati membutuhkan pengaktifan eksplisit per lingkungan.
+- **Timeout yang fail-closed**: lookup policy dan auth yang timeout harus menolak request; fail-open adalah pengecualian yang eksplisit, ter-review, dan terdokumentasi.
+- **Destruksi dua langkah**: operasi yang tak dapat dibatalkan membutuhkan langkah konfirmasi terpisah atau aktor kedua, ditegakkan oleh tooling, bukan oleh ingatan.
+- **Yang mencegah vs. yang mendeteksi**: middleware default-deny dan flag yang nonaktif secara default mencegah aksi itu terjadi bahkan ketika handler-nya buggy; audit atas flag dan grant hanya mendeteksi drift setelahnya.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On January 31, 2017, a GitLab operator, exhausted after hours of fighting replication failures, deleted a directory on the wrong server — the one holding the primary database's live data. The destructive command was available by default in his working context: nothing forced a dry run, a confirmation, or a second check before an irreversible delete. Roughly 300 GB of data was lost, and about six hours of database writes proved unrecoverable because the restores available were slower and less complete than expected. Fail-safe defaults would not have stopped the initial mistake, but they would have reduced a one-line command into a printed plan and a moment of embarrassment. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
+Pada 31 Januari 2017, seorang operator GitLab, kelelahan setelah berjam-jam melawan kegagalan replikasi, menghapus direktori di server yang salah — server yang memuat data live database utama. Perintah destruktif itu tersedia secara default di konteks kerjanya: tidak ada yang memaksa dry-run, konfirmasi, atau check kedua sebelum delete yang tak dapat dibatalkan. Sekitar 300 GB data hilang, dan sekitar enam jam penulisan database terbukti tak dapat dipulihkan karena restore yang tersedia lebih lambat dan kurang lengkap dari yang diperkirakan. Fail-safe defaults tidak akan menghentikan kesalahan awal itu, tetapi akan mengurangi satu perintah satu baris menjadi rencana tercetak dan sesaat rasa malu. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Fail-closed vs. graceful degradation**: when a dependency fails, denying everything converts its outage into yours — decide per path, before the incident, whether fail-closed is proportionate.
-- **Deny by default vs. least astonishment**: operators who hit unpredictable denials learn reflexive force flags; grants must be easy to give, visible when given, and predictable to reason about.
-- **Explicit grants vs. least authority**: per-action grants everywhere turn into ceremony; narrow each grant itself so renewing it is safe instead of annoying.
+- **Fail-closed vs. graceful degradation**: ketika sebuah dependency gagal, menolak segalanya mengubah outage-nya menjadi outage kita — putuskan per jalur, sebelum insiden terjadi, apakah fail-closed itu proporsional.
+- **Deny by default vs. least astonishment**: operator yang berulang kali menabrak penolakan tak terduga belajar memasang flag force secara refleks; grant harus mudah diberikan, terlihat saat diberikan, dan mudah dinalar.
+- **Grant eksplisit vs. least authority**: grant per aksi di mana-mana berubah menjadi seremoni; persempit grant-nya sendiri sehingga memperbaruinya terasa aman, bukan menyebalkan.
 
-## Related principles
+## Prinsip terkait
 
-- [Least Authority](/docs/principles/security/least-authority) — the sibling rule: grants are narrow, and doubt means denial.
-- [Secure by Default](/docs/principles/security/secure-by-default) — the same idea applied to shipped configuration.
-- [Defense in Depth](/docs/principles/security/defense-in-depth) — default-deny is one layer, not the whole wall.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — containment for the day a denial fails or is bypassed.
-- [Least Astonishment](/docs/principles/design/least-astonishment) — safe defaults that still make sense to the person hitting them.
+- [Least Authority](/docs/principles/security/least-authority) — aturan kembar: grant itu sempit, dan keraguan berarti penolakan.
+- [Secure by Default](/docs/principles/security/secure-by-default) — gagasan yang sama diterapkan pada konfigurasi yang dikirim.
+- [Defense in Depth](/docs/principles/security/defense-in-depth) — default-deny adalah satu lapisan, bukan seluruh tembok.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — penahanan untuk hari ketika sebuah penolakan gagal atau dilewati.
+- [Least Astonishment](/docs/principles/design/least-astonishment) — default yang aman namun tetap masuk akal bagi orang yang menabraknya.
 
-## References
+## Referensi
 
-- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults is one of the original design principles.
-- NIST SP 800-207, *Zero Trust Architecture*, 2020 — deny-by-default, per-request access decisions: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — fail-safe defaults adalah salah satu prinsip desain yang asli.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — deny-by-default, keputusan akses per request: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

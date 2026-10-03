@@ -2,7 +2,7 @@
 title: Blast Radius
 id: blast-radius
 name: Blast Radius
-summary: TERJEMAHAN DRAF — Limit the maximum damage any single action can cause — batch size caps, per-step confirmations, and staged rollouts turn catastrophes into incidents.
+summary: Batasi kerusakan maksimum yang bisa ditimbulkan satu aksi apa pun — pembatasan ukuran batch, konfirmasi per langkah, dan staged rollout mengubah bencana menjadi insiden biasa.
 category: reliability
 type: principle
 severity: critical
@@ -17,100 +17,101 @@ tags:
   - "containment"
   - "batching"
 aliases: []
-sources: []
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "1629ca13a85e94cd"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/reliability/blast-radius.mdx -->
-<!-- source_hash EN: 1629ca13a85e94cd -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/reliability/blast-radius.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Before executing any state-changing or infrastructure command, ask what is the worst this single action can do — then cap that worst case. Break destructive work into small batches with a dry-run and a fresh confirmation per step, and prefer staged rollouts over fleet-wide changes. If you cannot state the exact set of resources a command will touch, stop and ask a human.
+Sebelum mengeksekusi command yang mengubah state atau infrastruktur, tanyakan apa hal terburuk yang bisa dilakukan aksi tunggal ini — lalu batasi worst case itu. Pecahkan pekerjaan destruktif menjadi batch kecil dengan dry-run dan konfirmasi baru di setiap langkah, dan utamakan staged rollout daripada perubahan ke seluruh fleet. Jika tidak bisa menyebutkan himpunan resource persis yang akan disentuh sebuah command, berhenti dan tanyakan kepada manusia.
 </AIInstruction>
 
 <Severity level="critical" />
 
-## Definition
+## Definisi
 
-The blast radius of an action is the amount of state, traffic, or infrastructure it can damage in one execution. Engineer the maximum, not the average: the probability of a typo is fixed, but whether a typo kills one shard or the whole fleet is a design choice. Batch caps, per-step confirmation, and staged rollout are how the worst case gets a ceiling.
+Blast radius sebuah aksi adalah besaran state, traffic, atau infrastruktur yang bisa rusak akibat satu eksekusinya. Rekayasa maksimumnya, bukan rata-ratanya: probabilitas typo itu tetap, tetapi apakah sebuah typo membunuh satu shard atau seluruh fleet adalah pilihan desain. Batas batch, konfirmasi per langkah, dan staged rollout adalah cara worst case mendapatkan plafon.
 
-## When to use
+## Kapan pakai
 
-- Commands that delete, drop, restart, or remove in bulk — filesystem, database, cloud.
-- Deployments and infrastructure changes: canaries, percentages, one environment at a time.
-- Data migrations and backfills over live production tables.
-- ML: bulk dataset deletes, model promotion, cluster-wide retraining jobs.
-- Recovery tooling: keep it outside the failure domain of the thing it recovers.
+- Command yang menghapus, men-drop, me-restart, atau menghilangkan secara massal — filesystem, database, cloud.
+- Deployment dan perubahan infrastruktur: canary, persentase, satu lingkungan dalam satu waktu.
+- Data migration dan backfill di atas tabel production yang live.
+- ML: penghapusan dataset massal, promosi model, job retraining seluruh cluster.
+- Tooling recovery: jauhkan dari failure domain hal yang ia pulihkan.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Genuinely small atomic operations — a single-row insert does not need chunking.
-- Explicitly disposable sandboxes where the worst case is "recreate it in ten minutes".
-- Emergency kill switches that must act globally and immediately — their speed is the point; scope the trust instead (see Least Authority).
+- Operasi atomik yang memang kecil — insert satu baris tidak butuh chunking.
+- Sandbox yang secara eksplisit disposable, di mana worst case-nya "buat ulang dalam sepuluh menit".
+- Kill switch darurat yang harus bertindak global dan seketika — kecepatannya justru intinya; batasi trust-nya saja (lihat Least Authority).
 
 ## Anti-pattern
 
-- "DELETE FROM users" with the WHERE clause added mentally rather than literally.
-- A debugging command typed at 3am whose scope is "everything that matches".
-- One deploy pipeline applying one plan to every environment at once.
-- Recovery and monitoring tools that live inside the blast radius they are meant to survive.
+- "DELETE FROM users" dengan klausa WHERE yang ditambahkan di kepala, bukan secara literal.
+- Command debugging yang diketik jam 3 pagi dengan scope "semua yang cocok".
+- Satu deploy pipeline menerapkan satu plan ke semua lingkungan sekaligus.
+- Tool recovery dan monitoring yang hidup di dalam blast radius — padahal justru mereka yang harus selamat darinya.
 
-## Code example
+## Contoh kode
 
-Wrong — one command, unbounded scope:
+Salah — satu command, scope tak terbatas:
 
 ```bash
-# "Clean up the old backups" — no cap, no dry-run, no confirmation
+# "Bersihkan backup lama" — tanpa batas, tanpa dry-run, tanpa konfirmasi
 find /var/backups -type f -name '*.gz' | xargs rm -f
 ```
 
-Right — bounded batch, printed plan, fresh confirmation:
+Benar — batch terbatas, plan tercetak, konfirmasi baru:
 
 ```bash
-./bin/purge --older-than 30d --limit 500 --dry-run   # step 1: print the exact target set
-./bin/purge --older-than 30d --limit 500 --confirm   # step 2: delete only what was printed
-./bin/purge --older-than 30d --limit 500 --confirm   # step 3: next batch, verify between
+./bin/purge --older-than 30d --limit 500 --dry-run   # langkah 1: cetak himpunan target yang persis
+./bin/purge --older-than 30d --limit 500 --confirm   # langkah 2: hapus hanya yang tercetak
+./bin/purge --older-than 30d --limit 500 --confirm   # langkah 3: batch berikutnya, verifikasi di antaranya
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-This principle is enforced by tooling and permissions, not by operator discipline:
+Prinsip ini ditegakkan oleh tooling dan permission, bukan oleh disiplin operator:
 
-- **IAM scoping**: no standing role can destroy resources across environments; destructive verbs are per-environment and require fresh escalation.
-- **Tooling defaults**: dry-run is the default mode; a row/resource limit is required on destructive verbs; multi-batch runs re-confirm with a human between batches.
-- **Migration guards**: the migration tool refuses a DELETE or UPDATE touching more than N rows without a special, reviewed flag.
-- **Staged rollout as config**: percentage-based deployment with automatic halt on error-rate or latency regression is the only approved deploy path.
-- **Out-of-band recovery**: consoles, DNS, and monitoring run on separate credentials and networks from the systems they protect.
+- **Scoping IAM**: tidak ada standing role yang bisa menghancurkan resource lintas lingkungan; verb destruktif bersifat per-lingkungan dan memerlukan eskalasi baru.
+- **Default tooling**: dry-run adalah mode default; batas baris/resource diwajibkan pada verb destruktif; run multi-batch mengonfirmasi ulang dengan manusia di antara batch.
+- **Migration guard**: tool migration menolak DELETE atau UPDATE yang menyentuh lebih dari N baris tanpa flag khusus yang sudah direview.
+- **Staged rollout sebagai config**: deployment berbasis persentase dengan halt otomatis saat error-rate atau latency memburuk adalah satu-satunya jalur deploy yang disetujui.
+- **Recovery out-of-band**: konsol, DNS, dan monitoring berjalan di credential dan jaringan yang terpisah dari sistem yang mereka lindungi.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On 2017-02-28, while debugging a slow S3 billing subsystem, an authorized S3 team member ran a command meant to remove a small number of servers for that one subsystem. One input was entered incorrectly, and the command removed a larger set of servers than intended — additional S3 subsystems went down with it and required a full restart. The blast radius of a single mistyped command, executed inside shared infrastructure, became hours of unavailability for the many sites and services that depend on S3 in that region. Postmortem: https://aws.amazon.com/message/41926/ — a smaller, confirmed scope would have reduced a regional outage to a maintenance task.
+Pada 2017-02-28, sambil men-debug subsistem billing S3 yang lambat, seorang anggota tim S3 yang berwenang menjalankan command yang dimaksudkan untuk menghapus sejumlah kecil server milik subsistem tersebut. Satu input dimasukkan salah, dan command itu menghapus himpunan server yang lebih besar daripada yang dimaksudkan — subsistem S3 lain ikut mati dan memerlukan restart penuh. Blast radius satu command yang salah ketik, dieksekusi di dalam infrastruktur bersama, menjadi berjam-jam ketiadaan layanan bagi banyak situs dan service yang bergantung pada S3 di region tersebut. Postmortem: https://aws.amazon.com/message/41926/ — scope yang lebih kecil dan terkonfirmasi akan mengurangi outage regional itu menjadi sekadar tugas maintenance.
 
-On 2021-10-04, Facebook ran a maintenance command intended to assess the availability of its global backbone; it instead unplugged the connections between the backbone and the data centers, Facebook's routes were withdrawn from the internet, and the platform became unreachable worldwide. Crucially for this principle, DNS, internal tools, and out-of-band management were reachable only through the same affected network — the recovery tools were inside the blast radius. Engineers needed physical access to the machines to restore service. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — out-of-band tooling would have reduced the outage from a physical trip to a remote fix.
+Pada 2021-10-04, Facebook menjalankan command maintenance yang dimaksudkan untuk menilai ketersediaan backbone globalnya; command itu justru memutus koneksi antara backbone dan data center, route Facebook ditarik dari internet, dan platform menjadi tak bisa dijangkau di seluruh dunia. Yang krusial bagi prinsip ini: DNS, tool internal, dan out-of-band management hanya bisa dijangkau melalui jaringan terdampak yang sama — tool recovery-nya berada di dalam blast radius. Para engineer membutuhkan akses fisik ke mesin-mesin itu untuk memulihkan layanan. Postmortem: https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/ — tooling out-of-band akan mengurangi outage itu dari perjalanan fisik menjadi perbaikan remote.
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Speed vs. containment**: capped batches and staged rollouts trade minutes for the guarantee that a mistake is small. Weigh by the value of what is touched, not by operator patience.
-- **Cost vs. isolation**: keeping recovery and monitoring out-of-band costs money every day it is unused — and repays itself the one time it is needed.
-- **Weigh against Least Authority**: scoping who may act and scoping what any action may damage are complementary; neither substitutes for the other.
+- **Kecepatan vs. containment**: batch terbatas dan staged rollout menukar beberapa menit dengan jaminan bahwa kesalahan tetap kecil. Timbang menurut nilai hal yang disentuh, bukan menurut kesabaran operator.
+- **Biaya vs. isolasi**: menjaga recovery dan monitoring tetap out-of-band menghabiskan uang setiap hari tak terpakai — dan membayar dirinya sendiri pada satu-satunya kali ia dibutuhkan.
+- **Ditimbang terhadap Least Authority**: membatasi siapa yang boleh bertindak dan membatasi apa yang bisa dirusak aksi apa pun saling melengkapi; keduanya tidak menggantikan satu sama lain.
 
-## Related principles
+## Prinsip terkait
 
-- [Least Authority](/docs/principles/security/least-authority) — who can act; blast radius is what any action can hit.
-- [Idempotency](/docs/principles/reliability/idempotency) — a repeated action stays as small as the first one.
-- [Tested Backups](/docs/principles/data/tested-backups) — the last line of defense when containment was not enough.
-- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — contain damage at runtime, not just at deploy time.
+- [Least Authority](/docs/principles/security/least-authority) — siapa yang boleh bertindak; blast radius adalah apa yang bisa dihantam aksi apa pun.
+- [Idempotency](/docs/principles/reliability/idempotency) — aksi yang berulang tetap sekecil yang pertama.
+- [Tested Backups](/docs/principles/data/tested-backups) — lini pertahanan terakhir ketika containment tidak cukup.
+- [Graceful Degradation](/docs/principles/reliability/graceful-degradation) — tahan kerusakan saat runtime, bukan hanya saat deploy.
 
-## References
+## Referensi
 
 - AWS, *Summary of the Amazon S3 Service Disruption*, 2017 — https://aws.amazon.com/message/41926/
 - Facebook Engineering, *October 4, 2021 Outage* — https://engineering.fb.com/2021/10/04/networking-traffic/october-4-2021-outage/
-- Google SRE Book — https://sre.google/sre-book/ (change management and release engineering practice).
+- Google SRE Book — https://sre.google/sre-book/ (praktik change management dan release engineering).

@@ -1,0 +1,15 @@
+---
+title: Design
+description: Simplicity, judgment about duplication and speculation, and the laws that govern measures and surprises.
+---
+
+Design principles carry the lowest severities in the library — mostly advisory — because they are about the long-term cost of complexity, not the immediate blast radius of a failure. They still bite: a wrong abstraction or a gamed metric compounds quietly until it is the most expensive thing in the system.
+
+<Cards>
+  <Card title="Keep It Simple" description="Choose the simplest design that works — every moving part you add today is a part someone must debug at 3 a.m. tomorrow." href="/docs/principles/design/kiss" />
+  <Card title="DRY, With Judgment" description="Duplication is cheaper than the wrong abstraction — unify only knowledge that changes for the same reason." href="/docs/principles/design/dry-tension" />
+  <Card title="You Aren't Gonna Need It" description="Build for proven needs, not imagined futures — speculative generality is complexity you pay interest on forever." href="/docs/principles/design/yagni" />
+  <Card title="Principle of Least Astonishment" description="Do what the reader expects — match conventions so the obvious reading is the correct one." href="/docs/principles/design/least-astonishment" />
+  <Card title="Chesterton's Fence" description="Never remove a fence until you know why it was built — in code, the comment is rarely where the reason lives." href="/docs/principles/design/chesterton-fence" />
+  <Card title="Goodhart's Law" description="When a measure becomes a target, it ceases to be a good measure — proxy metrics get gamed by exactly the optimizers you point at them." href="/docs/principles/design/goodharts-law" />
+</Cards>

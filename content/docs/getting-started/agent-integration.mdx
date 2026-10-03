@@ -62,3 +62,7 @@ The whole point of this design is context economy:
 - The archive can grow without the load growing. That asymmetry is the library's premise: [exhaustive archive, curated load](/docs/concepts/profiles).
 
 A project that finds the copied set too small or too large adjusts the profile. Curation never deletes from the archive, and the archive never dictates the load.
+
+## Agents browsing this site
+
+An agent that reaches this site over HTTP should start at <a href="/llms.txt">/llms.txt</a> — a plain-text, markdown-formatted index of the whole library with one-line summaries and direct links. It follows the same staged-loading protocol as `.principles/`: read the index first, fetch a principle in full only when the task touches it, halt before critical violations.

@@ -2,7 +2,7 @@
 title: Tested Backups
 id: tested-backups
 name: Tested Backups
-summary: TERJEMAHAN DRAF — A backup without a tested restore is a hope, not a control — restore drills on schedule prove it works.
+summary: Backup tanpa restore yang teruji hanyalah harapan, bukan kontrol — restore drill terjadwal membuktikannya bekerja.
 category: data
 type: principle
 severity: critical
@@ -14,98 +14,100 @@ tags:
   - "backups"
   - "restore"
   - "disaster-recovery"
-aliases: []
-sources: []
+aliases:
+  - "A Backup Is Only Real After a Restore Test"
+sources:
+  - 'Google SRE Book, https://sre.google/sre-book/'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "47a6c470547f3be8"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/data/tested-backups.mdx -->
-<!-- source_hash EN: 47a6c470547f3be8 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/data/tested-backups.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Never claim data is backed up unless a restore from that backup has completed and its contents were verified. Schedule restore drills on real systems, measure recovery time and recovery point, and treat any backup that has never been restored as if it does not exist. Before any destructive operation, confirm with a human that the restore point is fresh and the restore path is known to work.
+Jangan pernah mengklaim data sudah di-backup kecuali restore dari backup itu telah selesai dan isinya telah diverifikasi. Jadwalkan restore drill di sistem nyata, ukur recovery time dan recovery point, dan perlakukan setiap backup yang belum pernah di-restore seolah-olah tidak ada. Sebelum operasi destruktif apa pun, konfirmasikan dengan manusia bahwa restore point-nya segar dan restore path-nya terbukti bekerja.
 </AIInstruction>
 
 <Severity level="critical" />
 
-## Definition
+## Definisi
 
-A backup is only real after a successful restore test; everything else is a hope with a schedule. The restore path is the actual product: its recovery point objective (how much data you lose) and recovery time objective (how long you are down) are measured properties, not intentions. Drills on a cadence catch the silent rot — backups that stopped days ago, credentials that expired, formats that changed, restores that take far longer than anyone believes.
+Backup hanya menjadi nyata setelah restore test yang berhasil; selebihnya hanyalah harapan dengan jadwal. Restore path-lah produk sesungguhnya: recovery point objective (berapa banyak data yang hilang) dan recovery time objective (berapa lama sistem down) adalah properti yang terukur, bukan niat. Drill berjadwal menangkap pembusukan senyap — backup yang berhenti berhari-hari lalu, credential yang kedaluwarsa, format yang berubah, restore yang jauh lebih lama daripada yang disangka siapa pun.
 
-## When to use
+## Kapan pakai
 
-- Any datastore whose loss is unacceptable: production databases, blob storage without re-derivable content, secrets vaults.
-- Before destructive operations — mass deletions, schema migrations, manual surgery — verify the restore point first (see Blast Radius).
-- After every backup-infrastructure change: new tool, new encryption, new storage location.
-- Regimes where restore capability is audited (compliance, contracts, insurance).
+- Datastore apa pun yang kehilangannya tak bisa diterima: database production, blob storage tanpa konten yang bisa diturunkan ulang, secrets vault.
+- Sebelum operasi destruktif — penghapusan massal, schema migration, pembedahan manual — verifikasi dulu restore point-nya (lihat Blast Radius).
+- Setelah setiap perubahan infrastruktur backup: tool baru, enkripsi baru, lokasi storage baru.
+- Rezim yang mengaudit kemampuan restore (compliance, kontrak, asuransi).
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Data that can be fully re-derived — a rebuilt cache, a re-materialized dataset from source events; drill the re-derivation instead.
-- Explicitly disposable environments; restoring sandboxes is theater.
-- Never restore onto the live primary — the drill itself must not endanger production; restore into an isolated copy.
+- Data yang sepenuhnya bisa diturunkan ulang — cache yang dibangun kembali, dataset yang di-materialisasi ulang dari event sumber; drill penurunan ulangnya saja.
+- Lingkungan yang secara eksplisit disposable; me-restore sandbox hanyalah teater.
+- Jangan pernah me-restore ke live primary — drill-nya sendiri tidak boleh membahayakan production; restore ke salinan yang terisolasi.
 
 ## Anti-pattern
 
-- "We have backups" — unasked questions: when was the last one? Who has ever restored one? How long does it take?
-- Backup job success monitored; restore never executed even once.
-- Restores tested only in the first week after the tool was installed, two years ago.
-- Backup credentials stored inside the system being backed up.
-- Retention shorter than the time it takes to notice the corruption — you backed up the corrupted state.
+- "Kami punya backup" — pertanyaan yang tak diajukan: kapan yang terakhir? Siapa yang pernah me-restore? Berapa lama waktunya?
+- Sukses backup job dimonitor; restore tidak pernah sekali pun dieksekusi.
+- Restore diuji hanya pada minggu pertama setelah tool dipasang, dua tahun lalu.
+- Credential backup disimpan di dalam sistem yang di-backup.
+- Retensi lebih pendek daripada waktu yang dibutuhkan untuk menyadari korupsi — yang ter-backup adalah state yang terkorupsi.
 
-## Code example
+## Contoh kode
 
-Wrong — dumps that nobody ever restores:
+Salah — dump yang tak pernah di-restore siapa pun:
 
 ```bash
-# Nightly cron dumps and uploads; success is assumed, never proven
+# Dump dan upload tiap malam via cron; sukses diasumsikan, tak pernah dibuktikan
 pg_dump "$DATABASE_URL" | gzip | aws s3 cp - "s3://backups/db-$(date +%F).sql.gz"
 ```
 
-Right — a scheduled drill that must pass:
+Benar — drill terjadwal yang wajib lulus:
 
 ```bash
-# Restore the latest backup into an isolated database; time it — that is your RTO
+# Restore backup terbaru ke database terisolasi; ukur waktunya — angka itulah RTO
 aws s3 cp "s3://backups/$LATEST" - | gunzip | psql "$DRILL_DB_URL"
-psql "$DRILL_DB_URL" -c "SELECT assert_fresh_data();"   # red build if data is stale
+psql "$DRILL_DB_URL" -c "SELECT assert_fresh_data();"   # build merah jika data stale
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-If the restore is not scheduled and automated, it will not happen — make it a job:
+Jika restore tidak dijadwalkan dan diotomatisasi, ia tidak akan terjadi — jadikan ia sebuah job:
 
-- **Restore drill as a CI job**: on a schedule, restore the newest backup to an isolated environment and run data assertions; a red build means the backup is broken.
-- **RTO and RPO as metrics**: every drill measures recovery time and data currency; drift over time is an incident, not a curiosity.
-- **Alert on backup silence**: no successful backup event in N hours pages someone — silent skips, not just loud failures, are the killer.
-- **Pre-destruction gate**: the ops tool requires a verified fresh restore point before a destructive run executes; this is enforced by the tool, not remembered by the operator.
-- **Rehearsed runbooks with owners**: a full-environment restore game day at a fixed cadence, with a name attached.
+- **Restore drill sebagai CI job**: terjadwal, restore backup terbaru ke lingkungan terisolasi dan jalankan data assertion; build merah berarti backup-nya rusak.
+- **RTO dan RPO sebagai metrik**: setiap drill mengukur recovery time dan kebaruan data; drift dari waktu ke waktu adalah insiden, bukan sekadar keanehan.
+- **Alert saat backup diam**: tidak ada event backup sukses dalam N jam harus mem-page seseorang — skip yang senyap, bukan hanya kegagalan yang bising, adalah pembunuhnya.
+- **Gerbang pra-destruksi**: tool ops mewajibkan restore point segar yang terverifikasi sebelum run destruktif dieksekusi; ini ditegakkan oleh tool, bukan diingat oleh operator.
+- **Runbook yang dilatih dengan pemilik**: game day restore lingkungan penuh pada ritme tetap, dengan nama yang bertanggung jawab.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-On 2017-01-31, a GitLab operator, exhausted after hours fighting replication problems, deleted the wrong directory on the primary database server — believing it held a secondary's data. The directory held the primary's live data. The team then discovered that of their five backup and replication mechanisms, most were unusable at that moment: broken, out of date, or unable to deliver recent data; the viable restore path was slower and less complete than expected, and six hours of user data (issues, merge requests, comments) were permanently lost. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ — five mechanisms with zero rehearsed restores. A scheduled restore drill would have reduced the loss from six hours of permanent data loss to a bounded, known recovery point.
+Pada 2017-01-31, seorang operator GitLab, kelelahan setelah berjam-jam melawan masalah replikasi, menghapus direktori yang salah di server database utama — mengira direktori itu berisi data milik secondary. Direktori itu berisi data live milik primary. Tim kemudian menemukan bahwa dari lima mekanisme backup dan replikasi mereka, sebagian besar tidak dapat dipakai saat itu: rusak, kedaluwarsa, atau tak mampu mengirim data terbaru; jalur restore yang masih layak lebih lambat dan kurang lengkap daripada yang diperkirakan, dan enam jam data pengguna (issue, merge request, komentar) hilang permanen. Postmortem: https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/ — lima mekanisme dengan nol restore yang pernah dilatih. Restore drill terjadwal akan mengurangi kerugian dari enam jam kehilangan data permanen menjadi recovery point yang terbatas dan diketahui.
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Tested Backups vs. cost**: drills consume storage, compute, and engineering time; treat the drill as the deliverable and the backup as its input.
-- **Tested Backups vs. Soft Delete / Append-Only Logs**: backups are the last line of defense, not the first — layered recovery (event replay, soft delete, then restore) each reduces how far back the last resort reaches.
-- **RPO vs. write latency**: more frequent backups or synchronous replication cost real write performance; decide per dataset with explicit numbers, not vibes.
+- **Tested Backups vs. biaya**: drill menghabiskan storage, compute, dan waktu engineering; perlakukan drill sebagai deliverable dan backup sebagai input-nya.
+- **Tested Backups vs. Soft Delete / Append-Only Logs**: backup adalah lini pertahanan terakhir, bukan pertama — recovery berlapis (replay event, soft delete, lalu restore) membuat pilihan terakhir itu tak perlu menjangkau terlalu jauh ke belakang.
+- **RPO vs. write latency**: backup yang lebih sering atau replikasi sinkron memakan performa write yang nyata; putuskan per dataset dengan angka eksplisit, bukan perasaan.
 
-## Related principles
+## Prinsip terkait
 
-- [Blast Radius](/docs/principles/reliability/blast-radius) — the fewer things one mistake can destroy, the less the backup matters.
-- [Least Authority](/docs/principles/security/least-authority) — the operator who deleted the directory should not have had the authority to.
-- [Append-Only Logs](/docs/principles/data/append-only-logs) — replayable history is a backup you use every day.
-- [Soft Delete](/docs/principles/data/soft-delete) — reversible deletion for the mistakes that do not need the last resort.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — semakin sedikit yang bisa dihancurkan satu kesalahan, semakin ringan beban pada backup.
+- [Least Authority](/docs/principles/security/least-authority) — operator yang menghapus direktori itu seharusnya tidak memegang otoritas tersebut.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — history yang bisa di-replay adalah backup yang dipakai setiap hari.
+- [Soft Delete](/docs/principles/data/soft-delete) — penghapusan yang bisa dibatalkan, untuk kesalahan yang tak memerlukan jalan terakhir.
 
-## References
+## Referensi
 
 - GitLab, *GitLab.com Database Incident, 2017-01-31* — https://about.gitlab.com/blog/2017/02/01/gitlab-dotcom-database-incident/
-- Google SRE Book — https://sre.google/sre-book/ (data integrity and emergency response practice; verify chapter pointers before citing them).
+- Google SRE Book — https://sre.google/sre-book/ (praktik data integrity dan emergency response; verifikasi penunjuk bab sebelum mengutipnya).

@@ -117,7 +117,9 @@ function walk(dir: string, ext = ".mdx"): string[] {
   for (const entry of readdirSync(dir)) {
     const p = join(dir, entry);
     if (statSync(p).isDirectory()) out.push(...walk(p, ext));
-    else if (entry.endsWith(ext)) out.push(p);
+    // index.mdx files are category navigation pages for the website, not
+    // principles — excluded everywhere (check, sync, copy, list, status).
+    else if (entry.endsWith(ext) && entry !== "index.mdx") out.push(p);
   }
   return out;
 }
@@ -637,11 +639,20 @@ async function cmdCheck(flags: Record<string, string | boolean>): Promise<number
   // Structural parity with another checkout
   if (flags.against) {
     const otherRoot = String(flags.against);
-    const otherDir = join(otherRoot, "content", "docs", "principles");
+    // Accept either a full checkout root (<root>/content/docs/principles)
+    // or a principles directory directly (e.g. translations/id/principles).
+    let otherDir = join(otherRoot, "content", "docs", "principles");
+    if (!existsSync(otherDir) && existsSync(otherRoot) && statSync(otherRoot).isDirectory()) {
+      const hasCategoryDirs = readdirSync(otherRoot).some(
+        (e) => statSync(join(otherRoot, e)).isDirectory() && walk(join(otherRoot, e)).length > 0,
+      );
+      if (hasCategoryDirs) otherDir = otherRoot;
+    }
     if (!existsSync(otherDir)) {
       problems.push(`--against: no principles directory at ${otherDir}`);
     } else {
-      const other = walk(otherDir).map((f) => slugOf(f));
+      // Slugs must be computed relative to the OTHER root, not ours.
+      const other = walk(otherDir).map((f) => relative(otherDir, f).replace(/\.mdx$/, "").replace(/\\/g, "/"));
       const ours = principles.map((p) => p.slug);
       const missingThere = ours.filter((s) => !other.includes(s));
       const missingHere = other.filter((s) => !ours.includes(s));

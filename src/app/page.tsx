@@ -57,6 +57,39 @@ const features = [
   },
 ];
 
+const categories = [
+  {
+    name: "Security",
+    desc: "Scoping authority, validating input, failing closed.",
+    href: "/docs/principles/security",
+  },
+  {
+    name: "Reliability",
+    desc: "Failures kept small, visible, and recoverable.",
+    href: "/docs/principles/reliability",
+  },
+  {
+    name: "Data",
+    desc: "Backups that restore, deletes that are reversible.",
+    href: "/docs/principles/data",
+  },
+  {
+    name: "Architecture",
+    desc: "Boundaries, dependencies, growth from simple beginnings.",
+    href: "/docs/principles/architecture",
+  },
+  {
+    name: "API",
+    desc: "Contracts that are explicit, versioned, and honest.",
+    href: "/docs/principles/api",
+  },
+  {
+    name: "Design",
+    desc: "Simplicity, judgment, and the laws of measures.",
+    href: "/docs/principles/design",
+  },
+];
+
 const steps = [
   {
     n: "01",
@@ -220,6 +253,51 @@ export default function Home() {
                 <h3 className="font-display mt-4 text-lg font-bold text-white">{f.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-[#8B89A0]">{f.desc}</p>
               </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Archive categories ===== */}
+      <section aria-labelledby="archive-heading" className="border-t border-[rgba(77,75,91,0.35)]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-[#0282D8]">
+                The archive
+              </p>
+              <h2
+                id="archive-heading"
+                className="font-display mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl"
+              >
+                Browse by category
+              </h2>
+            </div>
+            <p className="max-w-xs font-mono text-xs leading-relaxed text-[#8B89A0]">
+              status: sudah digali — every category below has files on disk. The honest list of
+              what is not dug yet lives in the{" "}
+              <Link href="/docs/taxonomy" className="text-[#5CB3F2] underline decoration-[#5CB3F2]/50 underline-offset-4 hover:decoration-[#5CB3F2]">
+                taxonomy
+              </Link>
+              .
+            </p>
+          </div>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((c) => (
+              <Link
+                key={c.name}
+                href={c.href}
+                className="group flex items-center justify-between gap-4 rounded-2xl border border-[rgba(77,75,91,0.4)] bg-[#0E0E12] p-5 transition-all hover:border-[rgba(2,130,216,0.5)] hover:bg-[#101017]"
+              >
+                <div>
+                  <h3 className="font-display text-base font-bold text-white">{c.name}</h3>
+                  <p className="mt-1 text-sm text-[#8B89A0]">{c.desc}</p>
+                </div>
+                <ArrowRight
+                  className="h-4 w-4 shrink-0 text-[#8B89A0] transition-all group-hover:translate-x-0.5 group-hover:text-[#0282D8]"
+                  aria-hidden
+                />
+              </Link>
             ))}
           </div>
         </div>

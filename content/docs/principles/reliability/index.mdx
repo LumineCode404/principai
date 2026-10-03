@@ -1,0 +1,17 @@
+---
+title: Reliability
+description: Keeping failures small, visible, and recoverable — idempotency, blast radius, backups that restore, systems you can see into.
+---
+
+Reliability is not the absence of failure — it is the sizing, visibility, and recoverability of failure. The principles in this category assume things will go wrong: re-runs will happen, components will degrade, and the 3 a.m. operator will know less than you do now.
+
+<Cards>
+  <Card title="Idempotency" description="Running the same operation twice must produce the same result as once — accidental re-runs become boring instead of fatal." href="/docs/principles/reliability/idempotency" />
+  <Card title="Blast Radius" description="Limit the maximum damage any single action can cause — batch caps, staged rollouts, and per-step confirmations." href="/docs/principles/reliability/blast-radius" />
+  <Card title="Fail Visible" description="Fail loudly and immediately — silent failure converts a small bug into corrupted state discovered weeks later." href="/docs/principles/reliability/fail-visible" />
+  <Card title="Graceful Degradation" description="When a component degrades, shed the optional and keep the essential — partial service beats total outage." href="/docs/principles/reliability/graceful-degradation" />
+  <Card title="Observability First" description="You cannot operate what you cannot see — logs, metrics, and traces exist before the incident, not after it." href="/docs/principles/reliability/observability-first" />
+  <Card title="Retry Budget" description="Retries amplify outages — exponential backoff with jitter and a hard budget on total retry volume." href="/docs/principles/reliability/retry-budget" />
+</Cards>
+
+Idempotency, blast radius, and tested backups form the core of the [destructive-ops profile](/docs/profiles/destructive-ops) — the three controls that turn a re-run disaster into a non-event.

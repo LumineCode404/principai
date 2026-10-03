@@ -70,3 +70,6 @@ desktop.ini
 .vercel
 .turbo
 .cache/
+
+# QA tool artifacts (agent screenshots, VLM outputs)
+tool-results/

@@ -1,0 +1,19 @@
+---
+title: Security
+description: Scoping authority, validating input, and failing closed — the category that keeps small bugs from becoming deleted databases.
+---
+
+Security here is not compliance checklists — it is the discipline of scope and defaults. The failure chain this category guards against is concrete: broad credentials, a missing dry-run, unvalidated input, defaults that assume trust. Each principle below names its [technical enforcement](/docs/concepts/enforcement); principles advise, controls enforce.
+
+<Cards>
+  <Card title="Least Authority" description="Grant only the authority a task actually needs — a cleanup script with full write access turns a small bug into a deleted database." href="/docs/principles/security/least-authority" />
+  <Card title="Fail-Safe Defaults" description="Deny by default and grant explicitly — permission must be earned per action, not assumed until revoked." href="/docs/principles/security/fail-safe-defaults" />
+  <Card title="Input Validation" description="Validate every input at the trust boundary before it touches state — reject early, completely, and unambiguously." href="/docs/principles/security/input-validation" />
+  <Card title="Secrets Hygiene" description="Secrets never live in code, logs, tickets, or history — one leak is permanent because git forgets nothing." href="/docs/principles/security/secrets-hygiene" />
+  <Card title="Defense in Depth" description="No single control is perfect — layer independent controls so one failure never becomes a breach." href="/docs/principles/security/defense-in-depth" />
+  <Card title="Secure by Default" description="Ship the safe configuration as the default — security must be what you get, not what you remember to enable." href="/docs/principles/security/secure-by-default" />
+  <Card title="Supply Chain Vetting" description="Every dependency is a stranger with commit access to your production — pin, audit, and review before adopting." href="/docs/principles/security/supply-chain-vetting" />
+  <Card title="Complete Mediation" description="Authorize every access through every path — a cached permission or a forgotten side door is still a door." href="/docs/principles/security/complete-mediation" />
+</Cards>
+
+The [destructive-ops profile](/docs/profiles/destructive-ops) loads the must-follow subset of this category for cleanup scripts, migrations, and bulk operations.

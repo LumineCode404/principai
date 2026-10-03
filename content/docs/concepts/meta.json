@@ -1,3 +1,10 @@
 {
-  "pages": ["principle-format", "severity", "profiles", "enforcement", "two-repo-sync"]
+  "pages": [
+    "index",
+    "principle-format",
+    "severity",
+    "profiles",
+    "enforcement",
+    "two-repo-sync"
+  ]
 }

@@ -1,4 +1,12 @@
 {
   "title": "Design",
-  "pages": ["kiss", "dry-tension", "yagni", "least-astonishment", "chesterton-fence", "goodharts-law"]
+  "pages": [
+    "index",
+    "kiss",
+    "dry-tension",
+    "yagni",
+    "least-astonishment",
+    "chesterton-fence",
+    "goodharts-law"
+  ]
 }

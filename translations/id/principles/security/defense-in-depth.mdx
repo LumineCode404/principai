@@ -2,7 +2,7 @@
 title: Defense in Depth
 id: defense-in-depth
 name: Defense in Depth
-summary: TERJEMAHAN DRAF — No single control is perfect — layer independent controls so one failure never becomes a breach.
+summary: Tidak ada kontrol tunggal yang sempurna — susun kontrol independen berlapis agar satu kegagalan tidak pernah menjadi breach.
 category: security
 type: principle
 severity: important
@@ -15,104 +15,108 @@ tags:
   - "layering"
   - "resilience"
   - "security"
-aliases: []
-sources: []
+aliases:
+  - "Layered Defence"
+  - "Defense in Depth"
+sources:
+  - 'Saltzer & Schroeder, "The Protection of Information in Computer Systems", 1975'
+  - 'NIST SP 800-207, "Zero Trust Architecture", 2020'
 status: draft
-verification: perlu
+verification: ok
 source_hash: "6ff65191d6b35457"
 translation_status: draft
 ---
 
-<!-- Draf terjemahan dari EN: content/docs/principles/security/defense-in-depth.mdx -->
-<!-- source_hash EN: 6ff65191d6b35457 -->
-<!-- Terjemahkan body ke Bahasa Indonesia; istilah teknis tetap Inggris (lihat glossary). -->
+<!-- Terjemahan bahasa Indonesia dari content/docs/principles/security/defense-in-depth.mdx -->
+<!-- Istilah teknis tetap Bahasa Inggris sesuai glosarium (lihat /docs/glossary). -->
+<!-- translation_status hanya menjadi reviewed setelah persetujuan manusia. -->
 
 <AIInstruction>
-Never rely on a single control to stop a security failure. When you design a boundary, assume the control in front of it will eventually fail — a bug, a misconfiguration, an expired certificate — and place an independent layer behind it. If removing one layer would leave the system unprotected, stop and redesign the boundary.
+Jangan pernah mengandalkan satu kontrol tunggal untuk menghentikan kegagalan keamanan. Saat merancang sebuah boundary, asumsikan kontrol di depannya pada akhirnya akan gagal — bug, misconfiguration, certificate yang kedaluwarsa — dan letakkan lapisan independen di belakangnya. Jika menghapus satu lapisan akan meninggalkan sistem tanpa perlindungan, berhenti dan rancang ulang boundary-nya.
 </AIInstruction>
 
 <Severity level="important" />
 
-## Definition
+## Definisi
 
-Every control fails eventually: code has bugs, configurations drift, certificates expire, people get tired. Defense in depth arranges multiple, independent controls so a single failure is contained by the next layer instead of becoming the incident. Independence is the load-bearing word — three copies of the same check share one failure mode and are one control wearing a costume.
+Setiap kontrol pada akhirnya gagal: kode punya bug, konfigurasi melenceng, certificate kedaluwarsa, manusia kelelahan. Defense in depth menyusun banyak kontrol yang saling independen agar satu kegagalan ditahan oleh lapisan berikutnya alih-alih menjadi insiden. Independensi adalah kata penopangnya — tiga salinan check yang sama berbagi satu failure mode dan hanyalah satu kontrol yang memakai kostum.
 
-## When to use
+## Kapan pakai
 
-- Security-critical paths: authentication, authorization, payments, key handling.
-- Boundaries facing untrusted input: public APIs, file uploads, network edges.
-- Infrastructure where misconfiguration is a realistic failure mode — it usually is.
-- Any system whose single security failure would also be a business-ending event.
+- Jalur security-critical: authentication, authorization, pembayaran, penanganan key.
+- Boundary yang menghadap input tak terpercaya: API publik, upload file, tepi network.
+- Infrastruktur tempat misconfiguration adalah failure mode yang realistis — biasanya memang begitu.
+- Sistem apa pun yang satu kegagalan keamanannya sekaligus menjadi akhir bisnisnya.
 
-## When NOT to use
+## Kapan TIDAK pakai
 
-- Prototypes with no real data, where one honest layer plus fast iteration beats three aspirational layers nobody maintains.
-- "Depth" made of copies: the same check duplicated in different places shares its failure mode — consolidate and build a genuinely different control instead.
-- Latency-critical paths guarding low-value assets, where every extra hop costs more than the thing it protects.
+- Prototipe tanpa data nyata, tempat satu lapisan yang jujur plus iterasi cepat mengalahkan tiga lapisan aspiratif yang tak dipelihara siapa pun.
+- "Kedalaman" dari salinan: check yang sama diduplikasi di tempat berbeda berbagi failure mode yang sama — konsolidasikan dan bangun kontrol yang benar-benar berbeda.
+- Jalur latency-critical yang menjaga aset bernilai rendah, tempat setiap hop tambahan lebih mahal daripada hal yang dilindunginya.
 
 ## Anti-pattern
 
-- "The WAF blocks it, so the app does not need to validate input."
-- A private network treated as the only boundary: anything that gets inside owns everything.
-- Secrets protected by file permissions alone, with no vault and no rotation behind them.
-- Monitoring that would tell you about a breach, running on the same infrastructure the breach takes down.
-- One penetration test passed years ago, declared secure forever.
+- "WAF sudah memblokirnya, jadi app tidak perlu memvalidasi input."
+- Private network yang diperlakukan sebagai satu-satunya boundary: apa pun yang masuk ke dalamnya memiliki segalanya.
+- Secret yang dilindungi hanya oleh file permission, tanpa vault dan tanpa rotasi di belakangnya.
+- Monitoring yang akan memberi tahu kita tentang sebuah breach, berjalan di infrastruktur yang sama yang dirobohkan breach itu.
+- Satu penetration test yang lulus bertahun-tahun lalu, lalu dinyatakan aman selamanya.
 
-## Code example
+## Contoh kode
 
-Wrong — one layer, total exposure when it fails:
+Salah — satu lapisan, paparan total saat ia gagal:
 
 ```javascript
-// The ONLY thing between the internet and account deletion is the network rule
+// Satu-satunya hal antara internet dan penghapusan akun hanyalah aturan network
 app.post("/admin/delete-user", (req, res) => {
-  // trusted because the load balancer only forwards internal traffic here
-  deleteUser(req.body.userId);   // one misconfigured routing rule and prod is wide open
+  // dipercaya karena load balancer hanya meneruskan traffic internal ke sini
+  deleteUser(req.body.userId);   // satu aturan routing salah konfigurasi dan prod terbuka lebar
 });
 ```
 
-Right — independent layers behind the boundary:
+Benar — lapisan independen di belakang boundary:
 
 ```javascript
-// Layer 1: network rule. Layer 2: app-level role check on every request.
+// Lapisan 1: aturan network. Lapisan 2: check role level app pada setiap request.
 app.post("/admin/delete-user", requireRole("admin"), (req, res) => {
-  // Layer 3: audit trail of who deleted what. Layer 4: soft, recoverable delete.
+  // Lapisan 3: audit trail siapa menghapus apa. Lapisan 4: delete lunak yang dapat dipulihkan.
   softDeleteUser(req.body.userId, { by: res.locals.user.id, reason: "admin-console" });
 });
 ```
 
-## Technical enforcement
+## Penegakan teknis
 
 <Enforcement>
-Depth must live in the platform, not in individual memory:
+Kedalaman harus hidup di platform, bukan di ingatan masing-masing orang:
 
-- **Segmentation plus per-service authorization**: even a fully compromised pod still faces service-level auth checks and mutual TLS policies — not just the network perimeter.
-- **A second authorization path**: policy engines or IAM conditions evaluated independently of application code, so an app bug does not decide access alone.
-- **Off-host, append-only audit logs**: evidence that survives the very compromise it records.
-- **Recoverable destruction**: soft deletes and tested backups so a defeated application layer is not the end of the story.
-- **What prevents vs. detects**: segmentation and per-service auth stop movement after a breach; logs and alerts detect what already happened. You need both — detection is the layer that tells you the others failed.
+- **Segmentasi plus authorization per service**: pod yang sepenuhnya compromised pun tetap menghadapi check auth level service dan policy mutual TLS — bukan hanya perimeter network.
+- **Jalur authorization kedua**: policy engine atau kondisi IAM yang dievaluasi terlepas dari kode aplikasi, sehingga bug di app tidak sendirian menentukan akses.
+- **Audit log off-host dan append-only**: bukti yang selamat dari compromise yang justru dicatatnya.
+- **Destruksi yang dapat dipulihkan**: soft delete dan backup yang teruji agar lapisan aplikasi yang kalah bukan akhir ceritanya.
+- **Yang mencegah vs. yang mendeteksi**: segmentasi dan auth per service menghentikan pergerakan setelah breach; log dan alert mendeteksi apa yang sudah terjadi. Kita butuh keduanya — deteksi adalah lapisan yang memberi tahu bahwa lapisan lain telah gagal.
 </Enforcement>
 
-## Real-world case
+## Kasus nyata
 
 <RealCase>
-In February 2014, Apple's iOS and OS X releases were found to contain a duplicated "goto fail" line inside the certificate-validation function. The extra unconditional jump skipped the checks that verify a server's certificate chain, yet the function still returned success — TLS connections were accepted with any certificate. The one layer responsible for validation failed silently, and there was no second layer behind it: no independent pinning check, no validator that disagreed, no test exercising the failure path. Defense in depth would not have made the typo impossible — it would have reduced the exposure: an independent validation or pinning layer would have caught connections the broken function approved. Details: https://www.imperialviolet.org/2014/02/22/applebug.html
+Pada Februari 2014, rilis iOS dan OS X Apple ditemukan memuat baris "goto fail" yang terduplikasi di dalam fungsi validasi certificate. Lompatan tanpa syarat yang ekstra itu melewati check-check yang memverifikasi rantai certificate sebuah server, padahal fungsinya tetap mengembalikan sukses — koneksi TLS diterima dengan certificate apa pun. Satu-satunya lapisan yang bertugas memvalidasi gagal secara senyap, dan tidak ada lapisan kedua di belakangnya: tidak ada check pinning independen, tidak ada validator yang berbeda pendapat, tidak ada test yang menguji jalur kegagalannya. Defense in depth tidak akan menjadikan typo itu mustahil — tetapi akan mengurangi paparannya: lapisan validasi atau pinning independen akan menangkap koneksi-koneksi yang disetujui fungsi yang rusak itu. Detail: https://www.imperialviolet.org/2014/02/22/applebug.html
 </RealCase>
 
-## Tension and trade-off
+## Tensi dan trade-off
 
-- **Depth vs. KISS**: every layer adds configuration surface, failure modes, and debugging pain; put depth on critical paths, not uniformly everywhere.
-- **Depth vs. Observability-First**: layers that fail quietly turn debugging into archaeology — per-layer logging is part of the layer, not an optional extra.
-- **Depth vs. Yagni**: speculative layers against hypothetical attacks cost real maintenance forever; scale the depth to what a breach would actually cost.
+- **Depth vs. KISS**: setiap lapisan menambah permukaan konfigurasi, failure mode, dan penderitaan debugging; taruh kedalaman di jalur kritis, bukan merata di mana-mana.
+- **Depth vs. Observability-First**: lapisan yang gagal secara senyap mengubah debugging menjadi arkeologi — logging per lapisan adalah bagian dari lapisan itu, bukan tambahan opsional.
+- **Depth vs. Yagni**: lapisan spekulatif melawan serangan hipotetis menagih maintenance nyata selamanya; skalakan kedalaman itu sesuai biaya yang benar-benar ditimbulkan sebuah breach.
 
-## Related principles
+## Prinsip terkait
 
-- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — each layer should fail toward denial, not toward openness.
-- [Least Authority](/docs/principles/security/least-authority) — bounds what any single compromised layer can reach.
-- [Blast Radius](/docs/principles/reliability/blast-radius) — layers exist to shrink the reachable damage set.
-- [Soft Delete](/docs/principles/data/soft-delete) — recoverable destruction as the last defensive layer.
-- [Append-Only Logs](/docs/principles/data/append-only-logs) — evidence designed to survive the incident.
+- [Fail-Safe Defaults](/docs/principles/security/fail-safe-defaults) — setiap lapisan seharusnya gagal ke arah penolakan, bukan ke arah keterbukaan.
+- [Least Authority](/docs/principles/security/least-authority) — membatasi apa yang bisa dijangkau satu lapisan yang compromised.
+- [Blast Radius](/docs/principles/reliability/blast-radius) — lapisan ada untuk memperkecil himpunan kerusakan yang dapat dijangkau.
+- [Soft Delete](/docs/principles/data/soft-delete) — destruksi yang dapat dipulihkan sebagai lapisan pertahanan terakhir.
+- [Append-Only Logs](/docs/principles/data/append-only-logs) — bukti yang dirancang selamat dari insiden.
 
-## References
+## Referensi
 
-- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — separation of privilege: requiring multiple conditions before granting access.
-- NIST SP 800-207, *Zero Trust Architecture*, 2020 — layered, per-request defenses: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf
+- Saltzer & Schroeder, *The Protection of Information in Computer Systems*, Proceedings of the IEEE, 1975 — separation of privilege: mensyaratkan beberapa kondisi sebelum memberikan akses.
+- NIST SP 800-207, *Zero Trust Architecture*, 2020 — pertahanan berlapis, per request: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf

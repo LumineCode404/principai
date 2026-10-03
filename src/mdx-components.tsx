@@ -8,28 +8,14 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 import { File, Files, Folder } from 'fumadocs-ui/components/files';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import type { ReactNode } from 'react';
+import { SeverityBadge } from '@/components/principle-meta';
 
 /**
  * Custom PRINCIPAI components.
  * Severity badges and section blocks used inside principle files.
  */
 function Severity({ level }: { level: 'critical' | 'important' | 'advisory' }) {
-  const styles: Record<string, string> = {
-    critical:
-      'border-[#ff6b6b]/40 bg-[#ff6b6b]/10 text-[#ff8787]',
-    important:
-      'border-[#0282D8]/40 bg-[#0282D8]/10 text-[#5cb3f2]',
-    advisory:
-      'border-[#4D4B5B]/60 bg-[#4D4B5B]/20 text-[#a8a5bd]',
-  };
-  return (
-    <span
-      data-severity={level}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${styles[level]}`}
-    >
-      {level}
-    </span>
-  );
+  return <SeverityBadge level={level} />;
 }
 
 function AIInstruction({ children }: { children: ReactNode }) {
